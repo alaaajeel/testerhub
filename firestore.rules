@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function self(uid) { return signedIn() && request.auth.uid == uid; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function developer() { return signedIn() && me().data.role == 'developer'; }
+    function profile(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
+    function project(pid) { return get(/databases/$(database)/documents/projects/$(pid)); }
+    function assignment(id) { return get(/databases/$(database)/documents/assignments/$(id)); }
+    function assignmentAfter(id) { return getAfter(/databases/$(database)/documents/assignments/$(id)); }
+    match /users/{uid} {
+      allow get: if self(uid) || (developer() && resource.data.role == 'tester' && resource.data.available == true);
+      allow list: if developer() && resource.data.role == 'tester' && resource.data.available == true;
+      allow create: if self(uid)
+        && request.resource.data.keys().hasOnly(['name','email','role','available','createdAt'])
+        && request.resource.data.role in ['tester','developer']
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.available is bool
+        && request.resource.data.createdAt == request.time
+        && (request.resource.data.role == 'tester' || request.resource.data.available == false);
+      allow update: if self(uid)
+        && resource.data.role == 'tester'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['available'])
+        && request.resource.data.available is bool;
+      allow delete: if false;
+    }
+    match /projects/{projectId} {
+      allow get, list: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if developer()
+        && request.resource.data.keys().hasOnly(['name','link','ownerUid','ownerName','createdAt','testersCount'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerName == me().data.name
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.link is string
+        && request.resource.data.link.size() <= 2000
+        && request.resource.data.testersCount is int
+        && request.resource.data.testersCount > 0
+        && request.resource.data.testersCount <= 400
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+    match /assignments/{assignmentId} {
+      allow get, list: if signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
+      allow create: if developer()
+        && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt'])
+        && assignmentId == request.resource.data.projectId + '_' + request.resource.data.testerUid
+        && request.resource.data.ownerUid == request.auth.uid
+        && project(request.resource.data.projectId).data.ownerUid == request.auth.uid
+        && request.resource.data.name == project(request.resource.data.projectId).data.name
+        && request.resource.data.link == project(request.resource.data.projectId).data.link
+        && profile(request.resource.data.testerUid).data.role == 'tester'
+        && profile(request.resource.data.testerUid).data.available == true
+        && request.resource.data.joinedDay == null
+        && request.resource.data.checkins == []
+        && request.resource.data.createdAt == request.time;
+      allow update: if self(resource.data.testerUid) && (
+        (resource.data.joinedDay == null
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['joinedDay','joinedAt'])
+          && request.resource.data.joinedDay is string
+          && request.resource.data.joinedDay.matches('\\d{4}-\\d{2}-\\d{2}')
+          && request.resource.data.joinedAt == request.time
+          && request.resource.data.checkins == [])
+        ||
+        (resource.data.joinedAt is timestamp
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checkins','lastCheckinAt'])
+          && request.resource.data.lastCheckinAt == request.time
+          && request.resource.data.checkins is list
+          && request.resource.data.checkins.size() == resource.data.checkins.size() + 1
+          && request.resource.data.checkins.size() <= 14
+          && request.resource.data.checkins.hasAll(resource.data.checkins)
+          && !(request.resource.data.checkins[request.resource.data.checkins.size()-1] in resource.data.checkins)
+          && getAfter(/databases/$(database)/documents/reports/$(assignmentId + '_' + request.resource.data.checkins[request.resource.data.checkins.size()-1])).data.date == request.resource.data.checkins[request.resource.data.checkins.size()-1]
+          && getAfter(/databases/$(database)/documents/reports/$(assignmentId + '_' + request.resource.data.checkins[request.resource.data.checkins.size()-1])).data.testerUid == resource.data.testerUid
+          && request.time < resource.data.joinedAt + duration.value(15, 'd')
+          && (!('lastCheckinAt' in resource.data) || request.time >= resource.data.lastCheckinAt + duration.value(14, 'h')))
+      );
+      allow delete: if false;
+    }
+    match /reports/{reportId} {
+      allow get, list: if signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','date','tested','outcome','notes','status','createdAt','submittedAt'])
+        && reportId == request.resource.data.assignmentId + '_' + request.resource.data.date
+        && request.resource.data.testerUid == request.auth.uid
+        && assignment(request.resource.data.assignmentId).data.testerUid == request.auth.uid
+        && request.resource.data.ownerUid == assignment(request.resource.data.assignmentId).data.ownerUid
+        && request.resource.data.projectId == assignment(request.resource.data.assignmentId).data.projectId
+        && request.resource.data.date is string
+        && request.resource.data.date.matches('\\d{4}-\\d{2}-\\d{2}')
+        && request.resource.data.outcome in ['ok','issue']
+        && request.resource.data.status == (request.resource.data.outcome == 'issue' ? 'new' : 'ok')
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 800
+        && (request.resource.data.outcome != 'issue' || request.resource.data.notes.size() >= 10)
+        && request.resource.data.tested is string
+        && request.resource.data.tested.size() <= 150
+        && request.resource.data.createdAt is string
+        && request.resource.data.submittedAt == request.time
+        && !(request.resource.data.date in assignment(request.resource.data.assignmentId).data.checkins)
+        && request.resource.data.date in assignmentAfter(request.resource.data.assignmentId).data.checkins;
+      allow update: if signedIn() && resource.data.ownerUid == request.auth.uid
+        && resource.data.outcome == 'issue' && resource.data.status == 'new'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'fixed';
+      allow delete: if false;
+    }
+    match /messages/{messageId} {
+      allow get, list: if signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','sender','senderUid','text','at','createdAt'])
+        && request.resource.data.senderUid == request.auth.uid
+        && request.resource.data.sender in ['tester','developer']
+        && ((request.resource.data.sender == 'tester' && request.resource.data.testerUid == request.auth.uid)
+            || (request.resource.data.sender == 'developer' && request.resource.data.ownerUid == request.auth.uid))
+        && request.resource.data.testerUid == assignment(request.resource.data.assignmentId).data.testerUid
+        && request.resource.data.ownerUid == assignment(request.resource.data.assignmentId).data.ownerUid
+        && request.resource.data.projectId == assignment(request.resource.data.assignmentId).data.projectId
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 2
+        && request.resource.data.text.size() <= 830
+        && request.resource.data.at is string
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}
