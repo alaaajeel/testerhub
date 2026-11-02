@@ -2,7 +2,7 @@ import {describe, it} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,existsSync} from 'node:fs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
-const html=read('index.html'),rules=read('firestore.rules'),sw=read('sw.js');
+const html=read('index.html')+read('src/services/accounts.js'),rules=read('firestore.rules'),sw=read('sw.js');
 const manifest=JSON.parse(read('manifest.webmanifest'));
 
 describe('QA-01 | Android PWA and branding',()=>{

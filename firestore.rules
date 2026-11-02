@@ -2,9 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
     function self(uid) { return signedIn() && request.auth.uid == uid; }
     function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
-    function developer() { return signedIn() && me().data.role == 'developer'; }
+    function developer() { return verified() && me().data.role == 'developer'; }
     function profile(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
     function project(pid) { return get(/databases/$(database)/documents/projects/$(pid)); }
     function assignment(id) { return get(/databases/$(database)/documents/assignments/$(id)); }
@@ -23,9 +24,14 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && (request.resource.data.role == 'tester' || request.resource.data.available == false);
       allow update: if self(uid)
-        && resource.data.role == 'tester'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['available'])
-        && request.resource.data.available is bool;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','available','participationPaused'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 80
+        && request.resource.data.available is bool
+        && (resource.data.role == 'tester' || request.resource.data.available == false)
+        && (!('participationPaused' in request.resource.data) ||
+            (resource.data.role == 'tester' && request.resource.data.participationPaused is bool))
+        && (!request.resource.data.get('participationPaused', false) || request.resource.data.available == false);
       allow delete: if false;
     }
     match /projects/{projectId} {
@@ -60,7 +66,7 @@ service cloud.firestore {
         && request.resource.data.joinedDay == null
         && request.resource.data.checkins == []
         && request.resource.data.createdAt == request.time;
-      allow update: if self(resource.data.testerUid) && (
+      allow update: if verified() && self(resource.data.testerUid) && (
         (resource.data.joinedDay == null
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['joinedDay','joinedAt'])
           && request.resource.data.joinedDay is string
@@ -86,7 +92,7 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow get, list: if signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
-      allow create: if signedIn()
+      allow create: if verified()
         && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','date','tested','outcome','notes','status','createdAt','submittedAt'])
         && reportId == request.resource.data.assignmentId + '_' + request.resource.data.date
         && request.resource.data.testerUid == request.auth.uid
@@ -106,7 +112,7 @@ service cloud.firestore {
         && request.resource.data.submittedAt == request.time
         && !(request.resource.data.date in assignment(request.resource.data.assignmentId).data.checkins)
         && request.resource.data.date in assignmentAfter(request.resource.data.assignmentId).data.checkins;
-      allow update: if signedIn() && resource.data.ownerUid == request.auth.uid
+      allow update: if verified() && resource.data.ownerUid == request.auth.uid
         && resource.data.outcome == 'issue' && resource.data.status == 'new'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'fixed';
@@ -115,7 +121,7 @@ service cloud.firestore {
     match /messages/{messageId} {
       allow get, list: if signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
-      allow create: if signedIn()
+      allow create: if verified()
         && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','sender','senderUid','text','at','createdAt'])
         && request.resource.data.senderUid == request.auth.uid
         && request.resource.data.sender in ['tester','developer']
