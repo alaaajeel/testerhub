@@ -386,8 +386,8 @@ async function submitDailyReport(assignmentId,{opened,feature,outcome,notes}){
    if(!a.joinedDay||daysSince(a.joinedDay)>14)throw Error('الاختبار غير فعال');
    if(a.checkins?.includes(date))throw Error('تقرير اليوم مسجل مسبقاً');
    const reportRef=storeFns.doc(db,'reports',`${assignmentId}_${date}`);
-   const prior=await txn.get(reportRef);
-   if(prior.exists())throw Error('تقرير اليوم مسجل مسبقاً');
+   // Do not read a nonexistent report: owner-only Firestore rules deny that read.
+   // The checkin and create-only rules prevent duplicates.
    const at=new Date().toISOString();
    txn.set(reportRef,{assignmentId,projectId:a.projectId,testerUid:active.uid,ownerUid:a.ownerUid,
      date,tested:'فتح التطبيق وتجربة وظيفة أساسية',outcome,notes,status:outcome==='issue'?'new':'ok',
