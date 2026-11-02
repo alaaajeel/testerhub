@@ -147,3 +147,13 @@ test('live Firestore listeners update invitations, reports and messages',()=>{
  assert.match(html,/stopLiveSync\(\);await api\.logout/);
  assert.match(html,/queueLiveSync\(\)/);
 });
+
+test('notification center can be dismissed while cloud verification is loading',()=>{
+ const start=html.indexOf("app.addEventListener('click'");
+ const finish=html.indexOf("app.addEventListener('change'",start);
+ const handlers=html.slice(start,finish);
+ const close=handlers.indexOf("if(action==='close-notices')");
+ const pending=handlers.indexOf("pending(async()=>");
+ assert.ok(close>0 && pending>close);
+ assert.match(handlers,/if\(action==='notice'\|\|action==='sync-notices'\)/);
+});
