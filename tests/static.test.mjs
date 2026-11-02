@@ -61,3 +61,16 @@ test('new project explicitly attempts and verifies invitations',()=>{
  assert.ok(start>=0&&projectWrite>start&&syncCall>projectWrite);
  assert.match(html,/التطبيق انحفظ لكن الدعوات ما وصلت بالكامل/);
 });
+
+test('daily check-in does not perform forbidden nonexistent report reads',()=>{
+ const start=html.indexOf('async function submitDailyReport(');
+ const end=html.indexOf('async function sendMessage(',start);
+ const section=html.slice(start,end);
+ assert.match(section,/runTransaction\(db/);
+ assert.match(section,/txn\.get\(ref\)/);
+ assert.doesNotMatch(section,/txn\.get\(reportRef\)/);
+ assert.match(section,/txn\.set\(reportRef/);
+ assert.match(section,/txn\.update\(ref/);
+ assert.match(rules,/match \/reports\//);
+ assert.match(rules,/allow create: if signedIn\(\)/);
+});
