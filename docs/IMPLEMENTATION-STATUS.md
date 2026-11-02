@@ -18,3 +18,7 @@ Priority backlog (separate branches/PRs):
 9. Phase 10: verify production rules/auth/indexes; approved migration only if necessary; deploy and verify Actions + live login.
 
 Do not merge phase 1 UI before the matching Firebase rules. Test command npm run test:rules uses project demo-testerhub and isolated Auth/Firestore emulators. Existing browser Firebase SDK is 13.1.0; npm test SDK is pinned by package-lock (12.6.0) and production CDN behavior still needs a live smoke test.
+
+Phase 2 selection slice: branch phase-2/tester-selection, based on phase 1. Explicit opt-in tester checkboxes; selected-only copy; selectedTesterUids on new projects; repair only from saved selected list; rules enforce membership and uniqueness. Legacy projects have no automatic broad repair. See PHASE-2-SELECTION-AR.md. Remaining phase 2 work is listed there.
+
+Firebase Console authentication subsequently succeeded. The project and current rules view were opened. Automatic approval review blocked reading/copying editor content due to usage limit; no production rules changed. Do not attempt an alternate route to bypass that block.
