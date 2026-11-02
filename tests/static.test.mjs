@@ -14,3 +14,8 @@ test('real Firebase Auth and role-based dashboards',()=>{assert.match(html,/crea
 test('daily reports and chat use Firebase reads and writes',()=>{assert.match(html,/runTransaction\(db/);assert.match(html,/collection\(db,'reports'\)/);assert.match(html,/collection\(db,'messages'\)/);});
 test('daily report is bound to checkins atomically by rules',()=>{assert.match(rules,/getAfter\(/);assert.match(rules,/match \/reports\//);assert.match(rules,/match \/messages\//);});
 test('no service credentials packaged',()=>{assert.doesNotMatch(html,/BEGIN PRIVATE KEY/);assert.doesNotMatch(load('firebase-config.js'),/BEGIN PRIVATE KEY/);});
+
+test('Firebase initialization waits for Auth instance (not SDK namespace)',()=>{
+ assert.match(html,/await auth\.authStateReady\(\)/);
+ assert.doesNotMatch(html,/a\.authStateReady\(auth\)/);
+});
