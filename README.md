@@ -47,3 +47,7 @@
 
 ## إعداد مشروع TestHubiq الجديد
 تمت إضافة إعدادات تطبيق Firebase Web الخاص بـ `testhubiq-c7711`. يجب تفعيل Email/Password، وإنشاء Firestore، ونشر قواعد `firestore.rules` في Firebase Console قبل التسجيل الحقيقي. لا تعتمد التطبيق قبل اختبار حسابين من جهازين مختلفين.
+
+## GitHub Pages deployment
+
+Site publishing uses the committed `.github/workflows/pages.yml` workflow on pushes to `main`. In repository Settings → Pages, set Source to **GitHub Actions**. Check Actions → Deploy TesterHub to GitHub Pages for the deployment status. Firebase Authentication and Firestore must be configured and verified separately.
