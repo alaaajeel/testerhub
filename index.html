@@ -236,6 +236,30 @@ button:focus-visible,input:focus-visible,select:focus-visible {outline:3px solid
  #toast.show{opacity:1;visibility:visible;transform:translate(-50%,0)}
 }
 @media(prefers-reduced-motion:reduce){#toast{transition:none!important}}
+
+/* Firebase-backed in-app notification center */
+.hero .header .round-ico{position:relative}
+.bell-count{position:absolute;top:-6px;right:-7px;display:grid;place-items:center;min-width:19px;height:19px;padding:0 4px;background:#ffcf54;color:#112956;font:800 11px Arial,sans-serif;border-radius:15px;box-shadow:0 0 0 2px #1658a8;line-height:1}
+.notices-overlay{position:absolute;inset:0;z-index:85;display:flex;justify-content:center;align-items:flex-start;padding:62px 12px 15px;direction:rtl}
+.notices-backdrop{position:absolute;inset:0;border:0;background:#0b244a8c;cursor:pointer}
+.notices-sheet{position:relative;z-index:1;width:100%;max-width:420px;max-height:calc(100% - 50px);background:#fff;border-radius:22px;box-shadow:0 15px 48px #06234b55;display:flex;flex-direction:column;overflow:hidden}
+.notices-header{display:flex;align-items:center;justify-content:space-between;padding:17px 18px;border-bottom:1px solid #e5edf6}
+.notices-header strong{display:block;color:#183965;font-size:18px}
+.notices-header small{display:block;color:#6f829e;font-size:11px;margin-top:2px}
+.notices-header button{border:0;border-radius:12px;width:38px;height:38px;cursor:pointer;color:#33577d;background:#edf3fb;font-size:16px}
+.notices-list{overflow-y:auto;min-height:95px;padding:11px 14px;scrollbar-width:thin}
+.notice-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 10px;margin:5px 0;background:#f4f8fe;border:1px solid #e1eaf5;border-radius:14px}
+.notice-card strong{display:block;color:#1d4779;font-size:13px;line-height:1.55}
+.notice-card p{font-size:12px;color:#657892;margin:5px 0 0;line-height:1.7;overflow-wrap:anywhere}
+.notice-card button{flex:none;border:0;border-radius:11px;min-height:40px;padding:7px 13px;background:#1662b8;color:#fff;font:700 12px inherit;cursor:pointer}
+.notice-status{padding:20px 12px;color:#44648c;font-size:13px;line-height:2;text-align:center}
+.notice-status.error{color:#99374b;background:#fff3f4;border-radius:13px}
+.notice-section-title{font-size:12px;color:#41739c;font-weight:700;padding:12px 9px 3px}
+.notices-footer{display:grid;gap:8px;border-top:1px solid #e4edf8;padding:12px 16px;text-align:center}
+.notices-footer button{min-height:43px;border:1px solid #cae0fa;background:#ebf5ff;color:#1457a7;font-weight:800;border-radius:12px;cursor:pointer}
+.notices-footer span{font-size:10px;color:#7488a6;line-height:1.6}
+@media(max-width:830px){.notices-overlay{padding:calc(17px + env(safe-area-inset-top,0px)) 10px 12px}.notices-sheet{max-height:calc(100% - 16px)}}
+
 </style>
 </head>
 <body>
@@ -322,24 +346,25 @@ async function signup({name,email,password,role,available}){
 }
 async function login(email,password){if(isDemo)throw Error('وضع المعاينة لا يستخدم تسجيل الدخول');await authFns.signInWithEmailAndPassword(auth,email,password);return currentUser()}
 async function logout(){if(!isDemo)await authFns.signOut(auth)}
-async function getDashboard(){
+async function getDashboard({fromServer=false}={}){
  if(isDemo){const d=demoState();return {projects:d.projects,assignments:d.assignments,testers:d.testers,reports:d.reports??[],messages:d.messages??[],settings:d.settings}}
  const user=await currentUser();if(!user)return {projects:[],assignments:[],testers:[],settings:{reminderHour:20}};
- const {collection,query,where,getDocs}=storeFns;
+ const {collection,query,where,getDocs,getDocsFromServer}=storeFns;
+ const read=fromServer?getDocsFromServer:getDocs;
  if(user.role==='developer'){
  const [p,a,t,r,m]=await Promise.all([
- getDocs(query(collection(db,'projects'),where('ownerUid','==',user.uid))),
- getDocs(query(collection(db,'assignments'),where('ownerUid','==',user.uid))),
- getDocs(query(collection(db,'users'),where('role','==','tester'),where('available','==',true))),
- getDocs(query(collection(db,'reports'),where('ownerUid','==',user.uid))),
- getDocs(query(collection(db,'messages'),where('ownerUid','==',user.uid)))
+ read(query(collection(db,'projects'),where('ownerUid','==',user.uid))),
+ read(query(collection(db,'assignments'),where('ownerUid','==',user.uid))),
+ read(query(collection(db,'users'),where('role','==','tester'),where('available','==',true))),
+ read(query(collection(db,'reports'),where('ownerUid','==',user.uid))),
+ read(query(collection(db,'messages'),where('ownerUid','==',user.uid)))
  ]);
  return {projects:p.docs.map(tidy),assignments:a.docs.map(tidy),testers:t.docs.map(testerProfile),reports:r.docs.map(tidy),messages:m.docs.map(tidy),settings:{reminderHour:20}};
  }
  const [a,r,m]=await Promise.all([
- getDocs(query(collection(db,'assignments'),where('testerUid','==',user.uid))),
- getDocs(query(collection(db,'reports'),where('testerUid','==',user.uid))),
- getDocs(query(collection(db,'messages'),where('testerUid','==',user.uid)))
+ read(query(collection(db,'assignments'),where('testerUid','==',user.uid))),
+ read(query(collection(db,'reports'),where('testerUid','==',user.uid))),
+ read(query(collection(db,'messages'),where('testerUid','==',user.uid)))
  ]);
  return {projects:[],assignments:a.docs.map(tidy),testers:[],reports:r.docs.map(tidy),messages:m.docs.map(tidy),settings:JSON.parse(previewStorage.getItem('testerhub_settings')||'{"reminderHour":20}')};
 }
@@ -574,6 +599,7 @@ function toast(message){
  },2500);
 }
 let drawerOpen=false;
+let noticeOpen=false,noticeState='idle',noticeLastVerified=0,noticeError='';
 let user=null,dashboard={projects:[],assignments:[],testers:[],reports:[],messages:[],settings:{}},tab='home',authMode='login',signupRole='tester',busy=false,offline=false,installPrompt=null;
 let justInstalled=window.matchMedia('(display-mode: standalone)').matches;
 let lastPageScroll=0;
@@ -586,7 +612,7 @@ function sumXp(){return primaryAssignments().reduce((n,a)=>n+(a.checkins?.length
 function lastActive(a){const dates=a.checkins||[];if(!a.joinedDay)return false;return dates.some(key=>api.daysSince(key)<=3)||api.daysSince(a.joinedDay)<=3}
 function countActive(assignments){return assignments.filter(lastActive).length}
 const formatNum=n=>new Intl.NumberFormat('ar-IQ').format(n);
-function siteHeader(){return `<div class="status"><span>10:24</span><span>◆ ◕ 100%</span></div><header class="hero"><div class="header"><button class="round-ico" data-action="open-menu" aria-label="فتح القائمة" aria-haspopup="dialog">${ico('menu',21)}</button><div class="logo"><img class="header-brand-icon" src="./assets/logo.svg" alt="" width="33" height="33"/>TesterHub</div><button class="round-ico" data-action="notice" aria-label="تذكير اليوم">${ico('bell',20)}</button></div><div class="hello"><h2>${user?.role==='developer'?'لوحة المطور':'مرحباً، '+clean(user?.name||'مختبر')}</h2><p>${user?.role==='developer'?'إدارة الاختبار المغلق لتطبيقاتك':'تابع تطبيقاتك وخطواتك نحو إكمال الاختبار'}</p></div></header>`}
+function siteHeader(){return `<div class="status"><span>10:24</span><span>◆ ◕ 100%</span></div><header class="hero"><div class="header"><button class="round-ico" data-action="open-menu" aria-label="فتح القائمة" aria-haspopup="dialog">${ico('menu',21)}</button><div class="logo"><img class="header-brand-icon" src="./assets/logo.svg" alt="" width="33" height="33"/>TesterHub</div><button class="round-ico" data-action="notice" aria-label="الإشعارات" aria-haspopup="dialog">${ico('bell',20)}${noticeBadgeCount()?`<span class="bell-count">${Math.min(99,noticeBadgeCount())}</span>`:''} </button></div><div class="hello"><h2>${user?.role==='developer'?'لوحة المطور':'مرحباً، '+clean(user?.name||'مختبر')}</h2><p>${user?.role==='developer'?'إدارة الاختبار المغلق لتطبيقاتك':'تابع تطبيقاتك وخطواتك نحو إكمال الاختبار'}</p></div></header>`}
 function appMenu(){
  if(!drawerOpen||!user)return '';
  const menu=user.role==='developer'?[['home','الرئيسية'],['apps','تطبيقاتي'],['testers','المختبرون'],['new','إضافة تطبيق'],['profile','حسابي']]:[['home','الرئيسية'],['tests','اختباراتي'],['rewards','المكافآت'],['profile','حسابي']];
@@ -594,7 +620,100 @@ function appMenu(){
 }
 function bottomBar(){const tabs=user.role==='developer'?[['home','home','الرئيسية'],['apps','apps','تطبيقاتي'],['testers','testers','المختبرون'],['profile','user','حسابي']]:[['home','home','الرئيسية'],['tests','tests','اختباراتي'],['rewards','rewards','المكافآت'],['profile','user','حسابي']];return `<nav class="nav" aria-label="التنقل الرئيسي">${tabs.map(([key,icon,label])=>`<button data-tab="${key}" ${tab===key?'class="active" aria-current="page"':''}>${ico(icon)}<span>${label}</span></button>`).join('')}</nav>`}
 function welcomeBanner(){if(!api.isDemo)return '';return `<div class="demo-banner">نسخة معاينة — البيانات تجريبية ومحفوظة على هذا الجهاز فقط</div>`}
-function reminderPending(){const now=new Date();return now.getHours()>=api.getReminderHour()&&primaryAssignments().some(a=>a.joinedDay&&currentDay(a)<=14&&!a.checkins.includes(api.dayKey()))}
+
+const FIFTEEN_DAYS=15*86400000;
+function classifyTesterWork(assignments, dateKey=api.dayKey(), nowMs=Date.now()){
+ const state={due:[],invites:[],cooldown:[],completed:[],expired:[]};
+ for(const a of assignments){
+  if(!a.joinedDay){state.invites.push(a);continue;}
+  if(api.daysSince(a.joinedDay)>14){state.expired.push(a);continue;}
+  if((a.checkins||[]).includes(dateKey)){state.completed.push(a);continue;}
+  const stamp=a.lastCheckinAt;
+  const last=typeof stamp?.toMillis==='function'?stamp.toMillis():
+    typeof stamp?.seconds==='number'?stamp.seconds*1000:
+    typeof stamp==='string'?Date.parse(stamp):NaN;
+  if(Number.isFinite(last)&&nowMs-last<14*3600000){state.cooldown.push(a);continue;}
+  state.due.push(a);
+ }
+ return state;
+}
+function messageIsIncoming(message){return user&&message.senderUid!==user.uid&&message.sender!==user.role}
+function noticeSeenKey(){return 'testerhub_notice_seen_'+(user?.uid||'guest')}
+function unreadNoticeMessages(){
+ if(!user)return [];
+ const lastSeen=Number(previewStorage.getItem(noticeSeenKey()))||0;
+ const minTime=Math.max(lastSeen,Date.now()-7*86400000);
+ return (dashboard.messages||[]).filter(m=>messageIsIncoming(m)&&Number.isFinite(Date.parse(m.at))&&Date.parse(m.at)>minTime);
+}
+function noticeBadgeCount(){
+ if(!user)return 0;
+ const unread=unreadNoticeMessages().length;
+ if(user.role==='tester'){
+  const st=classifyTesterWork(primaryAssignments());
+  return st.due.length+st.invites.length+unread;
+ }
+ const issueCount=(dashboard.reports||[]).filter(r=>r.outcome==='issue'&&r.status!=='fixed').length;
+ const missingProjects=mineProjects().filter(p=>!dashboard.assignments.some(a=>a.projectId===p.id)).length;
+ return issueCount+missingProjects+unread;
+}
+function noticeCard(text,description,buttonAction,target){
+ return '<div class="notice-card"><div><strong>'+clean(text)+'</strong><p>'+clean(description)+'</p></div>'+
+ (buttonAction?'<button type="button" data-action="'+buttonAction+'" data-target="'+clean(target||'')+'">عرض</button>':'')+'</div>';
+}
+function notificationPanel(){
+ if(!noticeOpen||!user)return '';
+ let body='';
+ if(noticeState==='loading')body='<div class="notice-status">جاري التحقق من Firebase ومزامنة التكليفات والرسائل…</div>';
+ else if(noticeState==='error')body='<div class="notice-status error">'+clean(noticeError||'تعذّر التحقق من البيانات الآن، حاول مرة ثانية.')+'</div>';
+ else if(noticeState==='verified'){
+  if(user.role==='tester'){
+   const work=classifyTesterWork(primaryAssignments());
+   if(!dashboard.assignments.length)body+=noticeCard('لا توجد تطبيقات مسندة لحسابك','تم التحقق من Firebase: ما عندك تكليفات اختبار حالياً.');
+   for(const a of work.invites)body+=noticeCard('دعوة اختبار جديدة: '+a.name,'بانتظار فتح رابط Google Play وتأكيد الانضمام.','notice-go-tests','tests');
+   for(const a of work.due)body+=noticeCard('اختبار مطلوب اليوم: '+a.name,'ماكو تقرير محفوظ لهذا اليوم، والاختبار جاهز للتنفيذ.','notice-go-tests','tests');
+   for(const a of work.cooldown)body+=noticeCard('بانتظار موعد التقرير التالي: '+a.name,'تم تقديم تقرير سابق قبل أقل من 14 ساعة. الاختبار بعده ضمن المتابعة.','notice-go-tests','tests');
+   if(!work.invites.length&&!work.due.length&&!work.cooldown.length&&dashboard.assignments.length){
+    body+=noticeCard('ما عندك اختبارات مطلوبة هسه',work.completed.length?'تم حفظ تقارير التطبيقات النشطة لليوم.':'ماكو اختبارات نشطة تحتاج إجراء اليوم.');
+   }
+  }else{
+   const issues=(dashboard.reports||[]).filter(r=>r.outcome==='issue'&&r.status!=='fixed');
+   const empty=mineProjects().filter(p=>!dashboard.assignments.some(a=>a.projectId===p.id));
+   for(const p of empty)body+=noticeCard('دعوات غير مكتملة: '+p.name,'هذا التطبيق لا يحتوي تكليفات مختبرين محفوظة.','notice-go-project',p.id);
+   for(const r of issues.slice(0,8))body+=noticeCard('بلاغ مشكلة: '+(dashboard.projects.find(p=>p.id===r.projectId)?.name||'تطبيقك'),r.notes||'مشكلة تحتاج مراجعة.','notice-go-project',r.projectId);
+   if(!issues.length&&!empty.length)body+=noticeCard('ماكو بلاغات مفتوحة','تم التحقق من التقارير والتكليفات في Firebase.');
+  }
+  const messages=(dashboard.messages||[]).filter(messageIsIncoming).slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,5);
+  if(messages.length){
+   body+='<div class="notice-section-title">آخر رسائل الطرف الآخر</div>';
+   for(const m of messages)body+=noticeCard(user.role==='tester'?'رد من المطور':'رسالة من مختبر',String(m.text||'').slice(0,140),'notice-go-chat',m.assignmentId);
+  }
+ }
+ return '<div class="notices-overlay"><button class="notices-backdrop" type="button" data-action="close-notices" aria-label="إغلاق الإشعارات"></button>'+
+ '<section class="notices-sheet" role="dialog" aria-modal="true" aria-label="الإشعارات"><header class="notices-header"><div><strong>الإشعارات</strong><small>'+
+ (noticeState==='verified'?'متزامنة مع Firebase · '+new Date(noticeLastVerified).toLocaleTimeString('ar-IQ',{hour:'numeric',minute:'2-digit'}):'حالة التحقق')+
+ '</small></div><button type="button" data-action="close-notices" aria-label="إغلاق">✕</button></header><div class="notices-list">'+body+
+ '</div><footer class="notices-footer"><button type="button" data-action="sync-notices">تحديث الإشعارات</button>'+
+ '<span>تعرض بيانات TesterHub، وليس تحقق Google Play الرسمي.</span></footer></section></div>';
+}
+async function syncNotificationPanel(){
+ if(!user)return;
+ noticeOpen=true;noticeState='loading';noticeError='';render();
+ const uid=user.uid;
+ try{
+  const fresh=await api.getDashboard({fromServer:!api.isDemo});
+  if(!user||user.uid!==uid)return;
+  dashboard=fresh;
+  noticeLastVerified=Date.now();noticeState='verified';
+  previewStorage.setItem(noticeSeenKey(),String(noticeLastVerified));
+ }catch(err){
+  console.warn('Notification verification failed',err);
+  noticeState='error';
+  noticeError='تعذّر التأكد من الاختبارات من Firebase. افحص الإنترنت أو الصلاحيات واضغط تحديث. ما نكدر نأكد أنه ما عندك مهام اليوم.';
+ }
+ render();
+}
+
+function reminderPending(){return user?.role==='tester'&&new Date().getHours()>=api.getReminderHour()&&classifyTesterWork(primaryAssignments()).due.length>0}
 function reminderUi(){return reminderPending()?`<div class="reminder-banner">🔔 وقت اختبارك اليوم! افتح التطبيقات الحالية، وبعد التجربة سجّل تقرير اليوم حتى يتحدث تقدمك.</div>`:''}
 function trackerCard(){const apps=primaryAssignments().filter(a=>a.joinedDay),a=apps[0],d=a?currentDay(a):0;return `<article class="surface feature"><div class="row between"><div class="stat-top">${ico('calendar',20)} متتبع الاختبار لمدة 14 يوماً</div><span class="mode-pill">${a?'مستمر':'جاهز'}</span></div><div class="test-summary"><span class="small">${clean(a?.name||'ابدأ أول اختبار لك')}</span><strong class="day-number">${d} / 14 يوماً</strong></div><div class="progress"><i style="width:${d/14*100}%"></i></div><div class="row between"><span class="tiny">${a?`بقي ${14-d} أيام في فترة المتابعة`:'انضم لتطبيق لتبدأ المتابعة'}</span><span class="badge">🪙 ${formatNum(sumXp())} XP</span></div></article>`}
 function seedProjectName(id){return dashboard.projects.find(p=>p.id===id)||{}}
@@ -646,7 +765,7 @@ function render(){
  if(!user){app.innerHTML=authScreen();return}
  const screens=user.role==='developer'?{home:devHome,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),chat:chatPage,profile}:{home:testerHome,tests:testerTests,report:dailyReport,chat:chatPage,rewards,profile};
  const content=(screens[tab]||screens.home)();
- app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar()+appMenu();
+ app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar()+appMenu()+notificationPanel();
 }
 let selectedProjectId=null,selectedAssignmentId=null;
 async function refresh(){if(!user)return;dashboard=await api.getDashboard();render()}
@@ -726,12 +845,19 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
   toast('تم التحقق من '+result.total+' دعوة وإضافة '+result.added+' دعوة ناقصة');
   return;
  }
- if(action==='notice'){if(reminderPending())toast('لا تنسى اختبار اليوم وتأكيده!');else toast('ما عندك اختبارات متأخرة اليوم');return}
+ if(action==='notice'||action==='sync-notices'){await syncNotificationPanel();return}
+ if(action==='close-notices'){noticeOpen=false;render();return}
+ if(action==='notice-go-tests'){noticeOpen=false;tab='tests';render();return}
+ if(action==='notice-go-project'){noticeOpen=false;selectedProjectId=button.dataset.target;tab='details';render();return}
+ if(action==='notice-go-chat'){noticeOpen=false;selectedAssignmentId=button.dataset.target;
+  if(user.role==='developer')selectedProjectId=dashboard.assignments.find(a=>a.id===selectedAssignmentId)?.projectId||selectedProjectId;
+  tab='chat';render();return;
+ }
  if(action==='profile'){tab='profile';render();return}
  if(action==='install'){await install();return}
  if(action==='switch-demo'){user=await api.switchDemo(user.role==='tester'?'developer':'tester');tab='home';await refresh();return}
  if(action==='reset-demo'){if(!confirm('إعادة بيانات المعاينة؟'))return;api.resetDemo();user=await api.currentUser();tab='home';await refresh();toast('تمت إعادة بيانات المعاينة');return}
- if(action==='logout'){await api.logout();user=null;drawerOpen=false;dashboard={projects:[],assignments:[],testers:[]};tab='home';render();return}
+ if(action==='logout'){stopLiveSync();await api.logout();user=null;noticeOpen=false;drawerOpen=false;dashboard={projects:[],assignments:[],testers:[]};tab='home';render();return}
  if(action==='calendar-reminder'){exportCalendarReminder();return}
  if(action==='enable-reminder'){
   if(!('Notification' in window)||!('serviceWorker' in navigator))throw Error('التنبيهات تحتاج متصفح Chrome يدعم إشعارات تطبيقات الويب');
@@ -745,7 +871,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  }
  });
 });
-window.addEventListener('keydown',event=>{if(event.key==='Escape'&&drawerOpen){drawerOpen=false;render();}});
+window.addEventListener('keydown',event=>{if(event.key==='Escape'&&(drawerOpen||noticeOpen)){drawerOpen=false;noticeOpen=false;render();}});
 app.addEventListener('change',event=>{const node=event.target;
  if(node.name==='outcome'){const note=document.getElementById('test-note'),label=document.getElementById('test-note-label');if(note&&label){const issue=node.value==='issue';note.required=issue;note.minLength=issue?10:0;note.placeholder=issue?'مثلاً: عند الضغط على تسجيل الدخول يعلّق التطبيق وتظهر شاشة بيضاء...':'ملاحظات إضافية إذا عندك شيء يفيد المطور...';label.textContent=issue?'اكتب تفاصيل المشكلة (مطلوب)':'ملاحظة للمطور (اختيارية)';}return;}if(node.id==='reminder-hour'){try{api.setReminderHour(Number(node.value));toast('تم تحديث وقت التذكير')}catch(err){toast(err.message)}return}
  if(node.dataset.change==='availability'){pending(async()=>{await api.setAvailability(node.checked);user=await api.currentUser();toast(node.checked?'تم إظهار بريدك للمطورين':'تم إخفاء بريدك من القائمة')})}
