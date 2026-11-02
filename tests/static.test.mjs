@@ -1,3 +1,4 @@
+import * as vm from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,existsSync} from 'node:fs';
@@ -18,4 +19,29 @@ test('no service credentials packaged',()=>{assert.doesNotMatch(html,/BEGIN PRIV
 test('Firebase initialization waits for Auth instance (not SDK namespace)',()=>{
  assert.match(html,/await auth\.authStateReady\(\)/);
  assert.doesNotMatch(html,/a\.authStateReady\(auth\)/);
+});
+
+test('tester IDs are populated from Firestore users document IDs',()=>{
+ assert.match(html,/const testerProfile=\(doc\)=>\(\{uid:doc\.id,\.\.\.doc\.data\(\)\}\)/);
+ assert.match(html,/testers:t\.docs\.map\(testerProfile\)/);
+ const expression=html.match(/const testerProfile=(.*);/)[1];
+ const {runInNewContext}=vm;
+ const tester=runInNewContext('('+expression+')')({id:'test-uid-42',data:()=>({name:'مختبر',role:'tester',email:'tester@example.org',available:true})});
+ assert.equal(tester.uid,'test-uid-42');
+ assert.equal(tester.role,'tester');
+ assert.equal(tester.available,true);
+});
+test('project creation rejects missing tester IDs before writing project data',()=>{
+ const start=html.indexOf('async function createProject(');
+ const validation=html.indexOf('seenTesterUids=new Set()',start);
+ const write=html.indexOf('await storeFns.setDoc(projectRef',start);
+ assert.ok(start>=0 && validation>start && write>validation);
+ assert.match(html,/typeof tester\.uid!=='string'/);
+ assert.match(html,/seenTesterUids\.has\(tester\.uid\)/);
+});
+test('Android notifications use ServiceWorkerRegistration, never unsupported Notification constructor',()=>{
+ assert.match(html,/registration\.showNotification\(title/);
+ assert.match(html,/showPwaNotification\('TesterHub/);
+ assert.doesNotMatch(html,/new Notification\(/);
+ assert.match(html,/if\(await showPwaNotification/);
 });
