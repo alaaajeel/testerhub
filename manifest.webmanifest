@@ -1,6 +1,6 @@
 {
   "id": "./",
-  "name": "TesterHub | منصة الاختبار المغلق",
+  "name": "TesterHub — منصة اختبار التطبيقات",
   "short_name": "TesterHub",
   "description": "إدارة الاختبارات المغلقة ومتابعة المختبرين لمدة 14 يوم",
   "lang": "ar",
@@ -8,7 +8,7 @@
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f4f7ff",
+  "background_color": "#f3f6fb",
   "theme_color": "#1558b2",
   "icons": [
     {
