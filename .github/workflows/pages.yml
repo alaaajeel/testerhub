@@ -19,16 +19,27 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run test:rules
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Validate project
         run: |
           node --test tests/*.test.mjs
           node scripts/preflight.mjs
+          npm run build
       - name: Upload static website
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4

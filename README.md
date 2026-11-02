@@ -12,41 +12,27 @@
 - حفظ نقاط XP بناءً على تقارير الأيام، وليس حقلاً قابلاً للكتابة.
 - تنبيه داخل التطبيق أو تصدير تقويم ICS. **الإشعارات بالخلفية والهاتف مغلق غير مفعّلة**.
 
-## إعداد GitHub Pages
-**تضم هذه النسخة ملف نشر تلقائي** `.github/workflows/pages.yml` لنشر الموقع عند كل رفع إلى فرع `main` بعد إنشاء المستودع واختيار GitHub Actions من إعدادات Pages.
+## تطوير المشروع الحالي
 
-مهم: لم يُنشأ المستودع ولم يُنشر الموقع لأن موصل GitHub المتصل لا يتيح إنشاء مستودعات جديدة.
+المستودع قائم والموقع الحالي: https://alaaajeel.github.io/testerhub/ . Firebase الحالي هو `testhubiq-c7711`؛ لا تنشئ مشروعاً جديداً.
 
-1. أنشئ مستودع GitHub باسم `testerhub` في حساب `alaaajeel` واجعله Public، ولا تضع به بيانات سرية.
-2. ارفع **محتويات هذا المجلد** إلى جذر المستودع على فرع `main` (لا ترفع ملف ZIP كملف واحد).
-3. من Settings → Pages → Build and deployment اختر **GitHub Actions**. يبدأ النشر تلقائياً بواسطة `.github/workflows/pages.yml` عند الرفع إلى `main`.
-4. بعد نشر GitHub Pages يجب أن يعمل الرابط `https://alaaajeel.github.io/testerhub/` إن كان اسم المستودع كما هو.
-5. افتح الرابط على Android Chrome → القائمة ⋮ → تثبيت التطبيق.
+تغييرات المرحلة الأولى وحالة النشر والمتطلبات: [تقرير المرحلة الأولى](docs/PHASE-1-AR.md). قائمة الاستكمال: [حالة التنفيذ](docs/IMPLEMENTATION-STATUS.md).
 
-## إعداد Firebase يدوياً (لا يحتاج ربط إضافة ChatGPT)
-1. افتح https://console.firebase.google.com/ وأنشئ مشروع Firebase خاص بـTesterHub.
-2. من Project settings → Your apps أضف Web app، وخذ كائن Firebase Config العلني فقط (apiKey/authDomain/projectId/appId/messagingSenderId).
-3. **تم:** ربط إعدادات تطبيق الويب `testhubiq-c7711` في `firebase-config.js`، ولا حاجة لإعادة نسخها.
-4. من Build → Authentication → Sign-in method فعّل Email/Password.
-5. من Build → Firestore Database أنشئ قاعدة Firestore (Production mode) ثم انشر محتوى `firestore.rules` في Rules.
-6. من Authentication → Settings → Authorized domains أضف `alaaajeel.github.io` إن لم يكن مسموحاً.
-7. أنشئ الفهرس المركب المحدد في `firestore.indexes.json` عند الحاجة من Firestore → Indexes؛ الاستعلامات الأخرى ذات شرط واحد تستخدم فهارس افتراضية.
-8. جرّب الحسابات على جهازين بعد نشر الإعدادات والقواعد. لا تبدأ الاختبار الفعلي قبل اختبار السماح والحجب من حسابين مختلفين.
+بعد موافقة ومراجعة القواعد ونشرها، ينشر Pages ملفات dist عند الدمج إلى main. لا يُنشر Firebase تلقائياً.
 
 ## تشغيل المعاينة محلياً
 `python -m http.server 8000` ثم افتح `http://localhost:8000`. مع `firebase-config.js` = null تكون المعاينة تجريبية ومحلية، وليست مزامنة حقيقية.
 
 ## الاختبارات
-`node --test tests/static.test.mjs` يفحص الملفات ومسارات المنطق، **ولا يغني عن اختبار قواعد Firestore عملياً بواسطة Firebase Emulator أو جهازين**.
+شغّل `npm ci` ثم `npm test` و`npm run test:rules` (Java 21 موصى به). للمتصفح: `npx playwright install chromium` ثم `npm run test:e2e`. للبناء: `npm run build`.
+
+هذه الاختبارات تفصل بين سلوك الخدمة، قواعد Emulator، وواجهة Chromium مع Firebase doubles. لا تغني عن تجربة إنتاج بين حسابين على أجهزة فعلية.
 
 ## حدود الأمان والنشاط
 - التطبيق يتلقى إقراراً من المختبر بأنه جرّب التطبيق، لكنه لا يستطيع التحقق المستقل من استعمال التطبيق على Google Play.
 - التقييد اليومي يعتمد على تحقق العميل وقواعد Firestore وتحديث ذرّي، وقد يحتاج تقوية إضافية بخادم موثوق لمنع التلاعب بزمن الجهاز أو تعدد الحسابات.
 - الملفات عامة عند استخدام GitHub Pages؛ لا تضف أي أسرار أو كلمات مرور إلى المستودع.
 - جرى ضبط Firebase Web Config لمشروع `testhubiq-c7711` داخل الملفات فقط؛ لم يتم إثبات نجاح تسجيل دخول حقيقي أو نشر قواعد Firestore، ولم يُنشر الموقع.
-
-## إعداد مشروع TestHubiq الجديد
-تمت إضافة إعدادات تطبيق Firebase Web الخاص بـ `testhubiq-c7711`. يجب تفعيل Email/Password، وإنشاء Firestore، ونشر قواعد `firestore.rules` في Firebase Console قبل التسجيل الحقيقي. لا تعتمد التطبيق قبل اختبار حسابين من جهازين مختلفين.
 
 ## GitHub Pages deployment
 

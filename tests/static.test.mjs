@@ -6,7 +6,7 @@ import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const base=join(dirname(fileURLToPath(import.meta.url)),'..');
 const load=n=>readFileSync(join(base,n),'utf8');
-const html=load('index.html'),rules=load('firestore.rules');
+const html=load('index.html')+load('src/services/accounts.js'),rules=load('firestore.rules');
 test('HTML and RTL UI',()=>{assert.match(html,/<html lang="ar" dir="rtl">/);assert.match(html,/IBM Plex Sans Arabic/);});
 test('PWA manifest and icons',()=>{const m=JSON.parse(load('manifest.webmanifest'));assert.equal(m.display,'standalone');for(const ic of m.icons)assert.ok(existsSync(join(base,ic.src.split('?')[0])));});
 test('service worker registered',()=>{assert.match(html,/serviceWorker\.register/);assert.match(load('sw.js'),/install/)});
@@ -72,7 +72,7 @@ test('daily check-in does not perform forbidden nonexistent report reads',()=>{
  assert.match(section,/txn\.set\(reportRef/);
  assert.match(section,/txn\.update\(ref/);
  assert.match(rules,/match \/reports\//);
- assert.match(rules,/allow create: if signedIn\(\)/);
+ assert.match(rules,/allow create: if verified\(\)/);
 });
 
 test('mobile native-style drawer has navigation controls',()=>{
