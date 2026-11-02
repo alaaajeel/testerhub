@@ -74,3 +74,13 @@ test('daily check-in does not perform forbidden nonexistent report reads',()=>{
  assert.match(rules,/match \/reports\//);
  assert.match(rules,/allow create: if signedIn\(\)/);
 });
+
+test('mobile native-style drawer has navigation controls',()=>{
+ assert.match(html,/function appMenu\(\)/);
+ assert.match(html,/data-action="open-menu"/);
+ assert.match(html,/data-action="menu-tab"/);
+ assert.match(html,/data-action="close-menu"/);
+ assert.match(html,/drawerOpen=false;tab=button\.dataset\.target/);
+ assert.match(html,/margin-top:0!important/);
+ assert.match(html,/\.drawer-overlay\{/);
+});

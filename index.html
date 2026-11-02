@@ -177,6 +177,56 @@ button:focus-visible,input:focus-visible,select:focus-visible {outline:3px solid
 .report-state.fixed{background:#ddf8eb;color:#08744f}
 .message-counter{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:50%;background:#fff0d3;color:#835317;font-size:11px;font-weight:700}
 .field textarea{min-height:92px;font-size:13px;line-height:1.8}
+
+/* PWA native app style: streamlined header, functional drawer, Android-safe navigation */
+.header-brand-icon{border-radius:11px;flex:none;box-shadow:0 2px 8px #0b32602b}
+.hero .logo{display:flex;align-items:center;gap:9px;direction:ltr;letter-spacing:-.35px}
+.nav button{position:relative}
+.nav button.active::before{content:"";position:absolute;top:4px;left:50%;width:24px;height:3px;border-radius:8px;background:#0aab80;transform:translateX(-50%)}
+#toast{bottom:calc(86px + env(safe-area-inset-bottom,0px));max-width:min(390px,calc(100vw - 32px));text-align:center;line-height:1.6;white-space:normal}
+.drawer-overlay{position:absolute;inset:0;z-index:75;display:flex;justify-content:flex-start;direction:rtl;animation:fadeIn .18s ease-out}
+.drawer-backdrop{position:absolute;inset:0;background:#1023409e;border:0;width:100%;cursor:pointer}
+.app-drawer{height:100%;max-width:320px;width:min(86vw,320px);position:relative;z-index:1;display:flex;flex-direction:column;background:#fff;box-shadow:-10px 0 35px #112d4e33;animation:slideDrawer .18s ease-out;overflow:auto;padding-bottom:env(safe-area-inset-bottom,0px)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:23px 21px 17px;border-bottom:1px solid #e9eff7}
+.drawer-brand{display:flex;align-items:center;gap:10px;color:#194e95;font-size:19px;font-weight:800;direction:ltr}
+.drawer-close{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:13px;background:#eaf1fc;color:#2d5a8a;cursor:pointer;font-size:19px}
+.drawer-identity{display:grid;gap:5px;padding:21px;color:#1e3764;background:linear-gradient(120deg,#f1f8ff,#f6fffd)}
+.drawer-identity strong{font-size:18px}
+.drawer-identity span{font-size:12px;color:#6b7e9a;direction:ltr;text-align:right;overflow-wrap:anywhere}
+.drawer-identity small{color:#0a8d66;font-size:12px;font-weight:700}
+.drawer-links{padding:14px 12px;display:grid;gap:6px}
+.drawer-links button{border:0;background:transparent;display:flex;justify-content:space-between;align-items:center;padding:13px 15px;border-radius:14px;font-size:15px;font-weight:700;color:#32527f;text-align:right;cursor:pointer;min-height:48px}
+.drawer-links button.selected{background:#e9f3ff;color:#165eaf}
+.drawer-links button span{font-size:24px;color:#859dbb}
+.drawer-foot{margin-top:auto;border-top:1px solid #e7eef8;padding:14px 17px}
+.drawer-signout{background:#fff2f3;border:0;border-radius:12px;color:#aa3847;width:100%;text-align:right;min-height:45px;padding:10px 12px;display:flex;align-items:center;gap:10px;font-weight:700;cursor:pointer}
+.drawer-version{font-size:11px;color:#91a0b7;text-align:center;margin-top:12px}
+@keyframes slideDrawer{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@media(max-width:830px){
+ html,body{background:#f3f6fb}
+ .hero{height:142px!important;min-height:142px!important;padding:calc(12px + env(safe-area-inset-top,0px)) 20px 17px!important;justify-content:flex-start!important;border-radius:0 0 22px 22px!important;box-shadow:0 3px 15px #175ba41f}
+ .hero:before{opacity:.32;width:220px;height:130px;top:10px}
+ .hero:after{width:190px;height:90px;bottom:-75px;opacity:.45}
+ .hero .header{min-height:45px}
+ .hero .hello{margin-top:12px!important}
+ .hero .hello h2{font-size:20px;line-height:1.45;margin-bottom:1px}
+ .hero .hello p{font-size:11px;line-height:1.7}
+ .hero .logo{font-size:20px}
+ .hero .round-ico{width:42px;height:42px;display:grid;place-items:center;border-radius:14px}
+ .page{margin-top:0!important;padding:15px 15px 20px!important;background:#f4f7fb}
+ .surface{border-radius:18px;box-shadow:0 5px 18px #1e4b8310;margin-bottom:13px}
+ .surface.feature{background:#fff}
+ .nav{height:calc(68px + env(safe-area-inset-bottom,0px))!important;min-height:calc(68px + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px)!important;background:#fff;box-shadow:0 -7px 24px #1b437d12}
+ .nav button{font-size:12px;padding-top:5px}
+ .nav button span{font-size:12px}
+ .auth-card{box-shadow:0 12px 32px #174c8d1b}
+ .field input,.field select,.field textarea{font-size:16px}
+ .login-shell{padding-top:calc(24px + env(safe-area-inset-top,0px))}
+ .hero .logo img{width:33px;height:33px}
+}
+@media(prefers-reduced-motion:reduce){.app-drawer,.drawer-overlay{animation:none}}
+
 </style>
 </head>
 <body>
@@ -503,6 +553,7 @@ const ico=(name,size=21)=>`<svg width="${size}" height="${size}" viewBox="0 0 24
 const clean=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const toastEl=document.getElementById('toast');let toastTimer;
 function toast(message){toastEl.textContent=message;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),3400)}
+let drawerOpen=false;
 let user=null,dashboard={projects:[],assignments:[],testers:[],reports:[],messages:[],settings:{}},tab='home',authMode='login',signupRole='tester',busy=false,offline=false,installPrompt=null;
 let justInstalled=window.matchMedia('(display-mode: standalone)').matches;
 let lastPageScroll=0;
@@ -515,7 +566,12 @@ function sumXp(){return primaryAssignments().reduce((n,a)=>n+(a.checkins?.length
 function lastActive(a){const dates=a.checkins||[];if(!a.joinedDay)return false;return dates.some(key=>api.daysSince(key)<=3)||api.daysSince(a.joinedDay)<=3}
 function countActive(assignments){return assignments.filter(lastActive).length}
 const formatNum=n=>new Intl.NumberFormat('ar-IQ').format(n);
-function siteHeader(){return `<div class="status"><span>10:24</span><span>◆ ◕ 100%</span></div><header class="hero"><div class="header"><button class="round-ico" data-action="profile" aria-label="حسابي">${ico('menu',20)}</button><div class="logo"><span class="mini-check">✓</span>TesterHub</div><button class="round-ico" data-action="notice" aria-label="تذكير اليوم">${ico('bell',20)}</button></div><div class="hello"><h2>${user?.role==='developer'?'لوحة المطور':'مرحباً، '+clean(user?.name||'مختبر')}</h2><p>${user?.role==='developer'?'إدارة الاختبار المغلق لتطبيقاتك':'تابع تطبيقاتك وخطواتك نحو إكمال الاختبار'}</p></div></header>`}
+function siteHeader(){return `<div class="status"><span>10:24</span><span>◆ ◕ 100%</span></div><header class="hero"><div class="header"><button class="round-ico" data-action="open-menu" aria-label="فتح القائمة" aria-haspopup="dialog">${ico('menu',21)}</button><div class="logo"><img class="header-brand-icon" src="./assets/logo.svg" alt="" width="33" height="33"/>TesterHub</div><button class="round-ico" data-action="notice" aria-label="تذكير اليوم">${ico('bell',20)}</button></div><div class="hello"><h2>${user?.role==='developer'?'لوحة المطور':'مرحباً، '+clean(user?.name||'مختبر')}</h2><p>${user?.role==='developer'?'إدارة الاختبار المغلق لتطبيقاتك':'تابع تطبيقاتك وخطواتك نحو إكمال الاختبار'}</p></div></header>`}
+function appMenu(){
+ if(!drawerOpen||!user)return '';
+ const menu=user.role==='developer'?[['home','الرئيسية'],['apps','تطبيقاتي'],['testers','المختبرون'],['new','إضافة تطبيق'],['profile','حسابي']]:[['home','الرئيسية'],['tests','اختباراتي'],['rewards','المكافآت'],['profile','حسابي']];
+ return `<div class="drawer-overlay"><button class="drawer-backdrop" type="button" data-action="close-menu" aria-label="إغلاق القائمة"></button><aside class="app-drawer" role="dialog" aria-modal="true" aria-label="قائمة التطبيق"><div class="drawer-head"><span class="drawer-brand"><img src="./assets/logo.svg" width="36" height="36" alt=""/>TesterHub</span><button class="drawer-close" data-action="close-menu" aria-label="إغلاق القائمة">✕</button></div><div class="drawer-identity"><strong>${clean(user.name)}</strong><span>${clean(user.email||'')}</span><small>${user.role==='developer'?'حساب مطور':'حساب مختبر'}</small></div><nav class="drawer-links">${menu.map(([k,label])=>`<button type="button" data-action="menu-tab" data-target="${k}" class="${tab===k?'selected':''}">${clean(label)}<span>‹</span></button>`).join('')}</nav><div class="drawer-foot"><button class="drawer-signout" data-action="logout">${ico('power',18)} تسجيل الخروج</button><div class="drawer-version">TesterHub · تطبيق ويب قابل للتثبيت</div></div></aside></div>`;
+}
 function bottomBar(){const tabs=user.role==='developer'?[['home','home','الرئيسية'],['apps','apps','تطبيقاتي'],['testers','testers','المختبرون'],['profile','user','حسابي']]:[['home','home','الرئيسية'],['tests','tests','اختباراتي'],['rewards','rewards','المكافآت'],['profile','user','حسابي']];return `<nav class="nav" aria-label="التنقل الرئيسي">${tabs.map(([key,icon,label])=>`<button data-tab="${key}" ${tab===key?'class="active" aria-current="page"':''}>${ico(icon)}<span>${label}</span></button>`).join('')}</nav>`}
 function welcomeBanner(){if(!api.isDemo)return '';return `<div class="demo-banner">نسخة معاينة — البيانات تجريبية ومحفوظة على هذا الجهاز فقط</div>`}
 function reminderPending(){const now=new Date();return now.getHours()>=api.getReminderHour()&&primaryAssignments().some(a=>a.joinedDay&&currentDay(a)<=14&&!a.checkins.includes(api.dayKey()))}
@@ -570,7 +626,7 @@ function render(){
  if(!user){app.innerHTML=authScreen();return}
  const screens=user.role==='developer'?{home:devHome,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),chat:chatPage,profile}:{home:testerHome,tests:testerTests,report:dailyReport,chat:chatPage,rewards,profile};
  const content=(screens[tab]||screens.home)();
- app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar();
+ app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar()+appMenu();
 }
 let selectedProjectId=null,selectedAssignmentId=null;
 async function refresh(){if(!user)return;dashboard=await api.getDashboard();render()}
@@ -613,8 +669,11 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  const {tab:next,action,id,auth:authNext,role}=button.dataset;
  if(authNext){authMode=authNext;render();return}
  if(role){signupRole=role;render();return}
- if(next){tab=next;render();return}
+ if(next){drawerOpen=false;tab=next;render();return}
  if(!action)return;
+ if(action==='open-menu'){drawerOpen=true;render();return}
+ if(action==='close-menu'){drawerOpen=false;render();return}
+ if(action==='menu-tab'){drawerOpen=false;tab=button.dataset.target||'home';render();return}
  pending(async()=>{
  if(action==='copy-emails'){const list=dashboard.testers.filter(t=>t.available);if(!list.length)throw Error('لا يوجد مختبرون متاحون');await copy(list.map(t=>t.email).join(', '));return}
  if(action==='open-link'){const a=primaryAssignments().find(x=>x.id===id);if(a)joinLink(a);return}
@@ -637,7 +696,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='install'){await install();return}
  if(action==='switch-demo'){user=await api.switchDemo(user.role==='tester'?'developer':'tester');tab='home';await refresh();return}
  if(action==='reset-demo'){if(!confirm('إعادة بيانات المعاينة؟'))return;api.resetDemo();user=await api.currentUser();tab='home';await refresh();toast('تمت إعادة بيانات المعاينة');return}
- if(action==='logout'){await api.logout();user=null;dashboard={projects:[],assignments:[],testers:[]};tab='home';render();return}
+ if(action==='logout'){await api.logout();user=null;drawerOpen=false;dashboard={projects:[],assignments:[],testers:[]};tab='home';render();return}
  if(action==='calendar-reminder'){exportCalendarReminder();return}
  if(action==='enable-reminder'){
   if(!('Notification' in window)||!('serviceWorker' in navigator))throw Error('التنبيهات تحتاج متصفح Chrome يدعم إشعارات تطبيقات الويب');
@@ -651,6 +710,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  }
  });
 });
+window.addEventListener('keydown',event=>{if(event.key==='Escape'&&drawerOpen){drawerOpen=false;render();}});
 app.addEventListener('change',event=>{const node=event.target;
  if(node.name==='outcome'){const note=document.getElementById('test-note'),label=document.getElementById('test-note-label');if(note&&label){const issue=node.value==='issue';note.required=issue;note.minLength=issue?10:0;note.placeholder=issue?'مثلاً: عند الضغط على تسجيل الدخول يعلّق التطبيق وتظهر شاشة بيضاء...':'ملاحظات إضافية إذا عندك شيء يفيد المطور...';label.textContent=issue?'اكتب تفاصيل المشكلة (مطلوب)':'ملاحظة للمطور (اختيارية)';}return;}if(node.id==='reminder-hour'){try{api.setReminderHour(Number(node.value));toast('تم تحديث وقت التذكير')}catch(err){toast(err.message)}return}
  if(node.dataset.change==='availability'){pending(async()=>{await api.setAvailability(node.checked);user=await api.currentUser();toast(node.checked?'تم إظهار بريدك للمطورين':'تم إخفاء بريدك من القائمة')})}
