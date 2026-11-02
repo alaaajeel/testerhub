@@ -8,7 +8,7 @@ const base=join(dirname(fileURLToPath(import.meta.url)),'..');
 const load=n=>readFileSync(join(base,n),'utf8');
 const html=load('index.html'),rules=load('firestore.rules');
 test('HTML and RTL UI',()=>{assert.match(html,/<html lang="ar" dir="rtl">/);assert.match(html,/IBM Plex Sans Arabic/);});
-test('PWA manifest and icons',()=>{const m=JSON.parse(load('manifest.webmanifest'));assert.equal(m.display,'standalone');for(const ic of m.icons)assert.ok(existsSync(join(base,ic.src)));});
+test('PWA manifest and icons',()=>{const m=JSON.parse(load('manifest.webmanifest'));assert.equal(m.display,'standalone');for(const ic of m.icons)assert.ok(existsSync(join(base,ic.src.split('?')[0])));});
 test('service worker registered',()=>{assert.match(html,/serviceWorker\.register/);assert.match(load('sw.js'),/install/)});
 test('Firebase config linked to TestHubiq',()=>{assert.match(html,/window\.TESTERHUB_FIREBASE_CONFIG/);assert.match(load('firebase-config.js'),/testhubiq-c7711/);});
 test('real Firebase Auth and role-based dashboards',()=>{assert.match(html,/createUserWithEmailAndPassword/);assert.match(html,/where\('ownerUid','==',user.uid\)/);assert.match(html,/where\('testerUid','==',user.uid\)/);});
