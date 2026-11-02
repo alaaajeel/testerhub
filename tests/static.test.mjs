@@ -110,3 +110,40 @@ test('mobile notifications do not obscure the bottom navigation and auto-dismiss
  assert.match(html,/toastEl\.classList\.remove\('show'\)/);
  assert.match(html,/toastEl\.textContent=''/);
 });
+
+test('bell verifies actual cloud state before claiming no tests',()=>{
+ assert.match(html,/getDocsFromServer/);
+ assert.match(html,/api\.getDashboard\(\{fromServer:!api\.isDemo\}\)/);
+ assert.match(html,/classifyTesterWork\(primaryAssignments\(\)\)/);
+ assert.match(html,/noticeState==='error'/);
+ assert.match(html,/ما نكدر نأكد أنه ما عندك مهام اليوم/);
+ assert.match(html,/noticeState==='stale'/);
+});
+test('day status distinguishes invitations, due tests, cool-down and completed reports',()=>{
+ const start=html.indexOf('function classifyTesterWork(');
+ const end=html.indexOf('function messageIsIncoming(',start);
+ assert.ok(start>0 && end>start);
+ const source=html.slice(start,end);
+ const scope={api:{dayKey:()=> '2026-11-03',daysSince:()=>2},Date};
+ const {runInNewContext}=vm;
+ const fn=runInNewContext('('+source.trim()+')',scope);
+ const arr=[
+  {name:'New',joinedDay:null,checkins:[]},
+  {name:'Due',joinedDay:'2026-11-02',checkins:[]},
+  {name:'Done',joinedDay:'2026-11-02',checkins:['2026-11-03']},
+  {name:'Wait',joinedDay:'2026-11-02',checkins:[],lastCheckinAt:{seconds:1793635200}}
+ ];
+ const output=fn(arr,'2026-11-03',1793635200000+3600000);
+ assert.equal(output.invites.length,1);
+ assert.equal(output.due.length,1);
+ assert.equal(output.completed.length,1);
+ assert.equal(output.cooldown.length,1);
+});
+test('live Firestore listeners update invitations, reports and messages',()=>{
+ assert.match(html,/storeFns\.onSnapshot/);
+ assert.match(html,/\['assignments','testerUid'\]/);
+ assert.match(html,/\['messages','testerUid'\]/);
+ assert.match(html,/\['reports','ownerUid'\]/);
+ assert.match(html,/stopLiveSync\(\);await api\.logout/);
+ assert.match(html,/queueLiveSync\(\)/);
+});

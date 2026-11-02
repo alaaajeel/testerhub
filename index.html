@@ -664,6 +664,7 @@ function notificationPanel(){
  if(!noticeOpen||!user)return '';
  let body='';
  if(noticeState==='loading')body='<div class="notice-status">جاري التحقق من Firebase ومزامنة التكليفات والرسائل…</div>';
+ else if(noticeState==='stale')body='<div class="notice-status">وصل تحديث جديد من Firebase؛ اضغط تحديث الإشعارات للتأكد من آخر حالة.</div>';
  else if(noticeState==='error')body='<div class="notice-status error">'+clean(noticeError||'تعذّر التحقق من البيانات الآن، حاول مرة ثانية.')+'</div>';
  else if(noticeState==='verified'){
   if(user.role==='tester'){
@@ -768,7 +769,79 @@ function render(){
  app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar()+appMenu()+notificationPanel();
 }
 let selectedProjectId=null,selectedAssignmentId=null;
-async function refresh(){if(!user)return;dashboard=await api.getDashboard();render()}
+
+let liveSubscriptions=[],liveSyncUid=null,liveSyncTimer=null,liveSyncDeferred=false,liveFetchInProgress=false;
+function stopLiveSync(){
+ for(const unsub of liveSubscriptions){try{unsub()}catch{}}
+ liveSubscriptions=[];liveSyncUid=null;liveSyncDeferred=false;
+ if(liveSyncTimer!==null)clearTimeout(liveSyncTimer);
+ liveSyncTimer=null;
+}
+function startLiveSync(){
+ if(api.isDemo||!fbReady||!user)return;
+ if(liveSyncUid===user.uid)return;
+ stopLiveSync();liveSyncUid=user.uid;
+ const uid=user.uid,role=user.role;
+ const specs=role==='developer'?
+  [['projects','ownerUid'],['assignments','ownerUid'],['reports','ownerUid'],['messages','ownerUid']]:
+  [['assignments','testerUid'],['reports','testerUid'],['messages','testerUid']];
+ for(const [collectionName,ownerField] of specs){
+  const q=storeFns.query(storeFns.collection(db,collectionName),storeFns.where(ownerField,'==',uid));
+  let initialized=false,knownIds=new Set();
+  liveSubscriptions.push(storeFns.onSnapshot(q,snap=>{
+   const ids=new Set(snap.docs.map(d=>d.id));
+   if(!initialized){
+    knownIds=ids;
+    if(!snap.metadata.fromCache)initialized=true;
+    return;
+   }
+   if(user?.uid!==uid)return;
+   const incoming=snap.docs.filter(d=>!knownIds.has(d.id));
+   knownIds=ids;
+   if(incoming.length&&'Notification' in window&&Notification.permission==='granted'){
+    if(collectionName==='assignments'&&role==='tester'){
+     for(const doc of incoming.slice(0,2)){
+      const a=doc.data(),time=a.createdAt?.toMillis?.();
+      if(Number.isFinite(time)&&Date.now()-time<120000)
+       showPwaNotification('TesterHub — اختبار جديد','وصلك رابط اختبار '+(a.name||'تطبيق جديد'),'testerhub-invite-'+doc.id).catch(console.warn);
+     }
+    }
+    if(collectionName==='messages'){
+     for(const doc of incoming.slice(0,2)){
+      const m=doc.data(),time=Date.parse(m.at);
+      if(m.senderUid!==uid&&Number.isFinite(time)&&Date.now()-time<120000)
+       showPwaNotification('TesterHub — رسالة جديدة',String(m.text||'وصلتك رسالة').slice(0,110),'testerhub-msg-'+doc.id).catch(console.warn);
+     }
+    }
+   }
+   if(noticeOpen&&noticeState==='verified')noticeState='stale';
+   queueLiveSync();
+  },err=>console.warn('Firestore listener:',collectionName,err)));
+ }
+}
+function canRerenderLive(){
+ if(document.hidden||busy||!user||!liveSyncDeferred||['new','report'].includes(tab))return false;
+ const focused=document.activeElement;
+ return !focused||!['INPUT','TEXTAREA','SELECT'].includes(focused.tagName);
+}
+function queueLiveSync(){
+ liveSyncDeferred=true;
+ if(liveSyncTimer!==null)clearTimeout(liveSyncTimer);
+ liveSyncTimer=setTimeout(flushLiveSync,850);
+}
+async function flushLiveSync(){
+ liveSyncTimer=null;
+ if(!canRerenderLive()||liveFetchInProgress)return;
+ liveFetchInProgress=true;
+ const uid=user.uid;
+ try{
+  const fresh=await api.getDashboard();
+  if(user?.uid===uid){dashboard=fresh;liveSyncDeferred=false;render()}
+ }catch(err){console.warn('Cloud notification sync:',err)}
+ finally{liveFetchInProgress=false}
+}
+
+async function refresh(){if(!user)return;dashboard=await api.getDashboard();startLiveSync();render()}
 const splashStartedAt=performance.now();
 let splashDismissed=false;
 function finishLaunchSplash(){
@@ -789,7 +862,7 @@ async function start(){
   finishLaunchSplash();
   return;
  }
- try{await api.initialize();user=await api.currentUser();if(user)dashboard=await api.getDashboard();render();maybeDailyReminder()}
+ try{await api.initialize();user=await api.currentUser();if(user)dashboard=await api.getDashboard();if(user)startLiveSync();render();maybeDailyReminder()}
  catch(err){app.innerHTML=`<div class="loading" style="padding:25px;line-height:2;text-align:center">تعذر تشغيل الاتصال: ${clean(err.message)}<br/>تحقق من إعدادات Firebase والاتصال بالإنترنت.</div>`;console.error(err)}
  finally{finishLaunchSplash()}
 }
@@ -823,7 +896,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  const {tab:next,action,id,auth:authNext,role}=button.dataset;
  if(authNext){authMode=authNext;render();return}
  if(role){signupRole=role;render();return}
- if(next){drawerOpen=false;tab=next;render();return}
+ if(next){drawerOpen=false;noticeOpen=false;tab=next;render();return}
  if(!action)return;
  if(action==='open-menu'){drawerOpen=true;render();return}
  if(action==='close-menu'){drawerOpen=false;render();return}
@@ -899,7 +972,8 @@ async function maybeDailyReminder(){
  }catch(err){console.warn('Notification failed:',err)}
  finally{reminderInFlight=false}
 }
-window.addEventListener('visibilitychange',async()=>{if(!document.hidden&&user){try{await refresh();maybeDailyReminder()}catch(err){console.warn('Refresh failed',err)}}});
+window.addEventListener('visibilitychange',async()=>{if(!document.hidden&&user){try{await refresh();if(liveSyncDeferred)queueLiveSync();maybeDailyReminder()}catch(err){console.warn('Refresh failed',err)}}});
+document.addEventListener('focusout',()=>{if(liveSyncDeferred)queueLiveSync()});
 setInterval(()=>{maybeDailyReminder()},60000);
 
 setInterval(async()=>{
