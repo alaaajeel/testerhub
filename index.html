@@ -234,6 +234,8 @@ const demoSeed=()=>({
 function demoState(){try{let value=JSON.parse(previewStorage.getItem(DEMO_KEY));if(value&&Array.isArray(value.projects)&&Array.isArray(value.assignments)){value.reports??=[];value.messages??=[];return value}}catch{}const value=demoSeed();previewStorage.setItem(DEMO_KEY,JSON.stringify(value));return value}
 function save(d){previewStorage.setItem(DEMO_KEY,JSON.stringify(d))}
 const tidy=(doc)=>({id:doc.id,...doc.data()});
+// Firestore stores the account UID as the users document ID, not as a profile field.
+const testerProfile=(doc)=>({uid:doc.id,...doc.data()});
 async function initialize(){
  if(isDemo)return;
  const version='13.1.0';
@@ -273,7 +275,7 @@ async function getDashboard(){
  getDocs(query(collection(db,'reports'),where('ownerUid','==',user.uid))),
  getDocs(query(collection(db,'messages'),where('ownerUid','==',user.uid)))
  ]);
- return {projects:p.docs.map(tidy),assignments:a.docs.map(tidy),testers:t.docs.map(tidy),reports:r.docs.map(tidy),messages:m.docs.map(tidy),settings:{reminderHour:20}};
+ return {projects:p.docs.map(tidy),assignments:a.docs.map(tidy),testers:t.docs.map(testerProfile),reports:r.docs.map(tidy),messages:m.docs.map(tidy),settings:{reminderHour:20}};
  }
  const [a,r,m]=await Promise.all([
  getDocs(query(collection(db,'assignments'),where('testerUid','==',user.uid))),
@@ -288,6 +290,14 @@ async function createProject({name,link},testers){
  if(parsed.protocol!=='https:'||parsed.hostname!=='play.google.com')throw Error('يجب إدخال رابط Google Play رسمي');
  if(!testers?.length)throw Error('لا يوجد مختبرون متاحون');
  if(testers.length>400)throw Error('الحد الأقصى في العملية الواحدة 400 مختبر');
+ // Verify all identifiers BEFORE creating a project document in Firestore.
+ const seenTesterUids=new Set();
+ for(const tester of testers){
+  if(typeof tester.uid!=='string'||!tester.uid.trim()||tester.role!=='tester'||tester.available!==true||!tester.email)
+   throw Error('بيانات بعض المختبرين ناقصة. حدّث قائمة المختبرين وحاول مرة ثانية.');
+  if(seenTesterUids.has(tester.uid))throw Error('القائمة تحتوي مختبراً مكرراً. حدّث الصفحة وحاول مرة ثانية.');
+  seenTesterUids.add(tester.uid);
+ }
  if(isDemo){const d=demoState(),id='app'+Date.now();d.projects.unshift({id,name:name.trim(),link,ownerUid:'d1',ownerName:'مطور تجريبي',created:dayKey()});for(const tester of testers){d.assignments.push({id:`${id}_${tester.uid}`,projectId:id,testerUid:tester.uid,ownerUid:'d1',name:name.trim(),link,joinedDay:null,checkins:[]})}save(d);return id}
  const user=await currentUser();if(user?.role!=='developer')throw Error('هذه الوظيفة للمطور فقط');
  const projectRef=storeFns.doc(storeFns.collection(db,'projects'));
@@ -548,6 +558,14 @@ function exportCalendarReminder(){
  const a=document.createElement('a');a.href=url;a.download='TesterHub-14-day-reminder.ics';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
  toast('تم تجهيز تذكير 14 يوم، افتح الملف وأضفه لتقويم هاتفك');
 }
+async function showPwaNotification(title,body,tag){
+ if(!('Notification' in window)||Notification.permission!=='granted'||!('serviceWorker' in navigator))return false;
+ let registration=await navigator.serviceWorker.getRegistration();
+ if(!registration)registration=await navigator.serviceWorker.register('./sw.js');
+ if(typeof registration.showNotification!=='function')return false;
+ await registration.showNotification(title,{body,icon:'./assets/icon-192.png',badge:'./assets/icon-192.png',tag});
+ return true;
+}
 async function install(){if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;return}toast(justInstalled?'TesterHub مثبت بالفعل':'من Chrome: القائمة ⋮ ثم «إضافة إلى الشاشة الرئيسية» أو «تثبيت التطبيق»')}
 window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event});window.addEventListener('appinstalled',()=>{justInstalled=true;installPrompt=null;toast('تم تثبيت TesterHub')});
 document.getElementById('installDesktop').addEventListener('click',install);
@@ -574,7 +592,16 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='reset-demo'){if(!confirm('إعادة بيانات المعاينة؟'))return;api.resetDemo();user=await api.currentUser();tab='home';await refresh();toast('تمت إعادة بيانات المعاينة');return}
  if(action==='logout'){await api.logout();user=null;dashboard={projects:[],assignments:[],testers:[]};tab='home';render();return}
  if(action==='calendar-reminder'){exportCalendarReminder();return}
- if(action==='enable-reminder'){if(!('Notification' in window))throw Error('المتصفح لا يدعم الإشعارات');const permission=await Notification.requestPermission();if(permission==='granted'){new Notification('TesterHub — إشعار تجريبي',{body:'سوف يظهر تذكير عند فتح التطبيق بعد موعد التذكير.'});toast('تم السماح بالإشعارات')}else toast('لم تسمح بالإشعارات');return}
+ if(action==='enable-reminder'){
+  if(!('Notification' in window)||!('serviceWorker' in navigator))throw Error('التنبيهات تحتاج متصفح Chrome يدعم إشعارات تطبيقات الويب');
+  const permission=await Notification.requestPermission();
+  if(permission==='granted'){
+   if(!await showPwaNotification('TesterHub — إشعار تجريبي','سوف يظهر تذكير عند فتح التطبيق بعد موعد التذكير.','testerhub-test'))
+    throw Error('تعذّر عرض الإشعار. افتح الموقع في Chrome وثبّت التطبيق ثم حاول مجدداً.');
+   toast('تم السماح بالإشعارات');
+  }else toast('لم تسمح بالإشعارات');
+  return;
+ }
  });
 });
 app.addEventListener('change',event=>{const node=event.target;
@@ -592,7 +619,18 @@ app.addEventListener('submit',event=>{event.preventDefault();const form=event.ta
  });
  if(form.id==='project-form')pending(async()=>{const f=new FormData(form),name=String(f.get('name')||'').trim(),link=String(f.get('link')||'').trim(),testers=dashboard.testers.filter(t=>t.available);if(!f.get('confirmed'))throw Error('أكد أنك أضفت الإيميلات إلى Google Play Console');const id=await api.createProject({name,link},testers);await refresh();selectedProjectId=id;tab='apps';render();toast('تم نشر الرابط للمختبرين المسجلين')});
 });
-function maybeDailyReminder(){if(!user||user.role!=='tester'||!reminderPending())return;const key=`${api.dayKey()}_${api.getReminderHour()}`;if(api.getReminderMarker()===key)return;api.setReminderMarker(key);if('Notification' in window && Notification.permission==='granted'){try{new Notification('TesterHub — تذكيرك اليومي 🔔',{body:'عندك تطبيق بانتظار الاختبار اليوم. افتح TesterHub وحدث تقدمك.'})}catch{}}}
+let reminderInFlight=false;
+async function maybeDailyReminder(){
+ if(!user||user.role!=='tester'||!reminderPending()||reminderInFlight)return;
+ const key=`${api.dayKey()}_${api.getReminderHour()}`;
+ if(api.getReminderMarker()===key)return;
+ reminderInFlight=true;
+ try{
+  if(await showPwaNotification('TesterHub — تذكيرك اليومي 🔔','عندك تطبيق بانتظار الاختبار اليوم. افتح TesterHub وسجّل تقريرك.','testerhub-daily'))
+   api.setReminderMarker(key);
+ }catch(err){console.warn('Notification failed:',err)}
+ finally{reminderInFlight=false}
+}
 window.addEventListener('visibilitychange',async()=>{if(!document.hidden&&user){try{await refresh();maybeDailyReminder()}catch(err){console.warn('Refresh failed',err)}}});
 setInterval(()=>{maybeDailyReminder()},60000);
 
