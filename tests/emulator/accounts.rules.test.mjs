@@ -21,3 +21,13 @@ test('developers remain isolated and testers cannot read peers',async()=>{await 
 test('unverified tester cannot start assignment',async()=>assertFails(updateDoc(doc(db('t1',false),'assignments','p1_t1'),{joinedDay:'2026-11-03',joinedAt:serverTimestamp()})));
 test('verified tester can start own assignment',async()=>assertSucceeds(updateDoc(doc(db('t1'),'assignments','p1_t1'),{joinedDay:'2026-11-03',joinedAt:serverTimestamp()})));
 test('invalid names and nonboolean availability rejected',async()=>{await assertFails(updateDoc(doc(db('t1'),'users','t1'),{name:'x'}));await assertFails(updateDoc(doc(db('t1'),'users','t1'),{available:'yes'}))});
+test('project invitation list is unique and constrains assignment creation',async()=>{
+ const d=db('d1'),p={name:'Selected App',link:'https://play.google.com/apps/testing/x',ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
+ await assertSucceeds(setDoc(doc(d,'projects','selected'),p));
+ await assertFails(setDoc(doc(d,'projects','duplicate'),{...p,testersCount:2,selectedTesterUids:['t1','t1']}));
+ const assignment={projectId:'selected',testerUid:'t1',ownerUid:'d1',name:p.name,link:p.link,joinedDay:null,checkins:[],createdAt:serverTimestamp()};
+ await assertSucceeds(setDoc(doc(d,'assignments','selected_t1'),assignment));
+ await assertFails(setDoc(doc(d,'assignments','selected_t1'),assignment));
+ await env.withSecurityRulesDisabled(async c=>updateDoc(doc(c.firestore(),'users','t2'),{available:true}));
+ await assertFails(setDoc(doc(d,'assignments','selected_t2'),{...assignment,testerUid:'t2'}));
+});

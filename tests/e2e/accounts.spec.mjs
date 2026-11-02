@@ -60,3 +60,11 @@ test('profile writes confirm success only after accepted save; logout removes pr
  await page.evaluate(()=>window.fixture.failSave=true);await page.locator('#profile-name').fill('اسم مرفوض');await page.locator('#profile-form button').click();await expect(page.locator('#toast')).toContainText('رفضت قاعدة البيانات');
  await page.locator('[data-action="logout"]').click();await expect(page.locator('#auth-form')).toBeVisible();await expect(page.locator('#profile-form')).toHaveCount(0);
 });
+test('developer selects testers explicitly before copying emails',async({page})=>{
+ await setup(page,{loggedIn:true,profile:{name:'Developer',role:'developer',available:false}});
+ await page.evaluate(()=>window.fixture.verified=true);await page.locator('[data-action="check-verification"]').click();
+ await page.evaluate(()=>{dashboard.testers=[{uid:'t1',name:'Tester One',email:'one@example.com',available:true,role:'tester'},{uid:'t2',name:'Tester Two',email:'two@example.com',available:true,role:'tester'}];tab='new';render()});
+ await expect(page.locator('[name="testerUid"]:checked')).toHaveCount(0);
+ await page.locator('[name="testerUid"][value="t2"]').check();
+ expect(await page.evaluate(()=>selectedProjectTesters().map(t=>t.uid))).toEqual(['t2']);
+});
