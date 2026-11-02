@@ -251,7 +251,7 @@ button:focus-visible,input:focus-visible,select:focus-visible {outline:3px solid
 .notice-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 10px;margin:5px 0;background:#f4f8fe;border:1px solid #e1eaf5;border-radius:14px}
 .notice-card strong{display:block;color:#1d4779;font-size:13px;line-height:1.55}
 .notice-card p{font-size:12px;color:#657892;margin:5px 0 0;line-height:1.7;overflow-wrap:anywhere}
-.notice-card button{flex:none;border:0;border-radius:11px;min-height:40px;padding:7px 13px;background:#1662b8;color:#fff;font:700 12px inherit;cursor:pointer}
+.notice-card button{flex:none;border:0;border-radius:11px;min-height:40px;padding:7px 13px;background:#1662b8;color:#fff;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer}
 .notice-status{padding:20px 12px;color:#44648c;font-size:13px;line-height:2;text-align:center}
 .notice-status.error{color:#99374b;background:#fff3f4;border-radius:13px}
 .notice-section-title{font-size:12px;color:#41739c;font-weight:700;padding:12px 9px 3px}
@@ -901,6 +901,15 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='open-menu'){drawerOpen=true;render();return}
  if(action==='close-menu'){drawerOpen=false;render();return}
  if(action==='menu-tab'){drawerOpen=false;tab=button.dataset.target||'home';render();return}
+ // A notification panel must stay dismissible even during a slow Firebase request.
+ if(action==='close-notices'){noticeOpen=false;render();return}
+ if(action==='notice-go-tests'){noticeOpen=false;tab='tests';render();return}
+ if(action==='notice-go-project'){noticeOpen=false;selectedProjectId=button.dataset.target;tab='details';render();return}
+ if(action==='notice-go-chat'){
+  noticeOpen=false;selectedAssignmentId=button.dataset.target;
+  if(user.role==='developer')selectedProjectId=dashboard.assignments.find(a=>a.id===selectedAssignmentId)?.projectId||selectedProjectId;
+  tab='chat';render();return;
+ }
  pending(async()=>{
  if(action==='copy-emails'){const list=dashboard.testers.filter(t=>t.available);if(!list.length)throw Error('لا يوجد مختبرون متاحون');await copy(list.map(t=>t.email).join(', '));return}
  if(action==='open-link'){const a=primaryAssignments().find(x=>x.id===id);if(a)joinLink(a);return}
@@ -919,13 +928,6 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
   return;
  }
  if(action==='notice'||action==='sync-notices'){await syncNotificationPanel();return}
- if(action==='close-notices'){noticeOpen=false;render();return}
- if(action==='notice-go-tests'){noticeOpen=false;tab='tests';render();return}
- if(action==='notice-go-project'){noticeOpen=false;selectedProjectId=button.dataset.target;tab='details';render();return}
- if(action==='notice-go-chat'){noticeOpen=false;selectedAssignmentId=button.dataset.target;
-  if(user.role==='developer')selectedProjectId=dashboard.assignments.find(a=>a.id===selectedAssignmentId)?.projectId||selectedProjectId;
-  tab='chat';render();return;
- }
  if(action==='profile'){tab='profile';render();return}
  if(action==='install'){await install();return}
  if(action==='switch-demo'){user=await api.switchDemo(user.role==='tester'?'developer':'tester');tab='home';await refresh();return}
