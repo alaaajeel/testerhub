@@ -228,6 +228,14 @@ button:focus-visible,input:focus-visible,select:focus-visible {outline:3px solid
 }
 @media(prefers-reduced-motion:reduce){.app-drawer,.drawer-overlay{animation:none}}
 
+
+/* Mobile snackbar: never overlaps the fixed bottom navigation. */
+#toast{pointer-events:none}
+@media(max-width:830px){
+ #toast{top:calc(153px + env(safe-area-inset-top,0px));bottom:auto!important;left:50%;max-width:calc(100vw - 32px);min-width:0;width:max-content;padding:10px 17px;line-height:1.65;font-size:13px;text-align:center;border-radius:14px;border:1px solid #ffffff32;box-shadow:0 8px 25px #122a4960;opacity:0;visibility:hidden;transform:translate(-50%,-12px);transition:opacity .2s ease,visibility .2s ease,transform .2s ease}
+ #toast.show{opacity:1;visibility:visible;transform:translate(-50%,0)}
+}
+@media(prefers-reduced-motion:reduce){#toast{transition:none!important}}
 </style>
 </head>
 <body>
@@ -552,8 +560,19 @@ const icons={
 };
 const ico=(name,size=21)=>`<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]||icons.apps}</svg>`;
 const clean=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-const toastEl=document.getElementById('toast');let toastTimer;
-function toast(message){toastEl.textContent=message;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),3400)}
+const toastEl=document.getElementById('toast');let toastTimer,toastCleanupTimer;
+function toast(message){
+ clearTimeout(toastTimer);
+ clearTimeout(toastCleanupTimer);
+ toastEl.textContent=String(message);
+ toastEl.classList.add('show');
+ toastTimer=setTimeout(()=>{
+  toastEl.classList.remove('show');
+  toastCleanupTimer=setTimeout(()=>{
+   if(!toastEl.classList.contains('show'))toastEl.textContent='';
+  },250);
+ },2500);
+}
 let drawerOpen=false;
 let user=null,dashboard={projects:[],assignments:[],testers:[],reports:[],messages:[],settings:{}},tab='home',authMode='login',signupRole='tester',busy=false,offline=false,installPrompt=null;
 let justInstalled=window.matchMedia('(display-mode: standalone)').matches;

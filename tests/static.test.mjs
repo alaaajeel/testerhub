@@ -101,3 +101,12 @@ test('application script syntax remains valid',()=>{
  assert.ok(match);
  assert.doesNotThrow(()=>new Function(match[1]));
 });
+
+test('mobile notifications do not obscure the bottom navigation and auto-dismiss',()=>{
+ assert.match(html,/#toast\{top:calc\(153px/);
+ assert.match(html,/bottom:auto!important/);
+ assert.match(html,/#toast\.show\{opacity:1/);
+ assert.match(html,/toastTimer=setTimeout/);
+ assert.match(html,/toastEl\.classList\.remove\('show'\)/);
+ assert.match(html,/toastEl\.textContent=''/);
+});
