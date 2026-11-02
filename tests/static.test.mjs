@@ -45,3 +45,19 @@ test('Android notifications use ServiceWorkerRegistration, never unsupported Not
  assert.doesNotMatch(html,/new Notification\(/);
  assert.match(html,/if\(await showPwaNotification/);
 });
+
+test('repair missing assignments without resetting progress',()=>{
+ assert.match(html,/async function syncProjectAssignments\(projectId\)/);
+ assert.match(html,/const missing=eligible\.filter\(t=>!existing\.has\(t\.uid\)\)/);
+ assert.match(html,/if\(eligible\.some\(t=>!finalUids\.has\(t\.uid\)\)\)/);
+ assert.match(html,/for\(let i=0;i<missing\.length;i\+=8\)/);
+ assert.match(html,/data-action="sync-project"/);
+ assert.match(html,/data-action="refresh-tests"/);
+});
+test('new project explicitly attempts and verifies invitations',()=>{
+ const start=html.indexOf("async function createProject(");
+ const syncCall=html.indexOf("await syncProjectAssignments(projectRef.id)",start);
+ const projectWrite=html.indexOf("await storeFns.setDoc(projectRef",start);
+ assert.ok(start>=0&&projectWrite>start&&syncCall>projectWrite);
+ assert.match(html,/التطبيق انحفظ لكن الدعوات ما وصلت بالكامل/);
+});
