@@ -84,3 +84,20 @@ test('mobile native-style drawer has navigation controls',()=>{
  assert.match(html,/margin-top:0!important/);
  assert.match(html,/\.drawer-overlay\{/);
 });
+
+test('animated application splash is integrated with startup',()=>{
+ assert.match(html,/id="launch-splash"/);
+ assert.match(html,/class="splash-logo"/);
+ assert.match(html,/class="splash-check"/);
+ assert.match(html,/function finishLaunchSplash\(\)/);
+ assert.match(html,/finally\{finishLaunchSplash\(\)\}/);
+ assert.match(html,/href="\.\/splash\.css"/);
+ assert.match(load('splash.css'),/prefers-reduced-motion/);
+ assert.match(load('splash.css'),/@keyframes splashPop/);
+ assert.match(load('sw.js'),/splash\.css/);
+});
+test('application script syntax remains valid',()=>{
+ const match=html.match(/<script>\s*([\s\S]*?)<\/script>/);
+ assert.ok(match);
+ assert.doesNotThrow(()=>new Function(match[1]));
+});

@@ -11,6 +11,7 @@
   <meta name="description" content="TesterHub — منصة بسيطة لإدارة الاختبار المغلق لتطبيقات Google Play ومتابعة المختبرين لمدة 14 يوم." />
   <title>TesterHub | منصة المختبرين</title>
   <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="stylesheet" href="./splash.css" />
   <link rel="icon" type="image/png" href="./assets/icon-192.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/icon-180.png" />
   <script src="./firebase-config.js"></script>
@@ -242,7 +243,7 @@ button:focus-visible,input:focus-visible,select:focus-visible {outline:3px solid
       <button id="installDesktop" type="button" class="install-outline">＋ تثبيت TesterHub</button>
     </aside>
     <section class="phone-wrap" aria-label="تطبيق TesterHub">
-      <div class="device"><div class="camera"></div><div id="app" class="app"><div class="loading">يتم تشغيل TesterHub...</div></div></div>
+      <div class="device"><div class="camera"></div><div id="app" class="app"><div class="loading">يتم تشغيل TesterHub...</div></div><div id="launch-splash" class="launch-splash" role="status" aria-label="جارٍ فتح TesterHub"><div class="splash-stars" aria-hidden="true"><i></i><i></i><i></i></div><div class="splash-center"><div class="splash-emblem"><div class="splash-ring" aria-hidden="true"></div><svg class="splash-logo" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="splashBlue" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#0a3a86"/><stop offset="1" stop-color="#1574d0"/></linearGradient><linearGradient id="splashGreen" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#009b83"/><stop offset="1" stop-color="#15d2b1"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#splashBlue)"/><rect x="102" y="102" width="308" height="308" rx="94" fill="white" opacity=".94"/><rect x="124" y="124" width="264" height="264" rx="77" fill="url(#splashGreen)"/><path class="splash-check" d="M173 260 233 318 342 194" stroke="white" stroke-width="39" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="splash-name" dir="ltr">Tester<span>Hub</span></div><p class="splash-caption">اختبر بثقة، وانطلق بجودة أعلى</p><div class="splash-loader" aria-hidden="true"><span></span></div></div></div></div>
     </section>
   </div>
   <div id="toast" role="status" aria-live="polite"></div>
@@ -630,14 +631,29 @@ function render(){
 }
 let selectedProjectId=null,selectedAssignmentId=null;
 async function refresh(){if(!user)return;dashboard=await api.getDashboard();render()}
+const splashStartedAt=performance.now();
+let splashDismissed=false;
+function finishLaunchSplash(){
+ const splash=document.getElementById('launch-splash');
+ if(!splash||splashDismissed)return;
+ splashDismissed=true;
+ const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+ const remaining=Math.max(0,(reduced?0:1350)-(performance.now()-splashStartedAt));
+ window.setTimeout(()=>{
+  splash.classList.add('splash-done');
+  window.setTimeout(()=>splash.remove(),reduced?0:380);
+ },remaining);
+}
 async function start(){
  const hosted = /(^|\.)github\.io$/.test(location.hostname) || location.hostname.endsWith('.web.app') || location.hostname.endsWith('.firebaseapp.com');
  if (isDemo && hosted && new URLSearchParams(location.search).get('demo') !== '1') {
   app.innerHTML = '<div class="loading" style="padding:24px;line-height:2;text-align:center"><strong>TesterHub قيد الإعداد</strong><p>واجهة الموقع منشورة، لكن لم يتم ربط Firebase بعد. لا توجد حسابات حقيقية متاحة حالياً.</p><p>يمكن للمشرف استخدام ?demo=1 لمعاينة بيانات تجريبية فقط.</p></div>';
+  finishLaunchSplash();
   return;
  }
  try{await api.initialize();user=await api.currentUser();if(user)dashboard=await api.getDashboard();render();maybeDailyReminder()}
  catch(err){app.innerHTML=`<div class="loading" style="padding:25px;line-height:2;text-align:center">تعذر تشغيل الاتصال: ${clean(err.message)}<br/>تحقق من إعدادات Firebase والاتصال بالإنترنت.</div>`;console.error(err)}
+ finally{finishLaunchSplash()}
 }
 async function pending(action){if(busy)return;busy=true;try{await action()}catch(err){console.error(err);toast(humanError(err))}finally{busy=false}}
 function humanError(err){const code=err.code||'';if(code.includes('email-already-in-use'))return 'هذا البريد مسجل مسبقاً';if(code.includes('invalid-credential'))return 'البريد أو كلمة المرور غير صحيحة';if(code.includes('permission-denied'))return 'لا تملك صلاحية هذه العملية. تأكد من قواعد Firebase';if(code.includes('network'))return 'تحقق من اتصال الإنترنت';return err.message||'تعذر إكمال العملية'}

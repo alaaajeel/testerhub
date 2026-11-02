@@ -1,0 +1,28 @@
+
+/* TesterHub — in-app launch motion; independent of the native Android system splash. */
+.launch-splash{position:absolute;inset:11px;border-radius:36px;z-index:100;background:radial-gradient(circle at 50% 35%,#175bb5,#092e73 55%,#061a3a 100%);color:#fff;overflow:hidden;display:grid;place-items:center;transition:opacity .35s ease,visibility .35s ease;isolation:isolate}
+.launch-splash.splash-done{opacity:0;visibility:hidden;pointer-events:none}
+.launch-splash:before{content:"";position:absolute;width:160%;height:160%;border-radius:45%;background:conic-gradient(from 160deg,transparent 0 38%,#05c5a411 60%,transparent 75%);animation:splashBack 4s ease-in-out infinite alternate}
+.splash-center{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;width:100%;padding:25px}
+.splash-emblem{width:166px;height:166px;display:grid;place-items:center;position:relative}
+.splash-logo{width:122px;height:122px;border-radius:28px;position:relative;z-index:2;filter:drop-shadow(0 16px 23px #03d8a23d);opacity:0;transform:scale(.65);animation:splashPop .7s cubic-bezier(.2,1.4,.45,1) .05s both}
+.splash-check{stroke-dasharray:280;stroke-dashoffset:280;animation:splashDraw .62s ease-out .5s forwards}
+.splash-ring{position:absolute;inset:4px;border-radius:50%;background:conic-gradient(transparent 0 67%,#3ffbd8a6 85%,transparent 98%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2px));animation:splashSpin 2.8s linear infinite}
+.splash-name{font:800 29px/1.2 Arial,Roboto,sans-serif;letter-spacing:-1px;margin-top:23px;opacity:0;transform:translateY(12px);animation:splashAppear .46s ease .63s forwards}
+.splash-name span{color:#47efbc}
+.splash-caption{font-size:12px;font-weight:600;color:#d9edff;margin:9px 0 0;opacity:0;transform:translateY(12px);animation:splashAppear .5s ease .82s forwards}
+.splash-loader{width:90px;height:3px;border-radius:50px;background:#ffffff35;margin-top:34px;overflow:hidden;opacity:0;animation:splashAppear .4s ease .64s forwards}
+.splash-loader span{display:block;width:45%;height:100%;background:linear-gradient(90deg,#13cdb5,#8affe1);border-radius:inherit;animation:splashLoad 1.2s ease-in-out infinite alternate}
+.splash-stars i{position:absolute;width:4px;height:4px;border-radius:50%;background:#80f8e3;box-shadow:0 0 12px #8affe1;opacity:.85;animation:splashTwinkle 2s ease-in-out infinite alternate}
+.splash-stars i:nth-child(1){left:24%;top:31%}
+.splash-stars i:nth-child(2){right:21%;top:66%;animation-delay:.5s}
+.splash-stars i:nth-child(3){left:29%;top:73%;animation-delay:1s}
+@keyframes splashPop{to{transform:scale(1);opacity:1}}
+@keyframes splashDraw{to{stroke-dashoffset:0}}
+@keyframes splashAppear{to{transform:translateY(0);opacity:1}}
+@keyframes splashSpin{to{transform:rotate(360deg)}}
+@keyframes splashBack{from{transform:rotate(0deg)}to{transform:rotate(28deg)}}
+@keyframes splashLoad{to{transform:translateX(120%)}}
+@keyframes splashTwinkle{to{opacity:.2;transform:scale(.55)}}
+@media(max-width:830px){.launch-splash{inset:0;border-radius:0}}
+@media(prefers-reduced-motion:reduce){.launch-splash,.launch-splash:before,.splash-logo,.splash-check,.splash-ring,.splash-name,.splash-caption,.splash-loader,.splash-loader span,.splash-stars i{animation:none!important;transition:none!important}.splash-logo{opacity:1;transform:none}.splash-check{stroke-dashoffset:0}.splash-name,.splash-caption,.splash-loader{opacity:1;transform:none}}
