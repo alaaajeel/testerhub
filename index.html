@@ -243,7 +243,7 @@ async function initialize(){
  import(`https://www.gstatic.com/firebasejs/${version}/firebase-firestore.js`)
  ]);
  const app=initializeApp(firebaseConfig);auth=a.getAuth(app);db=f.getFirestore(app);authFns=a;storeFns=f;fbReady=true;
- await a.authStateReady(auth);
+ await auth.authStateReady();
 }
 async function currentUser(){
  if(isDemo){const d=demoState();return d.role==='tester'?{uid:'t1',name:'مختبر 1',email:'tester01@example.com',role:'tester',available:d.user?.available!==false}:{uid:'d1',name:'مطور تجريبي',email:'developer@example.com',role:'developer'}}
