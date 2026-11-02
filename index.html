@@ -302,16 +302,55 @@ async function createProject({name,link},testers){
  const user=await currentUser();if(user?.role!=='developer')throw Error('هذه الوظيفة للمطور فقط');
  const projectRef=storeFns.doc(storeFns.collection(db,'projects'));
  await storeFns.setDoc(projectRef,{name:name.trim(),link,ownerUid:user.uid,ownerName:user.name,createdAt:storeFns.serverTimestamp(),testersCount:testers.length});
- // Chunk the invitations so Firestore security-rule document access limits are not exceeded.
- for(let start=0;start<testers.length;start+=15){
-  const batch=storeFns.writeBatch(db);
-  for(const tester of testers.slice(start,start+15)){
-   const ref=storeFns.doc(db,'assignments',`${projectRef.id}_${tester.uid}`);
-   batch.set(ref,{projectId:projectRef.id,testerUid:tester.uid,ownerUid:user.uid,name:name.trim(),link,joinedDay:null,checkins:[],createdAt:storeFns.serverTimestamp()});
+ try{await syncProjectAssignments(projectRef.id);}
+ catch(err){
+  console.error('Project saved, but invitations failed:',err);
+  throw Error('التطبيق انحفظ لكن الدعوات ما وصلت بالكامل. افتح تطبيقاتي واضغط فحص وإصلاح الدعوات. '+(err.message||''));
+ }
+ return projectRef.id;
+}
+// Send only missing invitations; never reset an existing assignment or its progress.
+async function syncProjectAssignments(projectId){
+ if(isDemo){
+  const d=demoState(),p=d.projects.find(x=>x.id===projectId);
+  if(!p)throw Error('التطبيق غير موجود');
+  let added=0;
+  for(const t of d.testers.filter(x=>x.available&&x.role==='tester')){
+   if(!d.assignments.some(a=>a.projectId===projectId&&a.testerUid===t.uid)){
+    d.assignments.push({id:projectId+'_'+t.uid,projectId,testerUid:t.uid,ownerUid:p.ownerUid,name:p.name,link:p.link,joinedDay:null,checkins:[]});added++;
+   }
+  }
+  save(d);return {added,total:d.assignments.filter(a=>a.projectId===projectId).length};
+ }
+ const owner=await currentUser();
+ if(owner?.role!=='developer')throw Error('إعادة إرسال الدعوات متاحة لصاحب التطبيق فقط');
+ const {collection,query,where,getDocs,getDoc,doc,writeBatch,serverTimestamp}=storeFns;
+ const projectSnap=await getDoc(doc(db,'projects',projectId));
+ if(!projectSnap.exists()||projectSnap.data().ownerUid!==owner.uid)throw Error('هذا التطبيق غير تابع لحسابك');
+ const p=projectSnap.data();
+ const [available,assignedBefore]=await Promise.all([
+  getDocs(query(collection(db,'users'),where('role','==','tester'),where('available','==',true))),
+  getDocs(query(collection(db,'assignments'),where('ownerUid','==',owner.uid)))
+ ]);
+ const eligible=available.docs.map(testerProfile).filter(t=>t.role==='tester'&&t.available===true&&typeof t.uid==='string'&&t.uid);
+ if(!eligible.length)throw Error('لا توجد حسابات مختبرين متاحة حالياً');
+ const existing=new Set(assignedBefore.docs.map(tidy).filter(a=>a.projectId===projectId).map(a=>a.testerUid));
+ const missing=eligible.filter(t=>!existing.has(t.uid));
+ // Batch size bounded to avoid security rule document-access limits.
+ for(let i=0;i<missing.length;i+=8){
+  const batch=writeBatch(db);
+  for(const tester of missing.slice(i,i+8)){
+   batch.set(doc(db,'assignments',projectId+'_'+tester.uid),{
+    projectId,testerUid:tester.uid,ownerUid:owner.uid,name:p.name,link:p.link,
+    joinedDay:null,checkins:[],createdAt:serverTimestamp()
+   });
   }
   await batch.commit();
  }
- return projectRef.id;
+ const verified=await getDocs(query(collection(db,'assignments'),where('ownerUid','==',owner.uid)));
+ const finalUids=new Set(verified.docs.map(tidy).filter(a=>a.projectId===projectId).map(a=>a.testerUid));
+ if(eligible.some(t=>!finalUids.has(t.uid)))throw Error('لم يتم تأكيد وصول كل الدعوات، أعد المحاولة.');
+ return {added:missing.length,total:finalUids.size};
 }
 async function confirmJoin(assignmentId){
  if(isDemo){const d=demoState(),a=d.assignments.find(a=>a.id===assignmentId);if(!a)throw Error('الاختبار غير موجود');if(!a.joinedDay)a.joinedDay=dayKey();save(d);return}
@@ -431,7 +470,7 @@ function resetDemo(){previewStorage.removeItem(DEMO_KEY)}
 function getReminderMarker(){return previewStorage.getItem('testerhub_reminder_fired')||''}
 function setReminderMarker(key){previewStorage.setItem('testerhub_reminder_fired',key)}
 
-const api={isDemo,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
+const api={isDemo,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,syncProjectAssignments,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
 
 
 const app=document.getElementById('app');
@@ -508,10 +547,10 @@ function chatPage(){
  <form id="chat-form" class="surface"><div class="field"><label for="message-body">${isDeveloper?'رد على المختبر':'رسالة إلى المطور'}</label><textarea name="message" id="message-body" maxlength="600" minlength="2" required placeholder="اكتب ملاحظتك هنا..."></textarea></div><button class="cta blue wide" type="submit">${ico('message',17)} إرسال الرسالة</button></form>`;
 }
 function testerHome(){const assignments=primaryAssignments();return `${reminderUi()}${trackerCard()}<div class="section-title">التطبيقات المتاحة للاختبار ${ico('apps',20)}</div>${assignments.length?assignments.map(assignmentCard).join(''):`<div class="tab-empty">${ico('apps',38)}<h3>لا توجد تطبيقات مسندة لك</h3>راح يظهر الاختبار هنا بعد ما يضيف المطور بريدك إلى الاختبار وينشر الرابط.</div>`}`}
-function testerTests(){const active=primaryAssignments();return `<div class="surface"><div class="lead">اختباراتي</div><div class="small">تابع مشاركتك لمدة 14 يوماً، وسجّل اختبار كل يوم بعد تجربته فعلاً.</div></div>${active.length?active.map(assignmentCard).join(''):`<div class="tab-empty"><h3>ما عندك اختبارات حالياً</h3>تظهر التطبيقات بعد إضافتك من المطور.</div>`}`}
+function testerTests(){const active=primaryAssignments();return `<div class="surface"><div class="row between"><div><div class="lead">اختباراتي</div><div class="small">تابع مشاركتك لمدة 14 يوماً، وسجّل اختبار كل يوم بعد تجربته فعلاً.</div></div><button class="cta outline" data-action="refresh-tests">تحديث</button></div></div>${active.length?active.map(assignmentCard).join(''):`<div class="tab-empty"><h3>ما عندك اختبارات حالياً</h3>تظهر التطبيقات بعد إضافتك من المطور.</div>`}`}
 function rewards(){const xp=sumXp();return `<div class="surface" style="text-align:center;padding:29px 17px"><div class="medal">🪙</div><h3 style="margin:13px 0 5px">نقاط مكافآتك</h3><div class="coins">${xp} XP</div><div class="small">نقاط تشجيعية فقط، لا تعادل مبالغ مالية</div><div class="progress"><i style="width:${xp%100}%"></i></div><span class="chip">كل يوم مؤكد يزيد رصيدك</span></div><div class="surface"><div class="lead">كيف تكسب النقاط؟</div><div class="item-link">تأكيد اختبار اليوم <strong>+10 🪙</strong></div><div class="item-link">إكمال 14 يوماً <strong>+20 🪙</strong></div></div>`}
 function stat(label,n,green=false){return `<div class="metric ${green?'green':''}">${ico('testers',23)}<div class="label">${label}</div><div class="num">${formatNum(n)}</div></div>`}
-function projectCard(p){const members=myProjectAssignments(p.id),n=members.length,active=members.filter(lastActive).length,percent=n?Math.round(active/n*100):0;return `<article class="surface app-card"><div class="row between"><div class="row"><div class="app-mark blue">${ico('package',29)}</div><div><div class="bold">${clean(p.name)}</div><div class="tiny">اختبار مغلق · ${n} مختبر</div></div></div><span class="flag">نشط ●</span></div><div class="divider"></div><div class="row between"><span class="tiny">نسبة النشاط</span><strong class="success">${percent}%</strong></div><div class="progress" style="margin:7px 0"><i style="width:${percent}%"></i></div><button class="cta blue wide" data-action="project-details" data-id="${clean(p.id)}">عرض المختبرين والتقدم</button></article>`}
+function projectCard(p){const members=myProjectAssignments(p.id),n=members.length,active=members.filter(lastActive).length,percent=n?Math.round(active/n*100):0;return `<article class="surface app-card"><div class="row between"><div class="row"><div class="app-mark blue">${ico('package',29)}</div><div><div class="bold">${clean(p.name)}</div><div class="tiny">اختبار مغلق · ${n} مختبر</div></div></div><span class="${n?'flag':'chip'}">${n?'وصل للمختبرين':'بلا دعوات'}</span></div><div class="divider"></div><div class="row between"><span class="tiny">نسبة النشاط</span><strong class="success">${percent}%</strong></div><div class="progress" style="margin:7px 0"><i style="width:${percent}%"></i></div><button class="cta blue wide" data-action="project-details" data-id="${clean(p.id)}">عرض المختبرين والتقدم</button></article>`}
 function devHome(){const projects=mineProjects(),project=projects[0],all=project?myProjectAssignments(project.id):[],number=all.length,active=all.filter(lastActive).length,pct=number?Math.round(active/number*100):0;return `<article class="surface feature"><div class="row between"><div class="row"><div class="app-mark" style="height:47px;width:47px;border-radius:13px;background:linear-gradient(120deg,#3382e9,#114285)">▰</div><div><div class="bold">${clean(project?.name||'تطبيقك الأول')}</div><div class="tiny">منصة الاختبار المغلق</div></div></div><span class="flag">${project?'نشط ●':'جاهز'}</span></div><div class="divider"></div><div class="metrics">${stat('إجمالي المختبرين',number)}${stat('المختبرون النشطون',active,true)}</div><div class="row" style="justify-content:center;margin:12px 0"><span class="tiny">${active} نشط · ${Math.max(0,number-active)} غير نشط</span></div><div class="divider"></div><div class="row between"><div><div class="bold">معدل النشاط</div><div class="small">${active} من ${number} مختبراً نشطون</div></div><div class="donut" style="--percent:${pct}%"><b>${pct}%</b></div></div></article><button class="cta blue wide" data-tab="new">${ico('add',17)} إضافة تطبيق للاختبار</button><div class="surface" style="margin-top:13px"><button class="item-link" data-tab="testers">${ico('testers',20)} قائمة المختبرين المتاحين <span>‹</span></button><button class="item-link" data-tab="apps">${ico('apps',20)} تطبيقاتي وروابط الاختبار <span>‹</span></button><button class="item-link" data-action="copy-emails">${ico('copy',20)} نسخ الإيميلات <span>‹</span></button></div>`}
 function devApps(){const projects=mineProjects();return `<div class="surface"><div class="row between"><div class="lead">تطبيقاتي</div><button data-tab="new" class="cta">＋ جديد</button></div><div class="small">أضف المختبرين في Google Play Console أولاً، ثم انشر رابط الانضمام.</div></div>${projects.length?projects.map(projectCard).join(''):`<div class="tab-empty">${ico('apps',36)}<h3>لم تضف تطبيقاً بعد</h3>اضغط «جديد» لنسخ الإيميلات وإضافة رابط اختبارك.</div>`}`}
 function testerDirectory(){const testers=dashboard.testers.filter(t=>t.available);return `<div class="surface"><div class="row between"><div><div class="lead">المختبرون المتاحون</div><div class="small">إيميلات وافق أصحابها على المشاركة</div></div><span class="email-count">${testers.length} بريد</span></div><button class="cta blue wide" data-action="copy-emails" ${!testers.length?'disabled':''} style="margin-top:10px">${ico('copy',17)} نسخ جميع الإيميلات</button></div><div class="surface">${testers.length?testers.map((t,i)=>`<div class="row between" style="padding:9px 0;${i?'border-top:1px solid #e8eef7':''}"><div><div class="bold" style="font-size:13px">${clean(t.name)}</div><div class="tiny email-ltr">${clean(t.email)}</div></div><span class="flag">متاح</span></div>`).join(''):'<div class="small">لا يوجد مختبرون مسجلون ومتاحون حالياً.</div>'}</div>`}
@@ -519,7 +558,7 @@ function newProject(){const testers=dashboard.testers.filter(t=>t.available);ret
 function projectDetails(id){
  const p=mineProjects().find(x=>x.id===id);if(!p)return devApps();
  const assignments=myProjectAssignments(id),reports=(dashboard.reports||[]).filter(r=>r.projectId===id).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
- return `<div class="surface"><button class="top-link" data-tab="apps">${ico('chevron',16)} العودة إلى تطبيقاتي</button><div class="lead" style="margin-top:13px">${clean(p.name)}</div><div class="small">${assignments.length} مختبر · الاختبار المغلق</div><button class="cta blue wide" style="margin-top:12px" data-action="open-project" data-id="${clean(id)}">فتح رابط الانضمام</button></div>
+ return `<div class="surface"><button class="top-link" data-tab="apps">${ico('chevron',16)} العودة إلى تطبيقاتي</button><div class="lead" style="margin-top:13px">${clean(p.name)}</div><div class="small">${assignments.length} تكليف اختبار محفوظ · الاختبار المغلق</div><button class="cta blue wide" style="margin-top:12px" data-action="open-project" data-id="${clean(id)}">فتح رابط الانضمام</button><button class="cta outline wide" style="margin-top:9px" data-action="sync-project" data-id="${clean(id)}">${ico('testers',17)} فحص وإصلاح دعوات المختبرين</button><div class="small" style="margin-top:8px">يرسل الدعوات الناقصة للمختبرين المتاحين الآن بدون تكرار أو تصفير الأيام.</div></div>
  <div class="section-title">${ico('clipboard',20)} تقارير المختبرين</div><div class="surface"><div class="row between"><strong>${reports.length} تقرير يومي</strong><span class="chip">${reports.filter(r=>r.outcome==='issue').length} مشكلة مُبلّغ عنها</span></div>${reports.length?reports.slice(0,12).map(r=>`<div class="report-record"><div class="row between"><span class="report-state ${r.status==='fixed'?'fixed':r.outcome==='issue'?'issue':''}">${r.status==='fixed'?'تم الإصلاح':r.outcome==='issue'?'⚠ مشكلة':'✓ نجح'}</span><span class="tiny">${clean(r.date)} · مختبر ${clean(r.testerUid.slice(1))}</span></div><div style="margin-top:5px">${clean(r.notes||'اختبر التطبيق ولم يبلغ عن مشاكل')}</div><button class="cta outline" style="margin-top:7px" data-action="open-chat" data-id="${clean(r.assignmentId)}">${ico('message',15)} مراسلة المختبر</button></div>`).join(''):`<div class="empty">ماكو تقارير يومية جديدة لحد الآن.</div>`}</div>
  <div class="section-title">المختبرون المشاركون</div>${assignments.length?assignments.map((a,i)=>{const count=threadMessages(a.id).length;return `<div class="surface" style="padding:12px"><div class="row between"><div><div class="bold">مختبر ${i+1}</div><div class="tiny">${a.joinedDay?'اليوم '+currentDay(a)+' من 14':'بانتظار تأكيد الانضمام'}</div></div><span class="${lastActive(a)?'flag':'chip'}">${lastActive(a)?'نشط':'غير نشط'}</span></div><div class="progress" style="margin:10px 0 0"><i style="width:${(a.checkins?.length||0)/14*100}%"></i></div><div class="tiny" style="margin-top:7px">${a.checkins?.length||0} يوم بتقرير مؤكّد</div><button class="item-link" data-action="open-chat" data-id="${clean(a.id)}">${ico('message',17)} مراسلة المختبر ${count?`<span class="message-counter">${count}</span>`:'<span>‹</span>'}</button></div>`}).join(''):'<div class="tab-empty">لم ينضم مختبرون بعد</div>'}`;
 }
@@ -585,6 +624,14 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='open-chat'){selectedAssignmentId=id;tab='chat';if(user.role==='developer')selectedProjectId=dashboard.assignments.find(a=>a.id===id)?.projectId||selectedProjectId;render();return}
  if(action==='mark-fixed'){await api.resolveLatestIssue(id);await refresh();tab='chat';toast('تم إبلاغ المختبر بأن المشكلة انحلّت');return}
  if(action==='project-details'){selectedProjectId=id;tab='details';render();return}
+ if(action==='refresh-tests'){await refresh();toast('تم تحديث الاختبارات من Firebase');return}
+ if(action==='sync-project'){
+  if(!confirm('راح نرسل التطبيق لجميع المختبرين المتاحين حالياً إذا ما وصلتهم دعوة. الاختبارات الموجودة تبقى محفوظة. تكمل؟'))return;
+  const result=await api.syncProjectAssignments(id);
+  await refresh();selectedProjectId=id;tab='details';render();
+  toast('تم التحقق من '+result.total+' دعوة وإضافة '+result.added+' دعوة ناقصة');
+  return;
+ }
  if(action==='notice'){if(reminderPending())toast('لا تنسى اختبار اليوم وتأكيده!');else toast('ما عندك اختبارات متأخرة اليوم');return}
  if(action==='profile'){tab='profile';render();return}
  if(action==='install'){await install();return}
