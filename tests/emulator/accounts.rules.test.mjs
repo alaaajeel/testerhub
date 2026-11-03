@@ -31,3 +31,19 @@ test('project invitation list is unique and constrains assignment creation',asyn
  await env.withSecurityRulesDisabled(async c=>updateDoc(doc(c.firestore(),'users','t2'),{available:true}));
  await assertFails(setDoc(doc(d,'assignments','selected_t2'),{...assignment,testerUid:'t2'}));
 });
+test('draft lifecycle preserves identity and rejects edits after invitations',async()=>{
+ const owner=db('d1'),other=db('d2'),ref=doc(owner,'projects','draft1');
+ const draft={name:'Draft App',link:'',status:'draft',ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:0,selectedTesterUids:[]};
+ await assertSucceeds(setDoc(ref,draft));
+ await assertFails(setDoc(doc(owner,'projects','badDraft'),{...draft,status:'draft',testersCount:1,selectedTesterUids:['t1']}));
+ await assertFails(setDoc(doc(owner,'projects','badLink'),{...draft,status:'recruiting',link:'https://example.com/x',testersCount:1,selectedTesterUids:['t1']}));
+ await assertFails(updateDoc(doc(other,'projects','draft1'),{name:'Stolen'}));
+ await assertSucceeds(updateDoc(ref,{name:'Edited Draft',link:'https://play.google.com/apps/testing/x'}));
+ await assertFails(updateDoc(ref,{status:'recruiting',link:'https://example.com/x',testersCount:1,selectedTesterUids:['t1']}));
+ await assertFails(setDoc(doc(owner,'assignments','draft1_t1'),{projectId:'draft1',testerUid:'t1',ownerUid:'d1',name:'Edited Draft',link:'https://play.google.com/apps/testing/x',joinedDay:null,checkins:[],createdAt:serverTimestamp()}));
+ await assertSucceeds(updateDoc(ref,{status:'recruiting',testersCount:1,selectedTesterUids:['t1']}));
+ await assertFails(updateDoc(ref,{name:'Erase history'}));
+ await assertFails(updateDoc(ref,{selectedTesterUids:['t2']}));
+ await assertFails(updateDoc(ref,{ownerUid:'d2'}));
+ await assertSucceeds(setDoc(doc(owner,'assignments','draft1_t1'),{projectId:'draft1',testerUid:'t1',ownerUid:'d1',name:'Edited Draft',link:'https://play.google.com/apps/testing/x',joinedDay:null,checkins:[],createdAt:serverTimestamp()}));
+});
