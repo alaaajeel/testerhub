@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#1558b2" />
+  <meta name="theme-color" content="#092e73" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -11,6 +11,8 @@
   <meta name="description" content="TesterHub — منصة بسيطة لإدارة الاختبار المغلق لتطبيقات Google Play ومتابعة المختبرين لمدة 14 يوم." />
   <title>TesterHub | منصة المختبرين</title>
   <link rel="manifest" href="./manifest.webmanifest" />
+  <!-- Keep first browser paint the same shade as the Android-generated PWA launch screen. -->
+  <style>html,body.splash-boot{background:#092e73!important}</style>
   <link rel="stylesheet" href="./splash.css" />
   <link rel="icon" type="image/png" href="./assets/icon-192.png?v=identity-2" />
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/icon-180.png?v=identity-2" />
@@ -269,7 +271,7 @@ button:focus-visible,input:focus-visible,select:focus-visible {outline:3px solid
 .header-brand-icon{width:36px;height:36px;object-fit:contain}
 </style>
 </head>
-<body>
+<body class="splash-boot">
   <div class="layout">
     <aside class="showcase">
       <div class="brand-card"><img src="./assets/brand-lockup.svg" alt="TesterHub" /></div>
@@ -936,7 +938,7 @@ function finishLaunchSplash(){
  const remaining=Math.max(0,(reduced?0:1350)-(performance.now()-splashStartedAt));
  window.setTimeout(()=>{
   splash.classList.add('splash-done');
-  window.setTimeout(()=>splash.remove(),reduced?0:380);
+  window.setTimeout(()=>{splash.remove();document.body.classList.remove('splash-boot')},reduced?0:380);
  },remaining);
 }
 async function start(){

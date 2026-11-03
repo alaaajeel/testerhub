@@ -166,3 +166,14 @@ test('updated brand covers home icon, browser favicon, login, desktop wordmark a
  assert.match(load('manifest.webmanifest'),/icon-maskable-512/);
  assert.match(load('sw.js'),/brand-lockup\.svg/);
 });
+
+test('Android-generated splash blends into animated in-app splash',()=>{
+ const m=JSON.parse(load('manifest.webmanifest'));
+ assert.equal(m.background_color,'#092e73');
+ assert.equal(m.theme_color,'#092e73');
+ assert.match(html,/<meta name="theme-color" content="#092e73"/);
+ assert.match(html,/<body class="splash-boot">/);
+ assert.match(html,/html,body\.splash-boot\{background:#092e73!important\}/);
+ assert.match(html,/document\.body\.classList\.remove\('splash-boot'\)/);
+ assert.match(load('splash.css'),/radial-gradient\(circle at 50% 35%,#175bb5,#092e73/);
+});
