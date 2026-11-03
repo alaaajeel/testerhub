@@ -161,7 +161,7 @@ test('notification center can be dismissed while cloud verification is loading',
 test('updated brand covers home icon, browser favicon, login, desktop wordmark and splash',()=>{
  assert.match(html,/assets\/brand-icon\.svg/);
  assert.match(html,/assets\/brand-lockup\.svg/);
- assert.match(html,/identity-2/);
+ assert.match(html,/splash-match-2/);
  assert.match(html,/class="splash-check"/);
  assert.match(load('manifest.webmanifest'),/icon-maskable-512/);
  assert.match(load('sw.js'),/brand-lockup\.svg/);
