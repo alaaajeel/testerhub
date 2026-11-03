@@ -136,7 +136,7 @@ service cloud.firestore {
       allow get, list: if signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
       allow create: if verified()
-        && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','date','tested','outcome','notes','status','createdAt','submittedAt'])
+        && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','date','tested','outcome','notes','status','createdAt','submittedAt','bug'])
         && reportId == request.resource.data.assignmentId + '_' + request.resource.data.date
         && request.resource.data.testerUid == request.auth.uid
         && assignment(request.resource.data.assignmentId).data.testerUid == request.auth.uid
@@ -149,6 +149,16 @@ service cloud.firestore {
         && request.resource.data.notes is string
         && request.resource.data.notes.size() >= 10
         && request.resource.data.notes.size() <= 800
+        && (!('bug' in request.resource.data) || (
+          request.resource.data.outcome == 'issue'
+          && request.resource.data.bug is map
+          && request.resource.data.bug.keys().hasAll(['title','steps','expected','actual','severity'])
+          && request.resource.data.bug.keys().hasOnly(['title','steps','expected','actual','severity'])
+          && request.resource.data.bug.title is string && request.resource.data.bug.title.size() >= 5 && request.resource.data.bug.title.size() <= 120
+          && request.resource.data.bug.steps is string && request.resource.data.bug.steps.size() >= 10 && request.resource.data.bug.steps.size() <= 800
+          && request.resource.data.bug.expected is string && request.resource.data.bug.expected.size() >= 5 && request.resource.data.bug.expected.size() <= 400
+          && request.resource.data.bug.actual is string && request.resource.data.bug.actual.size() >= 5 && request.resource.data.bug.actual.size() <= 400
+          && request.resource.data.bug.severity in ['low','medium','high','critical']))
         && request.resource.data.tested is string
         && request.resource.data.tested.size() <= 150
         && (assignment(request.resource.data.assignmentId).data.get('tasks',[]).size() == 0
