@@ -5,8 +5,8 @@
   "targets": {
     "testhubiq-c7711": {
       "hosting": {
-        "testerhubiq": [
-          "testerhubiq"
+        "testiqx": [
+          "testiqx"
         ]
       }
     }

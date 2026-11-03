@@ -70,5 +70,5 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESTHUBIQ_C7711 }}
           projectId: testhubiq-c7711
           channelId: live
-          target: testerhubiq
+          target: testiqx
           entryPoint: .
