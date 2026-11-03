@@ -43,3 +43,31 @@ jobs:
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  firebase_hosting:
+    name: Firebase Hosting — enabled only after owner authorization
+    needs: deploy
+    # Prevent accidentally replacing an existing Firebase Hosting site before owner verifies it.
+    if: ${{ vars.ENABLE_FIREBASE_HOSTING_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout same tested revision
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build the exact static site
+        run: npm run build
+      - name: Deploy Hosting only (never deploy Firestore rules from CI)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESTHUBIQ_C7711 }}
+          projectId: testhubiq-c7711
+          channelId: live
+          entryPoint: .
