@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "testhubiq-c7711"
+  },
+  "targets": {
+    "testhubiq-c7711": {
+      "hosting": {
+        "testerhubiq": [
+          "testerhubiq"
+        ]
+      }
+    }
   }
 }

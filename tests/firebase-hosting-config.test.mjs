@@ -8,6 +8,8 @@ const workflow=read('.github/workflows/pages.yml');
 test('Firebase Hosting uses the existing TestHubiq Firebase project, not a new database',()=>{
  assert.equal(project.projects.default,'testhubiq-c7711');
  assert.equal(firebase.hosting.public,'dist');
+ assert.equal(firebase.hosting.target,'testerhubiq');
+ assert.deepEqual(project.targets['testhubiq-c7711'].hosting.testerhubiq,['testerhubiq']);
  assert.equal(firebase.firestore.rules,'firestore.rules');
 });
 test('Hosting deploys only the built public site',()=>{
@@ -20,6 +22,7 @@ test('GitHub Firebase deploy is opt-in and requires an encrypted credential',()=
  assert.match(workflow,/secrets\.FIREBASE_SERVICE_ACCOUNT_TESTHUBIQ_C7711/);
  assert.match(workflow,/FirebaseExtended\/action-hosting-deploy@v0/);
  assert.match(workflow,/channelId: live/);
+ assert.match(workflow,/target: testerhubiq/);
 });
 test('Firebase Hosting deployment does not automatically push Firestore rules',()=>{
  assert.match(workflow,/needs: deploy/);
