@@ -1,7 +1,7 @@
 import {before,after,beforeEach,test} from 'node:test';
 import {readFileSync} from 'node:fs';
 import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
-import {doc,setDoc,getDoc,updateDoc,deleteDoc,collection,query,where,getDocs,serverTimestamp} from 'firebase/firestore';
+import {doc,setDoc,getDoc,updateDoc,deleteDoc,collection,query,where,getDocs,serverTimestamp,writeBatch} from 'firebase/firestore';
 let env;
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-testerhub',firestore:{rules:readFileSync('firestore.rules','utf8')}})});
 after(async()=>{await env?.cleanup()});
@@ -22,12 +22,30 @@ test('unverified tester cannot start assignment',async()=>assertFails(updateDoc(
 test('verified tester can start own assignment',async()=>assertSucceeds(updateDoc(doc(db('t1'),'assignments','p1_t1'),{joinedDay:'2026-11-03',joinedAt:serverTimestamp()})));
 test('invalid names and nonboolean availability rejected',async()=>{await assertFails(updateDoc(doc(db('t1'),'users','t1'),{name:'x'}));await assertFails(updateDoc(doc(db('t1'),'users','t1'),{available:'yes'}))});
 test('project invitation list is unique and constrains assignment creation',async()=>{
- const d=db('d1'),p={name:'Selected App',link:'https://play.google.com/apps/testing/x',ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
+ const d=db('d1'),p={name:'Selected App',link:'https://play.google.com/apps/testing/x',tasks:['Test login screen'],ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
  await assertSucceeds(setDoc(doc(d,'projects','selected'),p));
  await assertFails(setDoc(doc(d,'projects','duplicate'),{...p,testersCount:2,selectedTesterUids:['t1','t1']}));
- const assignment={projectId:'selected',testerUid:'t1',ownerUid:'d1',name:p.name,link:p.link,joinedDay:null,checkins:[],createdAt:serverTimestamp()};
+ const assignment={projectId:'selected',testerUid:'t1',ownerUid:'d1',name:p.name,link:p.link,tasks:p.tasks,joinedDay:null,checkins:[],createdAt:serverTimestamp()};
  await assertSucceeds(setDoc(doc(d,'assignments','selected_t1'),assignment));
  await assertFails(setDoc(doc(d,'assignments','selected_t1'),assignment));
  await env.withSecurityRulesDisabled(async c=>updateDoc(doc(c.firestore(),'users','t2'),{available:true}));
  await assertFails(setDoc(doc(d,'assignments','selected_t2'),{...assignment,testerUid:'t2'}));
+});
+test('task snapshot rejects mismatch and report must describe assigned task',async()=>{
+ const owner=db('d1'),tester=db('t1'),tasks=['Test search and open result'];
+ const p={name:'Tasks App',link:'https://play.google.com/apps/testing/x',tasks,ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
+ await assertSucceeds(setDoc(doc(owner,'projects','taskp'),p));
+ const a={projectId:'taskp',testerUid:'t1',ownerUid:'d1',name:p.name,link:p.link,tasks,joinedDay:null,checkins:[],createdAt:serverTimestamp()};
+ await assertFails(setDoc(doc(owner,'assignments','taskp_t1'),{...a,tasks:['Do something else']}));
+ await assertSucceeds(setDoc(doc(owner,'assignments','taskp_t1'),a));
+ await assertFails(updateDoc(doc(owner,'projects','taskp'),{tasks:['Replace old history']}));
+ const day=new Date().toISOString().slice(0,10),assignmentRef=doc(tester,'assignments','taskp_t1');
+ await assertSucceeds(updateDoc(assignmentRef,{joinedDay:day,joinedAt:serverTimestamp()}));
+ const report={assignmentId:'taskp_t1',projectId:'taskp',testerUid:'t1',ownerUid:'d1',date:day,tested:'Fake task',outcome:'ok',notes:'Tried this flow',status:'ok',createdAt:new Date().toISOString(),submittedAt:serverTimestamp()};
+ const batch=writeBatch(tester);batch.set(doc(tester,'reports','taskp_t1_'+day),report);batch.update(assignmentRef,{checkins:[day],lastCheckinAt:serverTimestamp()});
+ await assertFails(batch.commit());
+ const empty=writeBatch(tester);empty.set(doc(tester,'reports','taskp_t1_'+day),{...report,tested:tasks[0],notes:''});empty.update(assignmentRef,{checkins:[day],lastCheckinAt:serverTimestamp()});
+ await assertFails(empty.commit());
+ const good=writeBatch(tester);good.set(doc(tester,'reports','taskp_t1_'+day),{...report,tested:tasks[0]});good.update(assignmentRef,{checkins:[day],lastCheckinAt:serverTimestamp()});
+ await assertSucceeds(good.commit());
 });

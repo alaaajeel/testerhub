@@ -68,3 +68,23 @@ test('developer selects testers explicitly before copying emails',async({page})=
  await page.locator('[name="testerUid"][value="t2"]').check();
  expect(await page.evaluate(()=>selectedProjectTesters().map(t=>t.uid))).toEqual(['t2']);
 });
+test('assigned task appears in daily report and saved report keeps its snapshot',async({page})=>{
+ await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
+ await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
+ await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();tab='new';render()});
+ await page.locator('[name="testerUid"][value="t1"]').check();
+ await page.locator('#project-name').fill('Search Test');
+ await page.locator('#project-tasks').fill('ابحث عن منتج وافتح تفاصيله');
+ await page.locator('#project-link').fill('https://play.google.com/apps/testing/test');
+ await page.locator('[name="confirmed"]').check();
+ await page.locator('#project-form button[type="submit"]').click();
+ await page.evaluate(async()=>{user=await api.switchDemo('tester');await refresh();tab='tests';render()});
+ const card=page.locator('.app-card',{hasText:'Search Test'});
+ await card.locator('[data-action="confirm-join"]').click();
+ await card.locator('[data-action="write-report"]').click();
+ await expect(page.locator('#daily-report-form')).toContainText('ابحث عن منتج وافتح تفاصيله');
+ await page.locator('[name="opened"]').check();await page.locator('[name="feature"]').check();
+ await page.locator('#test-note').fill('بحثت عن منتج وفتحت صفحة التفاصيل بنجاح');
+ await page.locator('#daily-report-form button[type="submit"]').click();
+ expect(await page.evaluate(()=>dashboard.reports.find(r=>r.tested==='ابحث عن منتج وافتح تفاصيله')?.notes)).toContain('بحثت عن منتج');
+});
