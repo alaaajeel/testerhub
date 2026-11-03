@@ -84,7 +84,7 @@ service cloud.firestore {
       allow get, list: if signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
       allow create: if developer()
-        && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt','tasks'])
+        && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt','tasks','invitationStatus'])
         && assignmentId == request.resource.data.projectId + '_' + request.resource.data.testerUid
         && request.resource.data.ownerUid == request.auth.uid
         && project(request.resource.data.projectId).data.ownerUid == request.auth.uid
@@ -97,9 +97,19 @@ service cloud.firestore {
         && profile(request.resource.data.testerUid).data.available == true
         && request.resource.data.joinedDay == null
         && request.resource.data.checkins == []
+        && request.resource.data.invitationStatus == 'pending'
         && request.resource.data.createdAt == request.time;
       allow update: if verified() && self(resource.data.testerUid) && (
+        (resource.data.get('invitationStatus','legacy') == 'pending'
+          && resource.data.createdAt is timestamp
+          && request.time < resource.data.createdAt + duration.value(7, 'd')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['invitationStatus','respondedAt'])
+          && request.resource.data.invitationStatus in ['accepted','declined']
+          && request.resource.data.respondedAt == request.time
+          && resource.data.joinedDay == null)
+        ||
         (resource.data.joinedDay == null
+          && resource.data.get('invitationStatus','legacy') in ['accepted','legacy']
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['joinedDay','joinedAt'])
           && request.resource.data.joinedDay is string
           && currentUtcDay(request.resource.data.joinedDay)

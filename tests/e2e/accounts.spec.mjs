@@ -98,6 +98,7 @@ test('assigned task appears in daily report and saved report keeps its snapshot'
  await page.locator('#project-form button[value="publish"]').click();
  await page.evaluate(async()=>{user=await api.switchDemo('tester');await refresh();tab='tests';render()});
  const card=page.locator('.app-card',{hasText:'Search Test'});
+ await card.locator('[data-action="accept-invite"]').click();
  await card.locator('[data-action="confirm-join"]').click();
  await card.locator('[data-action="write-report"]').click();
  await expect(page.locator('#daily-report-form')).toContainText('ابحث عن منتج وافتح تفاصيله');
