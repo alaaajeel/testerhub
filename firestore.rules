@@ -10,6 +10,10 @@ service cloud.firestore {
     function project(pid) { return get(/databases/$(database)/documents/projects/$(pid)); }
     function assignment(id) { return get(/databases/$(database)/documents/assignments/$(id)); }
     function assignmentAfter(id) { return getAfter(/databases/$(database)/documents/assignments/$(id)); }
+    function currentUtcDay(day) {
+      return day is string && day.matches('\\d{4}-\\d{2}-\\d{2}')
+        && timestamp.date(int(day[0:4]), int(day[5:7]), int(day[8:10])) == request.time.date();
+    }
     match /users/{uid} {
       allow get: if self(uid) || (developer() && resource.data.role == 'tester' && resource.data.available == true);
       allow list: if developer() && resource.data.role == 'tester' && resource.data.available == true;
@@ -37,7 +41,7 @@ service cloud.firestore {
     match /projects/{projectId} {
       allow get, list: if signedIn() && resource.data.ownerUid == request.auth.uid;
       allow create: if developer()
-        && request.resource.data.keys().hasOnly(['name','link','ownerUid','ownerName','createdAt','testersCount','selectedTesterUids'])
+        && request.resource.data.keys().hasOnly(['name','link','ownerUid','ownerName','createdAt','testersCount','selectedTesterUids','status','tasks'])
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerName == me().data.name
         && request.resource.data.name is string
@@ -45,36 +49,70 @@ service cloud.firestore {
         && request.resource.data.name.size() <= 100
         && request.resource.data.link is string
         && request.resource.data.link.size() <= 2000
+        && (request.resource.data.get('status','recruiting') == 'draft' || request.resource.data.link.matches('https://play\\.google\\.com/.*'))
+        && request.resource.data.tasks is list
+        && (request.resource.data.get('status','recruiting') == 'draft' ? request.resource.data.tasks.size() <= 14 : request.resource.data.tasks.size() >= 1 && request.resource.data.tasks.size() <= 14)
+        && request.resource.data.tasks.join('|').size() <= 1680
         && request.resource.data.selectedTesterUids is list
         && request.resource.data.selectedTesterUids.size() == request.resource.data.testersCount
         && request.resource.data.selectedTesterUids.toSet().size() == request.resource.data.testersCount
         && request.resource.data.testersCount is int
-        && request.resource.data.testersCount > 0
+        && (request.resource.data.get('status','recruiting') == 'draft'
+          ? (request.resource.data.testersCount == 0 && request.resource.data.selectedTesterUids == [] && request.resource.data.link.size() <= 2000)
+          : (request.resource.data.get('status','recruiting') == 'recruiting' && request.resource.data.testersCount > 0))
         && request.resource.data.testersCount <= 400
         && request.resource.data.createdAt == request.time;
-      allow update, delete: if false;
+      allow update: if developer() && resource.data.ownerUid == request.auth.uid
+        && resource.data.get('status','recruiting') == 'draft'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','link','status','testersCount','selectedTesterUids','tasks'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 70
+        && request.resource.data.link is string && request.resource.data.link.size() <= 2000
+        && (request.resource.data.status == 'draft' || request.resource.data.link.matches('https://play\\.google\\.com/.*'))
+        && request.resource.data.tasks is list
+        && (request.resource.data.status == 'draft' ? request.resource.data.tasks.size() <= 14 : request.resource.data.tasks.size() >= 1 && request.resource.data.tasks.size() <= 14)
+        && request.resource.data.tasks.join('|').size() <= 1680
+        && request.resource.data.selectedTesterUids is list
+        && request.resource.data.selectedTesterUids.size() == request.resource.data.testersCount
+        && request.resource.data.selectedTesterUids.toSet().size() == request.resource.data.testersCount
+        && request.resource.data.testersCount is int
+        && (request.resource.data.status == 'draft'
+          ? (request.resource.data.testersCount == 0 && request.resource.data.selectedTesterUids == [])
+          : (request.resource.data.status == 'recruiting' && request.resource.data.testersCount > 0 && request.resource.data.testersCount <= 400));
+      allow delete: if false;
     }
     match /assignments/{assignmentId} {
       allow get, list: if signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
       allow create: if developer()
-        && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt'])
+        && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt','tasks','invitationStatus'])
         && assignmentId == request.resource.data.projectId + '_' + request.resource.data.testerUid
         && request.resource.data.ownerUid == request.auth.uid
         && project(request.resource.data.projectId).data.ownerUid == request.auth.uid
+        && project(request.resource.data.projectId).data.get('status','recruiting') == 'recruiting'
         && request.resource.data.testerUid in project(request.resource.data.projectId).data.selectedTesterUids
         && request.resource.data.name == project(request.resource.data.projectId).data.name
         && request.resource.data.link == project(request.resource.data.projectId).data.link
+        && request.resource.data.get('tasks',[]) == project(request.resource.data.projectId).data.get('tasks',[])
         && profile(request.resource.data.testerUid).data.role == 'tester'
         && profile(request.resource.data.testerUid).data.available == true
         && request.resource.data.joinedDay == null
         && request.resource.data.checkins == []
+        && request.resource.data.invitationStatus == 'pending'
         && request.resource.data.createdAt == request.time;
       allow update: if verified() && self(resource.data.testerUid) && (
+        (resource.data.get('invitationStatus','legacy') == 'pending'
+          && resource.data.createdAt is timestamp
+          && request.time < resource.data.createdAt + duration.value(7, 'd')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['invitationStatus','respondedAt'])
+          && request.resource.data.invitationStatus in ['accepted','declined']
+          && request.resource.data.respondedAt == request.time
+          && resource.data.joinedDay == null)
+        ||
         (resource.data.joinedDay == null
+          && resource.data.get('invitationStatus','legacy') in ['accepted','legacy']
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['joinedDay','joinedAt'])
           && request.resource.data.joinedDay is string
-          && request.resource.data.joinedDay.matches('\\d{4}-\\d{2}-\\d{2}')
+          && currentUtcDay(request.resource.data.joinedDay)
           && request.resource.data.joinedAt == request.time
           && request.resource.data.checkins == [])
         ||
@@ -86,6 +124,7 @@ service cloud.firestore {
           && request.resource.data.checkins.size() <= 14
           && request.resource.data.checkins.hasAll(resource.data.checkins)
           && !(request.resource.data.checkins[request.resource.data.checkins.size()-1] in resource.data.checkins)
+          && currentUtcDay(request.resource.data.checkins[request.resource.data.checkins.size()-1])
           && getAfter(/databases/$(database)/documents/reports/$(assignmentId + '_' + request.resource.data.checkins[request.resource.data.checkins.size()-1])).data.date == request.resource.data.checkins[request.resource.data.checkins.size()-1]
           && getAfter(/databases/$(database)/documents/reports/$(assignmentId + '_' + request.resource.data.checkins[request.resource.data.checkins.size()-1])).data.testerUid == resource.data.testerUid
           && request.time < resource.data.joinedAt + duration.value(15, 'd')
@@ -104,14 +143,17 @@ service cloud.firestore {
         && request.resource.data.ownerUid == assignment(request.resource.data.assignmentId).data.ownerUid
         && request.resource.data.projectId == assignment(request.resource.data.assignmentId).data.projectId
         && request.resource.data.date is string
-        && request.resource.data.date.matches('\\d{4}-\\d{2}-\\d{2}')
+        && currentUtcDay(request.resource.data.date)
         && request.resource.data.outcome in ['ok','issue']
         && request.resource.data.status == (request.resource.data.outcome == 'issue' ? 'new' : 'ok')
         && request.resource.data.notes is string
+        && request.resource.data.notes.size() >= 10
         && request.resource.data.notes.size() <= 800
-        && (request.resource.data.outcome != 'issue' || request.resource.data.notes.size() >= 10)
         && request.resource.data.tested is string
         && request.resource.data.tested.size() <= 150
+        && (assignment(request.resource.data.assignmentId).data.get('tasks',[]).size() == 0
+          ? request.resource.data.tested == 'فتح التطبيق وتجربة وظيفة أساسية'
+          : request.resource.data.tested in assignment(request.resource.data.assignmentId).data.tasks)
         && request.resource.data.createdAt is string
         && request.resource.data.submittedAt == request.time
         && !(request.resource.data.date in assignment(request.resource.data.assignmentId).data.checkins)
