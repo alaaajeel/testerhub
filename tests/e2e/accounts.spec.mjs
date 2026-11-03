@@ -161,3 +161,22 @@ test('test queue puts daily work before history and disables cooldown reports',a
  await expect(page.locator('.app-card',{hasText:'Cooldown Test'}).locator('[data-action="write-report"]')).toBeDisabled();
  await expect(page.locator('.app-card',{hasText:'Due Test'}).locator('[data-action="write-report"]')).toBeEnabled();
 });
+
+test('issue form saves structured details visible to the developer',async({page})=>{
+ await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
+ await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
+ await page.evaluate(async()=>{
+  user=await api.switchDemo('tester');await refresh();tab='report';selectedAssignmentId='fit_t1';render();
+ });
+ await expect(page.locator('#bug-fields')).not.toBeVisible();
+ await page.locator('[name="outcome"][value="issue"]').check();
+ await expect(page.locator('#bug-fields')).toBeVisible();
+ await page.locator('[name="opened"]').check();await page.locator('[name="feature"]').check();
+ await page.locator('#bug-title').fill('البحث يغلق التطبيق');await page.locator('#bug-steps').fill('افتح البحث واكتب كلمة ثم اضغط بحث');
+ await page.locator('#bug-expected').fill('ظهور نتائج البحث');await page.locator('#bug-actual').fill('يغلق التطبيق مباشرة');await page.locator('#bug-severity').selectOption('high');
+ await page.locator('#test-note').fill('تكررت المشكلة مرتين عند البحث');await page.locator('#daily-report-form button[type="submit"]').click();
+ expect(await page.evaluate(()=>dashboard.reports.find(r=>r.assignmentId==='fit_t1'&&r.date===api.dayKey()).bug.severity)).toBe('high');
+ await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();selectedProjectId='fit';tab='details';render()});
+ await expect(page.locator('.report-record')).toContainText('البحث يغلق التطبيق');
+ await expect(page.locator('.report-record')).toContainText('افتح البحث واكتب كلمة');
+});

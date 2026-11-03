@@ -105,3 +105,16 @@ test('message document is create-only and scoped to assignment participants',asy
  await assertFails(setDoc(doc(other,'messages','forged'),{...message,sender:'developer',senderUid:'d2'}));
 
 });
+
+test('structured bug validates fields, preserves legacy reports and is isolated',async()=>{
+ const d=db('t1'),day=utcDay(),a=doc(d,'assignments','p1_t1');
+ await assertSucceeds(updateDoc(a,{joinedDay:day,joinedAt:serverTimestamp()}));
+ const report={assignmentId:'p1_t1',projectId:'p1',testerUid:'t1',ownerUid:'d1',date:day,tested:'فتح التطبيق وتجربة وظيفة أساسية',outcome:'issue',notes:'Search crashes on submit',status:'new',createdAt:new Date().toISOString(),submittedAt:serverTimestamp()};
+ const bug={title:'Search crash',steps:'Open search then submit the query',expected:'Show results',actual:'App crashes',severity:'high'};
+ const write=b=>{const batch=writeBatch(d);batch.set(doc(d,'reports','p1_t1_'+day),{...report,bug:b});batch.update(a,{checkins:[day],lastCheckinAt:serverTimestamp()});return batch.commit()};
+ await assertFails(write({...bug,severity:'fake'}));await assertFails(write({...bug,steps:''}));await assertFails(write({...bug,admin:true}));
+ await assertSucceeds(write(bug));
+ await assertFails(getDoc(doc(db('t2'),'reports','p1_t1_'+day)));
+ await assertFails(updateDoc(doc(db('d1'),'reports','p1_t1_'+day),{'bug.title':'Changed'}));
+ await assertSucceeds(getDoc(doc(db('d1'),'reports','p1_t1_'+day)));
+});
