@@ -177,3 +177,21 @@ test('Android-generated splash blends into animated in-app splash',()=>{
  assert.match(html,/document\.body\.classList\.remove\('splash-boot'\)/);
  assert.match(load('splash.css'),/radial-gradient\(circle at 50% 35%,#175bb5,#092e73/);
 });
+
+test('Android native launcher icons are opaque and match the first paint background',()=>{
+ const m=JSON.parse(load('manifest.webmanifest'));
+ assert.equal(m.background_color,'#092e73');
+ for(const icon of m.icons){
+  const png=readFileSync(join(base,icon.src.split('?')[0]));
+  let cursor=8,hasAlpha=false,palette=null;
+  while(cursor+12<=png.length){
+   const n=png.readUInt32BE(cursor);
+   const type=png.toString('ascii',cursor+4,cursor+8);
+   if(type==='tRNS')hasAlpha=true;
+   if(type==='PLTE')palette=[...png.subarray(cursor+8,cursor+11)];
+   cursor+=12+n;
+  }
+  assert.equal(hasAlpha,false,'Black transparent icon corners should be removed');
+  assert.deepEqual(palette,[9,46,115]);
+ }
+});
