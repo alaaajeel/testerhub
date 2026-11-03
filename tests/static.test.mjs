@@ -124,7 +124,7 @@ test('day status distinguishes invitations, due tests, cool-down and completed r
  const end=html.indexOf('function messageIsIncoming(',start);
  assert.ok(start>0 && end>start);
  const source=html.slice(start,end);
- const scope={api:{dayKey:()=> '2026-11-03',daysSince:()=>2},Date};
+ const scope={api:{dayKey:()=> '2026-11-03',daysSince:()=>2},Date,invitationExpired:()=>false};
  const {runInNewContext}=vm;
  const fn=runInNewContext('('+source.trim()+')',scope);
  const arr=[

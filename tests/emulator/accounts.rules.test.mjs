@@ -1,12 +1,13 @@
 import {before,after,beforeEach,test} from 'node:test';
 import {readFileSync} from 'node:fs';
 import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
-import {doc,setDoc,getDoc,updateDoc,deleteDoc,collection,query,where,getDocs,serverTimestamp} from 'firebase/firestore';
+import {doc,setDoc,getDoc,updateDoc,deleteDoc,collection,query,where,getDocs,serverTimestamp,writeBatch,Timestamp} from 'firebase/firestore';
 let env;
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-testerhub',firestore:{rules:readFileSync('firestore.rules','utf8')}})});
 after(async()=>{await env?.cleanup()});
 const db=(uid,verified=true)=>env.authenticatedContext(uid,{email:uid+'@example.com',email_verified:verified}).firestore();
 const profile=(uid,role='tester',available=false)=>({name:'Test User',email:uid+'@example.com',role,available,createdAt:serverTimestamp()});
+const utcDay=()=>new Date().toISOString().slice(0,10);
 beforeEach(async()=>{await env.clearFirestore();await env.withSecurityRulesDisabled(async ctx=>{const d=ctx.firestore();for(const [uid,role,available] of [['t1','tester',true],['t2','tester',false],['d1','developer',false],['d2','developer',false]])await setDoc(doc(d,'users',uid),profile(uid,role,available));await setDoc(doc(d,'projects','p1'),{ownerUid:'d1',name:'App',link:'https://play.google.com/apps/testing/x'});await setDoc(doc(d,'assignments','p1_t1'),{ownerUid:'d1',testerUid:'t1',projectId:'p1',joinedDay:null,checkins:[]});})});
 test('anonymous access denied',async()=>assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'users','t1'))));
 test('unverified user can create and recover their own profile',async()=>assertSucceeds(setDoc(doc(db('new',false),'users','new'),profile('new'))));
@@ -18,16 +19,89 @@ test('pause requires hidden directory entry and preserves profile',async()=>{awa
 test('unverified developer cannot read directory',async()=>assertFails(getDocs(query(collection(db('d1',false),'users'),where('role','==','tester'),where('available','==',true)))));
 test('verified developer sees consented testers only',async()=>{await assertSucceeds(getDoc(doc(db('d1'),'users','t1')));await assertFails(getDoc(doc(db('d1'),'users','t2')));await assertFails(getDocs(collection(db('d1'),'users')));await assertSucceeds(getDocs(query(collection(db('d1'),'users'),where('role','==','tester'),where('available','==',true))))});
 test('developers remain isolated and testers cannot read peers',async()=>{await assertFails(getDoc(doc(db('d2'),'projects','p1')));await assertFails(getDoc(doc(db('t2'),'assignments','p1_t1')));await assertFails(getDoc(doc(db('t1'),'users','t2')))});
-test('unverified tester cannot start assignment',async()=>assertFails(updateDoc(doc(db('t1',false),'assignments','p1_t1'),{joinedDay:'2026-11-03',joinedAt:serverTimestamp()})));
-test('verified tester can start own assignment',async()=>assertSucceeds(updateDoc(doc(db('t1'),'assignments','p1_t1'),{joinedDay:'2026-11-03',joinedAt:serverTimestamp()})));
+test('unverified tester cannot start assignment',async()=>assertFails(updateDoc(doc(db('t1',false),'assignments','p1_t1'),{joinedDay:utcDay(),joinedAt:serverTimestamp()})));
+test('verified tester can start own assignment on server UTC day',async()=>assertSucceeds(updateDoc(doc(db('t1'),'assignments','p1_t1'),{joinedDay:utcDay(),joinedAt:serverTimestamp()})));
+test('tester cannot forge start date from another day',async()=>assertFails(updateDoc(doc(db('t1'),'assignments','p1_t1'),{joinedDay:'2000-01-01',joinedAt:serverTimestamp()})));
+test('daily report binds one UTC day to an atomic assignment checkin',async()=>{
+ const d=db('t1'),assignmentRef=doc(d,'assignments','p1_t1'),day=utcDay();
+ await assertSucceeds(updateDoc(assignmentRef,{joinedDay:day,joinedAt:serverTimestamp()}));
+ const report={assignmentId:'p1_t1',projectId:'p1',testerUid:'t1',ownerUid:'d1',tested:'فتح التطبيق وتجربة وظيفة أساسية',outcome:'ok',notes:'Worked as expected',status:'ok',createdAt:new Date().toISOString(),submittedAt:serverTimestamp()};
+ const write=(date)=>{const batch=writeBatch(d);batch.set(doc(d,'reports',`p1_t1_${date}`),{...report,date});batch.update(assignmentRef,{checkins:[date],lastCheckinAt:serverTimestamp()});return batch.commit()};
+ await assertFails(write('2000-01-01'));
+ await assertSucceeds(write(day));
+ await assertFails(write(day));
+ await assertFails(setDoc(doc(d,'reports','p1_t1_other'),{...report,date:day}));
+});
 test('invalid names and nonboolean availability rejected',async()=>{await assertFails(updateDoc(doc(db('t1'),'users','t1'),{name:'x'}));await assertFails(updateDoc(doc(db('t1'),'users','t1'),{available:'yes'}))});
 test('project invitation list is unique and constrains assignment creation',async()=>{
- const d=db('d1'),p={name:'Selected App',link:'https://play.google.com/apps/testing/x',ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
+ const d=db('d1'),p={name:'Selected App',link:'https://play.google.com/apps/testing/x',tasks:['Test login screen'],ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
  await assertSucceeds(setDoc(doc(d,'projects','selected'),p));
  await assertFails(setDoc(doc(d,'projects','duplicate'),{...p,testersCount:2,selectedTesterUids:['t1','t1']}));
- const assignment={projectId:'selected',testerUid:'t1',ownerUid:'d1',name:p.name,link:p.link,joinedDay:null,checkins:[],createdAt:serverTimestamp()};
+ const assignment={projectId:'selected',testerUid:'t1',ownerUid:'d1',name:p.name,link:p.link,tasks:p.tasks,invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()};
  await assertSucceeds(setDoc(doc(d,'assignments','selected_t1'),assignment));
  await assertFails(setDoc(doc(d,'assignments','selected_t1'),assignment));
  await env.withSecurityRulesDisabled(async c=>updateDoc(doc(c.firestore(),'users','t2'),{available:true}));
  await assertFails(setDoc(doc(d,'assignments','selected_t2'),{...assignment,testerUid:'t2'}));
+});
+test('draft lifecycle preserves identity and rejects edits after invitations',async()=>{
+ const owner=db('d1'),other=db('d2'),ref=doc(owner,'projects','draft1');
+ const draft={name:'Draft App',link:'',tasks:[],status:'draft',ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:0,selectedTesterUids:[]};
+ await assertSucceeds(setDoc(ref,draft));
+ await assertFails(setDoc(doc(owner,'projects','badDraft'),{...draft,status:'draft',testersCount:1,selectedTesterUids:['t1']}));
+ await assertFails(setDoc(doc(owner,'projects','badLink'),{...draft,status:'recruiting',link:'https://example.com/x',testersCount:1,selectedTesterUids:['t1']}));
+ await assertFails(updateDoc(doc(other,'projects','draft1'),{name:'Stolen'}));
+ await assertSucceeds(updateDoc(ref,{name:'Edited Draft',link:'https://play.google.com/apps/testing/x'}));
+ await assertFails(updateDoc(ref,{status:'recruiting',link:'https://example.com/x',testersCount:1,selectedTesterUids:['t1']}));
+ await assertFails(setDoc(doc(owner,'assignments','draft1_t1'),{projectId:'draft1',testerUid:'t1',ownerUid:'d1',name:'Edited Draft',link:'https://play.google.com/apps/testing/x',tasks:['Test login screen'],invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()}));
+ await assertSucceeds(updateDoc(ref,{status:'recruiting',tasks:['Test login screen'],testersCount:1,selectedTesterUids:['t1']}));
+ await assertFails(updateDoc(ref,{name:'Erase history'}));
+ await assertFails(updateDoc(ref,{selectedTesterUids:['t2']}));
+ await assertFails(updateDoc(ref,{ownerUid:'d2'}));
+ await assertSucceeds(setDoc(doc(owner,'assignments','draft1_t1'),{projectId:'draft1',testerUid:'t1',ownerUid:'d1',name:'Edited Draft',link:'https://play.google.com/apps/testing/x',tasks:['Test login screen'],invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()}));
+});
+test('task snapshot rejects mismatch and report must describe assigned task',async()=>{
+ const owner=db('d1'),tester=db('t1'),tasks=['Test search and open result'];
+ const p={name:'Tasks App',link:'https://play.google.com/apps/testing/x',tasks,ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
+ await assertSucceeds(setDoc(doc(owner,'projects','taskp'),p));
+ const a={projectId:'taskp',testerUid:'t1',ownerUid:'d1',name:p.name,link:p.link,tasks,invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()};
+ await assertFails(setDoc(doc(owner,'assignments','taskp_t1'),{...a,tasks:['Do something else']}));
+ await assertSucceeds(setDoc(doc(owner,'assignments','taskp_t1'),a));
+ await assertFails(updateDoc(doc(owner,'projects','taskp'),{tasks:['Replace old history']}));
+ const day=new Date().toISOString().slice(0,10),assignmentRef=doc(tester,'assignments','taskp_t1');
+ await assertFails(updateDoc(assignmentRef,{joinedDay:day,joinedAt:serverTimestamp()}));
+ await assertSucceeds(updateDoc(assignmentRef,{invitationStatus:'accepted',respondedAt:serverTimestamp()}));
+ await assertSucceeds(updateDoc(assignmentRef,{joinedDay:day,joinedAt:serverTimestamp()}));
+ const report={assignmentId:'taskp_t1',projectId:'taskp',testerUid:'t1',ownerUid:'d1',date:day,tested:'Fake task',outcome:'ok',notes:'Tried this flow',status:'ok',createdAt:new Date().toISOString(),submittedAt:serverTimestamp()};
+ const batch=writeBatch(tester);batch.set(doc(tester,'reports','taskp_t1_'+day),report);batch.update(assignmentRef,{checkins:[day],lastCheckinAt:serverTimestamp()});
+ await assertFails(batch.commit());
+ const empty=writeBatch(tester);empty.set(doc(tester,'reports','taskp_t1_'+day),{...report,tested:tasks[0],notes:''});empty.update(assignmentRef,{checkins:[day],lastCheckinAt:serverTimestamp()});
+ await assertFails(empty.commit());
+ const good=writeBatch(tester);good.set(doc(tester,'reports','taskp_t1_'+day),{...report,tested:tasks[0]});good.update(assignmentRef,{checkins:[day],lastCheckinAt:serverTimestamp()});
+ await assertSucceeds(good.commit());
+
+});
+test('declining an invitation blocks participation and preserves the assignment',async()=>{
+ const owner=db('d1'),tester=db('t1'),tasks=['Test account creation'];
+ const project={name:'Invite App',link:'https://play.google.com/apps/testing/x',tasks,ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
+ await assertSucceeds(setDoc(doc(owner,'projects','invite'),project));
+ await assertSucceeds(setDoc(doc(owner,'assignments','invite_t1'),{projectId:'invite',testerUid:'t1',ownerUid:'d1',name:project.name,link:project.link,tasks,invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()}));
+ const ref=doc(tester,'assignments','invite_t1');
+ await assertSucceeds(updateDoc(ref,{invitationStatus:'declined',respondedAt:serverTimestamp()}));
+ await assertFails(updateDoc(ref,{invitationStatus:'accepted',respondedAt:serverTimestamp()}));
+ await assertFails(updateDoc(ref,{joinedDay:new Date().toISOString().slice(0,10),joinedAt:serverTimestamp()}));
+ await assertFails(deleteDoc(ref));
+});
+test('expired invitation cannot be accepted after seven server days',async()=>{
+ await env.withSecurityRulesDisabled(async ctx=>setDoc(doc(ctx.firestore(),'assignments','old_t1'),{projectId:'p1',testerUid:'t1',ownerUid:'d1',invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:Timestamp.fromDate(new Date(Date.now()-8*86400000))}));
+ await assertFails(updateDoc(doc(db('t1'),'assignments','old_t1'),{invitationStatus:'accepted',respondedAt:serverTimestamp()}));
+});
+test('message document is create-only and scoped to assignment participants',async()=>{
+ const sender=db('t1'),owner=db('d1'),other=db('d2'),ref=doc(sender,'messages','stable-retry-id');
+ const message={assignmentId:'p1_t1',projectId:'p1',testerUid:'t1',ownerUid:'d1',sender:'tester',senderUid:'t1',text:'اختبرت التطبيق اليوم',at:new Date().toISOString(),createdAt:serverTimestamp()};
+ await assertSucceeds(setDoc(ref,message));
+ await assertFails(setDoc(ref,message));
+ await assertSucceeds(getDoc(doc(owner,'messages','stable-retry-id')));
+ await assertFails(getDoc(doc(other,'messages','stable-retry-id')));
+ await assertFails(setDoc(doc(other,'messages','forged'),{...message,sender:'developer',senderUid:'d2'}));
+
 });

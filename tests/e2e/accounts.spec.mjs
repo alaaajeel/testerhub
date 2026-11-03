@@ -16,8 +16,10 @@ async function setup(page,{profile=null,loggedIn=false}={}) {
  export const reload=async u=>{u.emailVerified=window.fixture.verified};
  export const getIdToken=async()=>'';`;
  const store=`export const getFirestore=()=>({});export const doc=(_,c,id)=>({c,id});
- const snap=()=>({exists:()=>!!window.fixture.profile,data:()=>window.fixture.profile});
- export const getDocFromServer=async()=>snap();
+ const snap=ref=>{const data=ref?.c==='messages'?window.fixture.messages?.[ref.id]:ref?.c==='assignments'?window.fixture.assignment:window.fixture.profile;return {exists:()=>!!data,data:()=>data}};
+ export const getDocFromServer=async ref=>{if(ref?.c==='messages'&&window.fixture.failMessageReadOnce){window.fixture.failMessageReadOnce=false;throw Error('network unavailable')}return snap(ref)};
+ export const getDoc=async ref=>snap(ref);
+ export const setDoc=async(ref,data)=>{window.fixture.messages??={};if(window.fixture.messages[ref.id])throw Object.assign(Error(),{code:'permission-denied'});window.fixture.messages[ref.id]=data;window.fixture.messageWriteCount=(window.fixture.messageWriteCount||0)+1;if(window.fixture.loseMessageAckOnce){window.fixture.loseMessageAckOnce=false;throw Error('network unavailable')}};
  export const runTransaction=async(_,fn)=>fn({get:async()=>snap(),set:(_,value)=>{if(window.fixture.failSave)throw Object.assign(Error(),{code:'permission-denied'});window.fixture.profile=value}});
  export const serverTimestamp=()=>1;
  export const updateDoc=async(_,v)=>{if(window.fixture.failSave)throw Object.assign(Error(),{code:'permission-denied'});Object.assign(window.fixture.profile,v)};
@@ -67,4 +69,52 @@ test('developer selects testers explicitly before copying emails',async({page})=
  await expect(page.locator('[name="testerUid"]:checked')).toHaveCount(0);
  await page.locator('[name="testerUid"][value="t2"]').check();
  expect(await page.evaluate(()=>selectedProjectTesters().map(t=>t.uid))).toEqual(['t2']);
+});
+test('developer saves draft, edits it, then invites only selected tester',async({page})=>{
+ await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
+ await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
+ await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();tab='new';render()});
+ await page.locator('#project-name').fill('Draft Test');
+ await page.locator('#project-form button[value="draft"]').click();
+ await expect(page.locator('.lead', {hasText:'Draft Test'})).toBeVisible();
+ expect(await page.evaluate(()=>dashboard.assignments.filter(a=>a.projectId===selectedProjectId).length)).toBe(0);
+ await page.locator('[data-action="edit-draft"]').click();
+ await page.locator('#project-name').fill('Published Test');
+ await page.locator('#project-tasks').fill('جرّب تسجيل الدخول بحسابك');
+ await page.locator('#project-link').fill('https://play.google.com/apps/testing/test');
+ await page.locator('[name="testerUid"][value="t2"]').check();
+ await page.locator('[name="confirmed"]').check();
+ await page.locator('#project-form button[value="publish"]').click();
+ await expect(page.locator('.lead',{hasText:'Published Test'})).toBeVisible();
+ expect(await page.evaluate(()=>dashboard.assignments.filter(a=>a.projectId===selectedProjectId).map(a=>a.testerUid))).toEqual(['t2']);
+});
+test('assigned task appears in daily report and saved report keeps its snapshot',async({page})=>{
+ await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
+ await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
+ await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();tab='new';render()});
+ await page.locator('[name="testerUid"][value="t1"]').check();
+ await page.locator('#project-name').fill('Search Test');
+ await page.locator('#project-tasks').fill('ابحث عن منتج وافتح تفاصيله');
+ await page.locator('#project-link').fill('https://play.google.com/apps/testing/test');
+ await page.locator('[name="confirmed"]').check();
+ await page.locator('#project-form button[value="publish"]').click();
+ await page.evaluate(async()=>{user=await api.switchDemo('tester');await refresh();tab='tests';render()});
+ const card=page.locator('.app-card',{hasText:'Search Test'});
+ await card.locator('[data-action="accept-invite"]').click();
+ await card.locator('[data-action="confirm-join"]').click();
+ await card.locator('[data-action="write-report"]').click();
+ await expect(page.locator('#daily-report-form')).toContainText('ابحث عن منتج وافتح تفاصيله');
+ await page.locator('[name="opened"]').check();await page.locator('[name="feature"]').check();
+ await page.locator('#test-note').fill('بحثت عن منتج وفتحت صفحة التفاصيل بنجاح');
+ await page.locator('#daily-report-form button[type="submit"]').click();
+ expect(await page.evaluate(()=>dashboard.reports.find(r=>r.tested==='ابحث عن منتج وافتح تفاصيله')?.notes)).toContain('بحثت عن منتج');
+
+});
+test('retry after lost message acknowledgement reuses document id',async({page})=>{
+ await setup(page,{loggedIn:true,profile:{name:'Developer',role:'developer',available:false}});
+ await page.evaluate(()=>window.fixture.verified=true);await page.locator('[data-action="check-verification"]').click();
+ await page.evaluate(()=>{window.fixture.assignment={ownerUid:'u1',testerUid:'t1',projectId:'p1'};window.fixture.loseMessageAckOnce=true;window.fixture.failMessageReadOnce=true});
+ await expect(page.evaluate(()=>api.sendMessage('a1','اختبرت التطبيق وأحتاج توضيحاً','developer'))).rejects.toThrow();
+ await page.evaluate(()=>api.sendMessage('a1','اختبرت التطبيق وأحتاج توضيحاً','developer'));
+ expect(await page.evaluate(()=>window.fixture.messageWriteCount)).toBe(1);
 });
