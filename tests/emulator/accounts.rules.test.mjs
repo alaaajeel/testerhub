@@ -1,12 +1,13 @@
 import {before,after,beforeEach,test} from 'node:test';
 import {readFileSync} from 'node:fs';
 import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
-import {doc,setDoc,getDoc,updateDoc,deleteDoc,collection,query,where,getDocs,serverTimestamp} from 'firebase/firestore';
+import {doc,setDoc,getDoc,updateDoc,deleteDoc,collection,query,where,getDocs,serverTimestamp,writeBatch} from 'firebase/firestore';
 let env;
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-testerhub',firestore:{rules:readFileSync('firestore.rules','utf8')}})});
 after(async()=>{await env?.cleanup()});
 const db=(uid,verified=true)=>env.authenticatedContext(uid,{email:uid+'@example.com',email_verified:verified}).firestore();
 const profile=(uid,role='tester',available=false)=>({name:'Test User',email:uid+'@example.com',role,available,createdAt:serverTimestamp()});
+const utcDay=()=>new Date().toISOString().slice(0,10);
 beforeEach(async()=>{await env.clearFirestore();await env.withSecurityRulesDisabled(async ctx=>{const d=ctx.firestore();for(const [uid,role,available] of [['t1','tester',true],['t2','tester',false],['d1','developer',false],['d2','developer',false]])await setDoc(doc(d,'users',uid),profile(uid,role,available));await setDoc(doc(d,'projects','p1'),{ownerUid:'d1',name:'App',link:'https://play.google.com/apps/testing/x'});await setDoc(doc(d,'assignments','p1_t1'),{ownerUid:'d1',testerUid:'t1',projectId:'p1',joinedDay:null,checkins:[]});})});
 test('anonymous access denied',async()=>assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'users','t1'))));
 test('unverified user can create and recover their own profile',async()=>assertSucceeds(setDoc(doc(db('new',false),'users','new'),profile('new'))));
@@ -18,8 +19,19 @@ test('pause requires hidden directory entry and preserves profile',async()=>{awa
 test('unverified developer cannot read directory',async()=>assertFails(getDocs(query(collection(db('d1',false),'users'),where('role','==','tester'),where('available','==',true)))));
 test('verified developer sees consented testers only',async()=>{await assertSucceeds(getDoc(doc(db('d1'),'users','t1')));await assertFails(getDoc(doc(db('d1'),'users','t2')));await assertFails(getDocs(collection(db('d1'),'users')));await assertSucceeds(getDocs(query(collection(db('d1'),'users'),where('role','==','tester'),where('available','==',true))))});
 test('developers remain isolated and testers cannot read peers',async()=>{await assertFails(getDoc(doc(db('d2'),'projects','p1')));await assertFails(getDoc(doc(db('t2'),'assignments','p1_t1')));await assertFails(getDoc(doc(db('t1'),'users','t2')))});
-test('unverified tester cannot start assignment',async()=>assertFails(updateDoc(doc(db('t1',false),'assignments','p1_t1'),{joinedDay:'2026-11-03',joinedAt:serverTimestamp()})));
-test('verified tester can start own assignment',async()=>assertSucceeds(updateDoc(doc(db('t1'),'assignments','p1_t1'),{joinedDay:'2026-11-03',joinedAt:serverTimestamp()})));
+test('unverified tester cannot start assignment',async()=>assertFails(updateDoc(doc(db('t1',false),'assignments','p1_t1'),{joinedDay:utcDay(),joinedAt:serverTimestamp()})));
+test('verified tester can start own assignment on server UTC day',async()=>assertSucceeds(updateDoc(doc(db('t1'),'assignments','p1_t1'),{joinedDay:utcDay(),joinedAt:serverTimestamp()})));
+test('tester cannot forge start date from another day',async()=>assertFails(updateDoc(doc(db('t1'),'assignments','p1_t1'),{joinedDay:'2000-01-01',joinedAt:serverTimestamp()})));
+test('daily report binds one UTC day to an atomic assignment checkin',async()=>{
+ const d=db('t1'),assignmentRef=doc(d,'assignments','p1_t1'),day=utcDay();
+ await assertSucceeds(updateDoc(assignmentRef,{joinedDay:day,joinedAt:serverTimestamp()}));
+ const report={assignmentId:'p1_t1',projectId:'p1',testerUid:'t1',ownerUid:'d1',tested:'Opened and tried feature',outcome:'ok',notes:'Worked as expected',status:'ok',createdAt:new Date().toISOString(),submittedAt:serverTimestamp()};
+ const write=(date)=>{const batch=writeBatch(d);batch.set(doc(d,'reports',`p1_t1_${date}`),{...report,date});batch.update(assignmentRef,{checkins:[date],lastCheckinAt:serverTimestamp()});return batch.commit()};
+ await assertFails(write('2000-01-01'));
+ await assertSucceeds(write(day));
+ await assertFails(write(day));
+ await assertFails(setDoc(doc(d,'reports','p1_t1_other'),{...report,date:day}));
+});
 test('invalid names and nonboolean availability rejected',async()=>{await assertFails(updateDoc(doc(db('t1'),'users','t1'),{name:'x'}));await assertFails(updateDoc(doc(db('t1'),'users','t1'),{available:'yes'}))});
 test('project invitation list is unique and constrains assignment creation',async()=>{
  const d=db('d1'),p={name:'Selected App',link:'https://play.google.com/apps/testing/x',ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};

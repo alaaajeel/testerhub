@@ -2,6 +2,8 @@
 
 Baseline: dd84d5179496afec2b7a428b1a940d3064076c60. Existing repository only.
 
+Phase 1 and phase 2 tester selection merged through PR #1 and #2. Phase 2 project drafts are in open draft PR #3. Current branch `phase-2/report-timing` is based on main and enforces server UTC dates. Read `PHASE-2-TIMING-AR.md`. Both open branches need production rules deployed before their UIs; reconcile their Firestore rule changes rather than overwriting a newer deployed version.
+
 Phase 1 branch: phase-1/accounts-security. Read PHASE-1-AR.md for exact implementation, verification evidence, production dependency and deployment commands.
 
 User authorization: existing accounts are disposable personal test accounts; approved freedom to modify production rules after verification. No deletion required. GitHub PR before merge; never claim production deployment from local tests. Firebase CLI has no administrative authentication. No production data inspected or mutated.
