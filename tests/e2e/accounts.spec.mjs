@@ -16,8 +16,10 @@ async function setup(page,{profile=null,loggedIn=false}={}) {
  export const reload=async u=>{u.emailVerified=window.fixture.verified};
  export const getIdToken=async()=>'';`;
  const store=`export const getFirestore=()=>({});export const doc=(_,c,id)=>({c,id});
- const snap=()=>({exists:()=>!!window.fixture.profile,data:()=>window.fixture.profile});
- export const getDocFromServer=async()=>snap();
+ const snap=ref=>{const data=ref?.c==='messages'?window.fixture.messages?.[ref.id]:ref?.c==='assignments'?window.fixture.assignment:window.fixture.profile;return {exists:()=>!!data,data:()=>data}};
+ export const getDocFromServer=async ref=>{if(ref?.c==='messages'&&window.fixture.failMessageReadOnce){window.fixture.failMessageReadOnce=false;throw Error('network unavailable')}return snap(ref)};
+ export const getDoc=async ref=>snap(ref);
+ export const setDoc=async(ref,data)=>{window.fixture.messages??={};if(window.fixture.messages[ref.id])throw Object.assign(Error(),{code:'permission-denied'});window.fixture.messages[ref.id]=data;window.fixture.messageWriteCount=(window.fixture.messageWriteCount||0)+1;if(window.fixture.loseMessageAckOnce){window.fixture.loseMessageAckOnce=false;throw Error('network unavailable')}};
  export const runTransaction=async(_,fn)=>fn({get:async()=>snap(),set:(_,value)=>{if(window.fixture.failSave)throw Object.assign(Error(),{code:'permission-denied'});window.fixture.profile=value}});
  export const serverTimestamp=()=>1;
  export const updateDoc=async(_,v)=>{if(window.fixture.failSave)throw Object.assign(Error(),{code:'permission-denied'});Object.assign(window.fixture.profile,v)};
@@ -106,4 +108,12 @@ test('assigned task appears in daily report and saved report keeps its snapshot'
  await page.locator('#daily-report-form button[type="submit"]').click();
  expect(await page.evaluate(()=>dashboard.reports.find(r=>r.tested==='ابحث عن منتج وافتح تفاصيله')?.notes)).toContain('بحثت عن منتج');
 
+});
+test('retry after lost message acknowledgement reuses document id',async({page})=>{
+ await setup(page,{loggedIn:true,profile:{name:'Developer',role:'developer',available:false}});
+ await page.evaluate(()=>window.fixture.verified=true);await page.locator('[data-action="check-verification"]').click();
+ await page.evaluate(()=>{window.fixture.assignment={ownerUid:'u1',testerUid:'t1',projectId:'p1'};window.fixture.loseMessageAckOnce=true;window.fixture.failMessageReadOnce=true});
+ await expect(page.evaluate(()=>api.sendMessage('a1','اختبرت التطبيق وأحتاج توضيحاً','developer'))).rejects.toThrow();
+ await page.evaluate(()=>api.sendMessage('a1','اختبرت التطبيق وأحتاج توضيحاً','developer'));
+ expect(await page.evaluate(()=>window.fixture.messageWriteCount)).toBe(1);
 });

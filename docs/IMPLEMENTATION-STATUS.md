@@ -4,6 +4,8 @@ Baseline: dd84d5179496afec2b7a428b1a940d3064076c60. Existing repository only. Ph
 
 Integration branch: `integration/phase-2-3`, combining draft projects (PR #3), UTC reports (PR #4), and daily task snapshots (PR #5). Combined rules and UI passed Node 55, Firebase emulator 19, Chromium 14, build and preflight. See `PHASE-2-LIFECYCLE-AR.md`, `PHASE-2-TIMING-AR.md`, `PHASE-3-TASKS-AR.md`. The integration PR is the canonical review/deployment candidate; individual draft PRs remain unmerged. Publish the combined Firestore rules before the UI merge and verify them with real accounts. No production rules or data were modified by this branch.
 
+Phase 4 follow-up branch `phase-4/message-idempotency` builds on the integration branch. It prevents duplicate message writes on retry and sorts by server timestamp; see `PHASE-4-MESSAGES-AR.md`. PR #6 remains the prerequisite for this branch. No production data has been changed.
+
 Phase 1 branch: phase-1/accounts-security. Read PHASE-1-AR.md for exact implementation, verification evidence, production dependency and deployment commands.
 
 User authorization: existing accounts are disposable personal test accounts; approved freedom to modify production rules after verification. No deletion required. GitHub PR before merge; never claim production deployment from local tests. Firebase CLI has no administrative authentication. No production data inspected or mutated.

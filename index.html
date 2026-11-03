@@ -546,6 +546,12 @@ async function submitDailyReport(assignmentId,{opened,feature,outcome,notes}){
  if(notes)d.messages.push({id:`msg_${Date.now()}`,assignmentId,projectId:a.projectId,sender:'tester',text:(outcome==='issue'?'بلاغ مشكلة: ':'ملاحظة: ')+notes,at});
  a.checkins.push(dayKey());save(d);
 }
+const messageRetryIds=new Map();
+async function messageRetryKey(uid,assignmentId,body){
+ const bytes=new TextEncoder().encode(uid+'|'+assignmentId+'|'+body);
+ const digest=await crypto.subtle.digest('SHA-256',bytes);
+ return 'testerhub-pending-message-'+Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+}
 async function sendMessage(assignmentId,body,sender){
  if(!isDemo){
   const active=await currentUser();
@@ -556,10 +562,21 @@ async function sendMessage(assignmentId,body,sender){
   if(!aSnap.exists())throw Error('الاختبار غير موجود');
   const a=aSnap.data();
   if(!((sender==='tester'&&a.testerUid===active.uid)||(sender==='developer'&&a.ownerUid===active.uid)))throw Error('ليس لديك صلاحية');
-  await storeFns.addDoc(storeFns.collection(db,'messages'),{
+  const retryKey=await messageRetryKey(active.uid,assignmentId,body);
+  let retryId=messageRetryIds.get(retryKey);
+  if(!retryId){try{retryId=sessionStorage.getItem(retryKey)}catch{}}
+  if(!retryId){retryId=crypto.randomUUID();messageRetryIds.set(retryKey,retryId);try{sessionStorage.setItem(retryKey,retryId)}catch{}}
+  const messageRef=storeFns.doc(db,'messages',retryId);
+  const data={
    assignmentId,projectId:a.projectId,testerUid:a.testerUid,ownerUid:a.ownerUid,sender,senderUid:active.uid,
    text:body,at:new Date().toISOString(),createdAt:storeFns.serverTimestamp()
-  });
+  };
+  try{await storeFns.setDoc(messageRef,data)}catch(err){
+   // The server may have committed the write while its acknowledgement was lost.
+   try{const saved=await storeFns.getDocFromServer(messageRef);if(!saved.exists()||saved.data().senderUid!==active.uid||saved.data().assignmentId!==assignmentId||saved.data().text!==body)throw err}
+   catch(readErr){throw err}
+  }
+  messageRetryIds.delete(retryKey);try{sessionStorage.removeItem(retryKey)}catch{}
   return;
  }
  const d=demoState(),a=d.assignments.find(x=>x.id===assignmentId);
@@ -686,12 +703,13 @@ function classifyTesterWork(assignments, dateKey=api.dayKey(), nowMs=Date.now())
  return state;
 }
 function messageIsIncoming(message){return user&&message.senderUid!==user.uid&&message.sender!==user.role}
+function messageTime(message){return message.createdAt?.toMillis?.()??Date.parse(message.at||'')}
 function noticeSeenKey(){return 'testerhub_notice_seen_'+(user?.uid||'guest')}
 function unreadNoticeMessages(){
  if(!user)return [];
  const lastSeen=Number(previewStorage.getItem(noticeSeenKey()))||0;
  const minTime=Math.max(lastSeen,Date.now()-7*86400000);
- return (dashboard.messages||[]).filter(m=>messageIsIncoming(m)&&Number.isFinite(Date.parse(m.at))&&Date.parse(m.at)>minTime);
+ return (dashboard.messages||[]).filter(m=>messageIsIncoming(m)&&Number.isFinite(messageTime(m))&&messageTime(m)>minTime);
 }
 function noticeBadgeCount(){
  if(!user)return 0;
@@ -731,7 +749,7 @@ function notificationPanel(){
    for(const r of issues.slice(0,8))body+=noticeCard('بلاغ مشكلة: '+(dashboard.projects.find(p=>p.id===r.projectId)?.name||'تطبيقك'),r.notes||'مشكلة تحتاج مراجعة.','notice-go-project',r.projectId);
    if(!issues.length&&!empty.length)body+=noticeCard('ماكو بلاغات مفتوحة','تم التحقق من التقارير والتكليفات في Firebase.');
   }
-  const messages=(dashboard.messages||[]).filter(messageIsIncoming).slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,5);
+  const messages=(dashboard.messages||[]).filter(messageIsIncoming).slice().sort((a,b)=>messageTime(b)-messageTime(a)).slice(0,5);
   if(messages.length){
    body+='<div class="notice-section-title">آخر رسائل الطرف الآخر</div>';
    for(const m of messages)body+=noticeCard(user.role==='tester'?'رد من المطور':'رسالة من مختبر',String(m.text||'').slice(0,140),'notice-go-chat',m.assignmentId);
@@ -780,13 +798,13 @@ function dailyReport(){
  ${already?`<div class="surface"><div class="flag">✓ تقرير اليوم مسجّل</div><button class="cta outline wide" data-action="open-chat" data-id="${clean(a.id)}" style="margin-top:13px">افتح رسائلك ويا المطور</button></div>`:
  `<form class="surface" id="daily-report-form"><div class="lead">شنو جربت اليوم؟</div><div class="small">اتبع مهمة اليوم، ثم اكتب نتيجة التجربة بوضوح.</div><div class="report-tasks"><label class="task-option"><input type="checkbox" name="opened" required><span>فتحت التطبيق وشغّلته على جهازك.</span></label><label class="task-option"><input type="checkbox" name="feature" required><span>نفذت مهمة اليوم: ${clean(taskForDay(a))}</span></label></div><div class="divider"></div><div class="lead">شنو كانت النتيجة؟</div><div class="test-result-choices"><label><input type="radio" name="outcome" value="ok" checked> ✅ اشتغل بصورة طبيعية</label><label><input type="radio" name="outcome" value="issue"> ⚠ واجهت مشكلة</label></div><div class="field"><label for="test-note" id="test-note-label">ملاحظة للمطور (مطلوبة)</label><textarea id="test-note" name="notes" minlength="10" required maxlength="800" placeholder="مثل: جرّبت البحث وفتح الصفحات، وكلشي اشتغل..." ></textarea></div><button class="cta wide" type="submit">${ico('clipboard',17)} إرسال التقرير وتأكيد اليوم</button><div class="card-note">إذا واجهت مشكلة اكتب تفاصيلها حتى توصل للمطور. ما تحتاج تختلق مشكلة إذا التطبيق شغال.</div></form>`}`;
 }
-function threadMessages(assignmentId){return (dashboard.messages||[]).filter(m=>m.assignmentId===assignmentId).slice().sort((a,b)=>a.at.localeCompare(b.at))}
+function threadMessages(assignmentId){return (dashboard.messages||[]).filter(m=>m.assignmentId===assignmentId).slice().sort((a,b)=>messageTime(a)-messageTime(b))}
 function chatPage(){
  const a=dashboard.assignments.find(x=>x.id===selectedAssignmentId && (user.role==='developer'?x.ownerUid===user.uid:x.testerUid===user.uid));
  if(!a)return `<div class="tab-empty">المحادثة غير متاحة</div>`;
  const messages=threadMessages(a.id),isDeveloper=user.role==='developer',issues=(dashboard.reports||[]).filter(r=>r.assignmentId===a.id&&r.outcome==='issue'&&r.status!=='fixed');
  return `<div class="surface"><button class="top-link" data-tab="${isDeveloper?'details':'tests'}">${ico('chevron',16)} رجوع</button><div class="lead" style="margin-top:12px">${ico('message',20)} محادثة ${clean(a.name)}</div><div class="small">${isDeveloper?'محادثة خاصة بينك وبين المختبر':'ملاحظاتك توصل لصاحب هذا التطبيق بعد تفعيل الحسابات الحقيقية'}</div>${api.isDemo?`<div class="notice">معاينة محلية: تقدر تكتب وتبدّل الدور بنفس الهاتف، لكن الرسائل ما تنتقل لأجهزة أخرى حالياً.</div>`:''}</div>
- <div class="surface" aria-label="سجل الرسائل">${messages.length?messages.map(m=>`<div class="chat-bubble ${m.sender==='developer'?'developer':''}"><strong>${m.sender==='developer'?'المطور':'المختبر'}</strong><div>${clean(m.text)}</div><div class="chat-meta">${new Date(m.at).toLocaleString('ar-IQ',{dateStyle:'short',timeStyle:'short'})}</div></div>`).join(''):`<div class="empty">ماكو رسائل بعد. اكتب ملاحظة أو استفسار ليبدأ النقاش.</div>`}</div>
+ <div class="surface" aria-label="سجل الرسائل">${messages.length?messages.map(m=>`<div class="chat-bubble ${m.sender==='developer'?'developer':''}"><strong>${m.sender==='developer'?'المطور':'المختبر'}</strong><div>${clean(m.text)}</div><div class="chat-meta">${new Date(messageTime(m)).toLocaleString('ar-IQ',{dateStyle:'short',timeStyle:'short'})}</div></div>`).join(''):`<div class="empty">ماكو رسائل بعد. اكتب ملاحظة أو استفسار ليبدأ النقاش.</div>`}</div>
  ${isDeveloper&&issues.length?`<div class="surface"><div class="lead">بلاغ مفتوح</div><p class="small">${clean(issues[issues.length-1].notes)}</p><button class="cta wide" data-action="mark-fixed" data-id="${clean(a.id)}">${ico('check',16)} تم الإصلاح — أبلغ المختبر</button></div>`:''}
  <form id="chat-form" class="surface"><div class="field"><label for="message-body">${isDeveloper?'رد على المختبر':'رسالة إلى المطور'}</label><textarea name="message" id="message-body" maxlength="600" minlength="2" required placeholder="اكتب ملاحظتك هنا..."></textarea></div><button class="cta blue wide" type="submit">${ico('message',17)} إرسال الرسالة</button></form>`;
 }
@@ -861,7 +879,7 @@ function startLiveSync(){
     }
     if(collectionName==='messages'){
      for(const doc of incoming.slice(0,2)){
-      const m=doc.data(),time=Date.parse(m.at);
+      const m=doc.data(),time=messageTime(m);
       if(m.senderUid!==uid&&Number.isFinite(time)&&Date.now()-time<120000)
        showPwaNotification('TesterHub — رسالة جديدة',String(m.text||'وصلتك رسالة').slice(0,110),'testerhub-msg-'+doc.id).catch(console.warn);
      }
