@@ -106,8 +106,8 @@ describe('QA-04 | Closed test and daily feedback',()=>{
   assert.doesNotMatch(html,/txn\.get\(reportRef\)/);
  });
  it('never automatically marks a daily report as completed on launching the link',()=>{
-  assert.match(html,/function joinLink\(a\)/);
-  assert.match(html,/url\.hostname==='play\.google\.com'/);
+  assert.match(html,/function joinLink\(a,destination=/);
+  assert.match(html,/url\.hostname!=='play\.google\.com'/);
   assert.match(html,/data-action="write-report"/);
  });
 });

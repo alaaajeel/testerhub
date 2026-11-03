@@ -118,3 +118,46 @@ test('retry after lost message acknowledgement reuses document id',async({page})
  await page.evaluate(()=>api.sendMessage('a1','اختبرت التطبيق وأحتاج توضيحاً','developer'));
  expect(await page.evaluate(()=>window.fixture.messageWriteCount)).toBe(1);
 });
+
+test('tester setup separates opt-in and store; confirmed setup stays collapsed after reload',async({page})=>{
+ await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
+ await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
+ await page.evaluate(async()=>{
+  user=await api.switchDemo('developer');await refresh();
+  await api.createProject({name:'Journey App',link:'https://play.google.com/apps/testing/com.example.journey',tasks:'جرّب تسجيل الدخول بحسابك'},[{uid:'t1',role:'tester',available:true,email:'tester01@example.com'}]);
+  user=await api.switchDemo('tester');await refresh();tab='tests';render();
+  window.openedLinks=[];window.open=url=>window.openedLinks.push(url);
+ });
+ const card=page.locator('.app-card',{hasText:'Journey App'});
+ await card.locator('[data-action="accept-invite"]').click();
+ await card.locator('[data-action="open-link"]').click();
+ await card.locator('[data-action="open-store"]').click();
+ expect(await page.evaluate(()=>window.openedLinks)).toEqual(['https://play.google.com/apps/testing/com.example.journey','https://play.google.com/store/apps/details?id=com.example.journey']);
+ expect(await page.evaluate(()=>primaryAssignments().find(a=>a.name==='Journey App').joinedDay)).toBeNull();
+ await card.locator('[data-action="confirm-join"]').click();
+ await expect(card.locator('[data-action="confirm-join"]')).toHaveCount(0);
+ await expect(card.locator('details [data-action="open-link"]')).not.toBeVisible();
+ await expect(card.locator('[data-action="write-report"]')).toBeVisible();
+ await page.reload();await expect(page.locator('#launch-splash')).toHaveCount(0);
+ await page.evaluate(()=>{tab='tests';render()});
+ await expect(card.locator('[data-action="confirm-join"]')).toHaveCount(0);
+ await expect(card).toContainText('صفحة التطبيق بالمتجر');
+ await expect(card.locator('details [data-action="open-link"]')).not.toBeVisible();
+ await card.locator('summary').click();await expect(card.locator('details [data-action="open-link"]')).toBeVisible();
+});
+
+test('test queue puts daily work before history and disables cooldown reports',async({page})=>{
+ await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
+ await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
+ await page.evaluate(async()=>{
+  user=await api.switchDemo('tester');await refresh();
+  dashboard.assignments=[
+   {id:'old',testerUid:user.uid,name:'Old Test',joinedDay:'2020-01-01',checkins:[]},
+   {id:'wait',testerUid:user.uid,name:'Cooldown Test',joinedDay:api.dayKey(),checkins:[],lastCheckinAt:{seconds:Date.now()/1000}},
+   {id:'due',testerUid:user.uid,name:'Due Test',joinedDay:api.dayKey(),checkins:[]}
+  ];tab='tests';render();
+ });
+ await expect(page.locator('.app-card h4')).toHaveText(['Due Test','Cooldown Test','Old Test']);
+ await expect(page.locator('.app-card',{hasText:'Cooldown Test'}).locator('[data-action="write-report"]')).toBeDisabled();
+ await expect(page.locator('.app-card',{hasText:'Due Test'}).locator('[data-action="write-report"]')).toBeEnabled();
+});
