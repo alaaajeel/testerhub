@@ -1,6 +1,8 @@
 # TesterHub continuation checkpoint
 
-Baseline: dd84d5179496afec2b7a428b1a940d3064076c60. Existing repository only.
+Baseline: dd84d5179496afec2b7a428b1a940d3064076c60. Existing repository only. Phase 1 and phase 2 tester selection merged into main through PR #1 and PR #2. Their matching rules were reported published by the user, but the Console editor content was not independently verified.
+
+Current branch: `phase-2/project-lifecycle`. Draft creation/edit and `draft → recruiting` publishing implemented and tested locally. Read `PHASE-2-LIFECYCLE-AR.md`. Do not merge or deploy this branch until its updated rules are published and confirmed in production.
 
 Phase 1 branch: phase-1/accounts-security. Read PHASE-1-AR.md for exact implementation, verification evidence, production dependency and deployment commands.
 
