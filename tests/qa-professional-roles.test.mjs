@@ -94,7 +94,8 @@ describe('QA-04 | Closed test and daily feedback',()=>{
  });
  it('requires a meaningful test report with problem details when needed',()=>{
   assert.match(html,/if\(!opened\|\|!feature\)/);
-  assert.match(html,/outcome==='issue'&&notes\.length<10/);
+  assert.match(html,/notes\.length<10/);
+  assert.match(html,/taskForDay\(a\)/);
   assert.match(html,/notes\.length>800/);
  });
  it('updates the assignment and creates a report in one Firestore transaction',()=>{

@@ -1,6 +1,8 @@
 # TesterHub continuation checkpoint
 
-Baseline: dd84d5179496afec2b7a428b1a940d3064076c60. Existing repository only.
+Baseline: dd84d5179496afec2b7a428b1a940d3064076c60. Existing repository only. Phase 1 and phase 2 tester selection merged into main through PR #1 and PR #2. Their matching rules were reported published by the user, but the Console editor content was not independently verified.
+
+Integration branch: `integration/phase-2-3`, combining draft projects (PR #3), UTC reports (PR #4), and daily task snapshots (PR #5). Combined rules and UI passed Node 55, Firebase emulator 19, Chromium 14, build and preflight. See `PHASE-2-LIFECYCLE-AR.md`, `PHASE-2-TIMING-AR.md`, `PHASE-3-TASKS-AR.md`. The integration PR is the canonical review/deployment candidate; individual draft PRs remain unmerged. Publish the combined Firestore rules before the UI merge and verify them with real accounts. No production rules or data were modified by this branch.
 
 Phase 1 branch: phase-1/accounts-security. Read PHASE-1-AR.md for exact implementation, verification evidence, production dependency and deployment commands.
 
