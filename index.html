@@ -305,8 +305,8 @@ const previewStorage = (() => {
 const DEMO_KEY='testerhub_pwa_demo_v2';
 const isDemo=!firebaseConfig?.apiKey || !firebaseConfig?.projectId;
 let auth,db,authFns,storeFns,accountService,fbReady=false;
-const dayKey=(date=new Date())=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-const daysSince=(dateKey)=>{if(!dateKey)return 0;const [y,m,d]=dateKey.split('-').map(Number);if(!y)return 0;const now=new Date();return Math.max(1,Math.floor((Date.UTC(now.getFullYear(),now.getMonth(),now.getDate())-Date.UTC(y,m-1,d))/86400000)+1)};
+const dayKey=(date=new Date())=>date.toISOString().slice(0,10);
+const daysSince=(dateKey)=>{if(!dateKey)return 0;const [y,m,d]=dateKey.split('-').map(Number);if(!y)return 0;const now=new Date();return Math.max(1,Math.floor((Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate())-Date.UTC(y,m-1,d))/86400000)+1)};
 const seedTesters=()=>Array.from({length:20},(_,i)=>({uid:`t${i+1}`,name:`مختبر ${i+1}`,email:`tester${String(i+1).padStart(2,'0')}@example.com`,available:true,lastActive:i<18,role:'tester'}));
 const daysBefore=(n)=>{let d=new Date();d.setDate(d.getDate()-n);return dayKey(d)};
 const demoSeed=()=>({
