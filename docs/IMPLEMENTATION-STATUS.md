@@ -2,6 +2,8 @@
 
 Baseline: dd84d5179496afec2b7a428b1a940d3064076c60. Existing repository only.
 
+Phase 1 and phase 2 tester selection merged through PR #1 and #2. Open draft PR #3 has project drafts and PR #4 has UTC report timing. Current branch `phase-3/daily-tasks` adds task snapshots; see `PHASE-3-TASKS-AR.md`. These branches are individually based on main. Integrate all rule changes together, publish combined rules first, then merge UI PRs. Do not overwrite production rules with an older standalone branch copy.
+
 Phase 1 branch: phase-1/accounts-security. Read PHASE-1-AR.md for exact implementation, verification evidence, production dependency and deployment commands.
 
 User authorization: existing accounts are disposable personal test accounts; approved freedom to modify production rules after verification. No deletion required. GitHub PR before merge; never claim production deployment from local tests. Firebase CLI has no administrative authentication. No production data inspected or mutated.
