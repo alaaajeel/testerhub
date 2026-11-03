@@ -78,3 +78,12 @@ test('task snapshot rejects mismatch and report must describe assigned task',asy
  await assertSucceeds(good.commit());
 
 });
+test('message document is create-only and scoped to assignment participants',async()=>{
+ const sender=db('t1'),owner=db('d1'),other=db('d2'),ref=doc(sender,'messages','stable-retry-id');
+ const message={assignmentId:'p1_t1',projectId:'p1',testerUid:'t1',ownerUid:'d1',sender:'tester',senderUid:'t1',text:'اختبرت التطبيق اليوم',at:new Date().toISOString(),createdAt:serverTimestamp()};
+ await assertSucceeds(setDoc(ref,message));
+ await assertFails(setDoc(ref,message));
+ await assertSucceeds(getDoc(doc(owner,'messages','stable-retry-id')));
+ await assertFails(getDoc(doc(other,'messages','stable-retry-id')));
+ await assertFails(setDoc(doc(other,'messages','forged'),{...message,sender:'developer',senderUid:'d2'}));
+});
