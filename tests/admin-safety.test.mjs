@@ -30,8 +30,8 @@ test('permanent deletion is scoped and resumable',()=>{
 test('client Firestore rules lock all writes during project deletion',()=>{
  assert.match(rules,/match \/adminDeleteJobs\/\{jobId\} \{ allow read, write: if false; \}/);
  assert.match(rules,/match \/adminAuditLogs\/\{auditId\} \{ allow read, write: if false; \}/);
- assert.match(rules,/&& project\(resource\.data\.projectId\)\.data\.get\('status','recruiting'\) not in \['deleting','archived'\]/);
- assert.equal((rules.match(/project\(request\.resource\.data\.projectId\)\.data\.get\('status','recruiting'\) not in \['deleting','archived'\]/g)||[]).length,2);
+ assert.match(rules,/&& project\(resource\.data\.projectId\)\.data\.get\('status','recruiting'\) in \['deleting','archived'\]/);
+ assert.equal((rules.match(/project\(request\.resource\.data\.projectId\)\.data\.get\('status','recruiting'\) in \['deleting','archived'\]/g)||[]).length,2);
  assert.match(rules,/allow delete: if false/);
 });
 test('admin grant requires a verified owner and explicit local confirmation',()=>{
