@@ -133,6 +133,12 @@ test('role is a mode switch and can never become a privilege',async()=>{
  await assertSucceeds(updateDoc(t,{role:'developer'}));
  await assertSucceeds(updateDoc(t,{role:'tester'}));
 });
+test('legacy profile listed in the old directory can still be edited once it leaves it',async()=>{
+ await env.withSecurityRulesDisabled(c=>updateDoc(doc(c.firestore(),'users','t1'),{available:true}));
+ const t=doc(db('t1'),'users','t1');
+ await assertFails(updateDoc(t,{name:'New Name'}));
+ await assertSucceeds(updateDoc(t,{name:'New Name',available:false}));
+});
 test('suspended user reads own profile only, and cannot lift the suspension',async()=>{
  await env.withSecurityRulesDisabled(c=>updateDoc(doc(c.firestore(),'users','t1'),{suspended:true}));
  await assertSucceeds(getDoc(doc(db('t1'),'users','t1')));
