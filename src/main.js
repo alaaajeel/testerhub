@@ -43,7 +43,8 @@ function navigation(current) {
     const n = badge(key);
     return `<a href="#/${key}" class="${current === key ? 'on' : ''}" ${current === key ? 'aria-current="page"' : ''}>${icon(ic, 22)}<span>${label}</span>${n ? `<b class="count">${Math.min(n, 99)}</b>` : ''}</a>`;
   }).join('');
-  return `<nav class="nav" aria-label="التنقل الرئيسي"><div class="nav-brand"><img src="./assets/brand-icon.svg" alt="" width="32" height="32"><span dir="ltr">TesterHub</span></div>${links}</nav>`;
+  const adminLink = ui.admin ? `<a href="./admin.html">${icon('shield', 22)}<span>الإدارة</span></a>` : '';
+  return `<nav class="nav" aria-label="التنقل الرئيسي"><div class="nav-brand"><img src="./assets/brand-icon.svg" alt="" width="32" height="32"><span dir="ltr">TesterHub</span></div>${links}${adminLink}</nav>`;
 }
 
 function screen({name, param}) {
@@ -130,7 +131,7 @@ async function enter(user) {
   ui.admin = false;
   if (user && !user.profileMissing && !user.suspended && user.emailVerified) {
     store.startLive({onChange: onLive, onArrival});
-    store.isAdmin().then(v => { ui.admin = v; if (route().name === 'profile') render({live: true}); });
+    store.isAdmin().then(v => { ui.admin = v; updateBadges(route().name); if (route().name === 'profile') render({live: true}); });
     store.deletionRequested().then(v => { ui.deletionRequested = v; if (route().name === 'profile') render({live: true}); });
   }
   render();

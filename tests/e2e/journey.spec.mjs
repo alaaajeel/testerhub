@@ -272,6 +272,15 @@ test('admin console: gate, moderation, audit trail', async ({browser}) => {
  const adminDoc = await findDoc('users', 'email', adminEmail);
  const adminUid = adminDoc.name.split('/').pop();
  await write(`projects/${PROJECT}/databases/(default)/documents/adminRoles/${adminUid}`, {active: {booleanValue: true}});
+ await user.goto('/?emulator=1#/home');
+ await expect(user.locator('.nav')).toBeVisible({timeout: 15000});
+ await expect(user.locator('.nav a[href="./admin.html"]'), 'ordinary users never see the admin link').toHaveCount(0);
+ await admin.reload();
+ await expect(admin.locator('.nav a[href="./admin.html"]'), 'the admin reaches the console from any mode').toBeVisible({timeout: 15000});
+ await admin.setViewportSize({width: 360, height: 740});
+ await expect(admin.locator('.nav a[href="./admin.html"]')).toBeVisible();
+ expect(await admin.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+ await admin.setViewportSize({width: 1280, height: 860});
  await admin.goto('/admin.html?emulator=1');
  await expect(admin.locator('#metrics .stat').first()).toBeVisible({timeout: 15000});
  await shot(admin, '17-admin-overview');
