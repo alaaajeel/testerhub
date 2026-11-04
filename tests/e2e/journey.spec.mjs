@@ -256,7 +256,8 @@ test('desktop app uses a real layout instead of a phone frame', async ({browser}
  const email = mail('desktop');
  await signup(page, {name: 'مطور الحاسوب', email, role: 'developer'});
  await expect(page.locator('.device')).toHaveCount(0);
- expect((await page.locator('.nav').boundingBox()).width).toBeLessThan(260);
+ // Live updates re-render the shell, so measure in one step inside the page.
+ await expect.poll(() => page.evaluate(() => document.querySelector('.nav')?.getBoundingClientRect().width)).toBeLessThan(260);
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
  await shot(page, '16-desktop-dev');
 });
