@@ -99,7 +99,8 @@ service cloud.firestore {
         && request.resource.data.checkins == []
         && request.resource.data.invitationStatus == 'pending'
         && request.resource.data.createdAt == request.time;
-      allow update: if verified() && self(resource.data.testerUid) && (
+      allow update: if verified() && self(resource.data.testerUid)
+        && project(resource.data.projectId).data.get('status','recruiting') != 'deleting' && (
         (resource.data.get('invitationStatus','legacy') == 'pending'
           && resource.data.createdAt is timestamp
           && request.time < resource.data.createdAt + duration.value(7, 'd')
@@ -136,6 +137,7 @@ service cloud.firestore {
       allow get, list: if signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
       allow create: if verified()
+        && project(request.resource.data.projectId).data.get('status','recruiting') != 'deleting'
         && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','date','tested','outcome','notes','status','createdAt','submittedAt'])
         && reportId == request.resource.data.assignmentId + '_' + request.resource.data.date
         && request.resource.data.testerUid == request.auth.uid
@@ -159,15 +161,20 @@ service cloud.firestore {
         && !(request.resource.data.date in assignment(request.resource.data.assignmentId).data.checkins)
         && request.resource.data.date in assignmentAfter(request.resource.data.assignmentId).data.checkins;
       allow update: if verified() && resource.data.ownerUid == request.auth.uid
+        && project(resource.data.projectId).data.get('status','recruiting') != 'deleting'
         && resource.data.outcome == 'issue' && resource.data.status == 'new'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'fixed';
       allow delete: if false;
     }
+    // Admin queue and audit logs are server-only. Firebase Admin SDK bypasses client rules.
+    match /adminDeleteJobs/{jobId} { allow read, write: if false; }
+    match /adminAuditLogs/{auditId} { allow read, write: if false; }
     match /messages/{messageId} {
       allow get, list: if signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
       allow create: if verified()
+        && project(request.resource.data.projectId).data.get('status','recruiting') != 'deleting'
         && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','sender','senderUid','text','at','createdAt'])
         && request.resource.data.senderUid == request.auth.uid
         && request.resource.data.sender in ['tester','developer']
