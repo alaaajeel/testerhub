@@ -1,7 +1,9 @@
 // Screens seen before the app opens: landing, sign in, verification, suspension.
 import {esc, icon} from '../ui.js';
 
-export const authDraft = {mode: 'login', role: 'tester', name: '', email: ''};
+export const authDraft = {mode: 'login', role: 'tester', name: '', email: '', linking: false};
+
+const GOOGLE_MARK = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.700 1.200 9.200 3.600l6.900-6.900C35.900 2.400 30.400 0 24 0 14.600 0 6.500 5.400 2.600 13.200l8 6.200C12.500 13.700 17.800 9.500 24 9.500z"/><path fill="#4285F4" d="M46.900 24.500c0-1.600-.1-3.100-.4-4.500H24v9h12.900c-.6 3-2.200 5.500-4.700 7.200l7.700 6c4.500-4.200 7-10.300 7-17.700z"/><path fill="#FBBC05" d="M10.600 28.600a14.500 14.500 0 0 1 0-9.200l-8-6.200a24 24 0 0 0 0 21.600l8-6.200z"/><path fill="#34A853" d="M24 48c6.500 0 11.900-2.100 15.900-5.800l-7.700-6c-2.200 1.400-4.900 2.300-8.200 2.300-6.200 0-11.500-4.200-13.400-9.900l-8 6.200C6.500 42.600 14.600 48 24 48z"/></svg>';
 
 export function landing() {
   return `<div class="public">
@@ -39,6 +41,9 @@ export function authScreen() {
   return `<div class="auth-page"><a class="brand" href="#/"><img src="./assets/brand-icon.svg" alt="" width="38" height="38"><span dir="ltr">TesterHub</span></a>
   <main class="card auth-card">
    <h1>${signup ? 'إنشاء حساب' : 'تسجيل الدخول'}</h1>
+   ${d.linking ? '<p class="notice" role="status">هذا البريد له حساب بكلمة مرور. أدخلها مرة واحدة لنربطه بحساب Google، وبعدها تدخل بزر Google مباشرة.</p>' : ''}
+   <button class="btn google wide" type="button" data-action="google">${GOOGLE_MARK}<span>المتابعة بحساب Google</span></button>
+   <div class="or"><span>أو بالبريد الإلكتروني</span></div>
    <form id="auth-form" novalidate>
     ${signup ? `<fieldset class="choice"><legend>كيف ستستخدم TesterHub؟</legend><div class="segmented">
       <button type="button" data-signup-role="tester" class="${d.role === 'tester' ? 'on' : ''}" aria-pressed="${d.role === 'tester'}">أختبر التطبيقات</button>
@@ -64,9 +69,10 @@ export function verifyScreen(user) {
 }
 
 export function profileRecovery(user) {
-  return `<div class="auth-page"><main class="card auth-card"><h1>أكمل بيانات حسابك</h1><p class="muted">حساب الدخول موجود بالبريد <bdi dir="ltr">${esc(user.email)}</bdi>، وتبقى خطوة واحدة.</p>
-   <form id="complete-profile-form"><label class="field"><span>الاسم</span><input name="name" minlength="2" maxlength="80" required></label>
-   <label class="field"><span>كيف ستستخدم TesterHub؟</span><select name="role"><option value="tester">أختبر التطبيقات</option><option value="developer">عندي تطبيق</option></select></label>
+  const role = authDraft.role;
+  return `<div class="auth-page"><main class="card auth-card"><h1>أكمل بيانات حسابك</h1><p class="muted">حساب الدخول موجود بالبريد <bdi dir="ltr">${esc(user.email)}</bdi>، وتبقى خطوة واحدة.</p>${user.hasGoogle ? '<p class="muted small">إذا كان لك حساب TesterHub ببريد آخر فسجّل الخروج وادخل به، ثم اربط Google من صفحة حسابي.</p>' : ''}
+   <form id="complete-profile-form"><label class="field"><span>الاسم</span><input name="name" minlength="2" maxlength="80" required value="${esc(user.displayName || authDraft.name)}"></label>
+   <label class="field"><span>كيف ستستخدم TesterHub؟</span><select name="role"><option value="tester">أختبر التطبيقات</option><option value="developer" ${role === 'developer' ? 'selected' : ''}>عندي تطبيق</option></select></label>
    <label class="check"><input type="checkbox" name="terms" required><span>أوافق على <a href="./terms.html" target="_blank" rel="noopener">الشروط</a> و<a href="./privacy.html" target="_blank" rel="noopener">سياسة الخصوصية</a>.</span></label>
    <button class="btn primary wide" type="submit">متابعة</button></form><button class="link" data-action="logout">تسجيل الخروج</button></main></div>`;
 }

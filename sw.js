@@ -16,7 +16,25 @@ self.addEventListener('fetch', e => {
     return response;
   }).catch(() => caches.match(e.request).then(hit => hit || (e.request.mode === 'navigate' ? caches.match('./index.html') : Response.error()))));
 });
+// The reminder job sends data-only FCM messages, so this handler alone decides what is shown.
+self.addEventListener('push', e => {
+  let data = {};
+  try { data = e.data.json().data || {}; } catch {}
+  const title = data.title || 'TesterHub', body = data.body || '', url = data.url || './#/home';
+  e.waitUntil(self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(list => {
+    const open = list.find(c => c.focused);
+    if (open) return open.postMessage({type: 'testerhub-reminder', title, body});
+    return self.registration.showNotification(title, {body, icon: './assets/icon-192.png', badge: './assets/icon-192.png', tag: 'testerhub-daily', lang: 'ar', dir: 'rtl', data: {url}});
+  }));
+});
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  e.waitUntil(self.clients.matchAll({type: 'window'}).then(list => list.length ? list[0].focus() : self.clients.openWindow('./index.html')));
+  const url = new URL(e.notification.data?.url || './index.html', self.registration.scope);
+  if (url.origin !== self.location.origin) return;
+  e.waitUntil(self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(list => {
+    const open = list[0];
+    if (!open) return self.clients.openWindow(url.href);
+    // navigate() rejects for a window this worker does not control yet; opening it is still better than nothing.
+    return Promise.resolve(e.notification.data?.url ? open.navigate(url.href).catch(() => open) : open).then(c => (c || open).focus());
+  }));
 });

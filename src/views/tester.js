@@ -2,6 +2,7 @@ import {state} from '../store.js';
 import {groupTesterWork, testerStage, taskForDay, daysSince, playLinks, testerRecord, statusLabel, severityLabel, hoursUntilNextReport, TEST_DAYS, dayKey} from '../domain.js';
 import {esc, icon, strip, empty, num} from '../ui.js';
 import {backLink} from './common.js';
+import {shouldOfferReminder} from '../reminders.js';
 
 const mine = () => state.data.assignments;
 
@@ -58,6 +59,7 @@ export function home() {
     : 'لا يوجد ما تفعله الآن. اختر تطبيقاً تجرّبه.';
   const nothing = !mine().length && !state.data.applications.some(x => x.status === 'pending');
   return `<header class="page-head"><h1>أهلاً ${name}</h1><p class="muted">${summary}</p></header>
+   ${shouldOfferReminder() && (work.due.length || work.done.length || work.waiting.length) ? `<section class="card"><p>لا تفوّت يوماً من اختبارك: نذكّرك على هذا الجهاز حتى والتطبيق مغلق، في الأيام التي ينتظر فيها تقريرك فقط.</p><button class="btn primary wide" data-action="enable-notifications">${icon('bell', 18)} تفعيل التذكير اليومي</button></section>` : ''}
    ${[...work.due, ...work.setup].map(card).join('')}
    ${pendingApplications()}
    ${[...work.waiting, ...work.done].map(card).join('')}

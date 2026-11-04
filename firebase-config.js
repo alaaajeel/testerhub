@@ -8,3 +8,5 @@ window.TESTERHUB_FIREBASE_CONFIG = {
   "appId": "1:776338360189:web:142dbd94537ce3453e6e14",
   "measurementId": "G-6881JSTLT1"
 };
+/* Public Web Push key from Firebase Console; while empty the app keeps calendar and in-app reminders only. */
+window.TESTERHUB_VAPID_KEY = "";

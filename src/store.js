@@ -228,6 +228,10 @@ export async function sendMessage(assignment, body) {
   retryIds.delete(key);
 }
 
+// merge keeps lastReminderAt, which only the reminder job writes.
+export const savePushDevice = (id, token, reminderUtcHour) => commit(() => f.setDoc(f.doc(db, 'pushDevices', id), {uid: state.user.uid, token, reminderUtcHour, updatedAt: f.serverTimestamp()}, {merge: true}));
+export const deletePushDevice = id => commit(() => f.deleteDoc(f.doc(db, 'pushDevices', id)));
+
 export function flag(targetType, targetId, targetName, reason) {
   const text = String(reason || '').trim();
   if (text.length < 5) throw new Error('اكتب سبب البلاغ، 5 أحرف على الأقل.');

@@ -326,6 +326,27 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Only the reminder job (Admin SDK) reads tokens to send; no other account can, admins included.
+    // The id is the token's hash, so a browser is one document, owned by whoever signed in there last.
+    function validPushDevice(deviceId, d) {
+      return d.uid == request.auth.uid
+        && d.token is string && d.token.size() >= 20 && d.token.size() <= 4096
+        && hashing.sha256(d.token).toHexString().lower() == deviceId
+        && d.reminderUtcHour is int && d.reminderUtcHour >= 0 && d.reminderUtcHour <= 23
+        && d.updatedAt == request.time;
+    }
+    match /pushDevices/{deviceId} {
+      allow get: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow list: if false;
+      allow create: if verified()
+        && request.resource.data.keys().hasOnly(['uid','token','reminderUtcHour','updatedAt'])
+        && validPushDevice(deviceId, request.resource.data);
+      allow update: if verified()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid','reminderUtcHour','updatedAt'])
+        && validPushDevice(deviceId, request.resource.data);
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
     match /adminAuditLogs/{auditId} {
       allow get, list: if adminAllowed();
       allow create: if adminAllowed()
