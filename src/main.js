@@ -9,7 +9,7 @@ import * as pub from './views/public.js';
 import * as common from './views/common.js';
 import * as tester from './views/tester.js';
 import * as dev from './views/developer.js';
-import {setReminderHour, exportCalendar, enableNotifications, notify, dailyReminder} from './reminders.js';
+import {setReminderHour, exportCalendar, enableNotifications, disablePush, forgetDevice, syncPush, listenForReminders, notify, dailyReminder} from './reminders.js';
 
 const root = document.getElementById('app');
 const ui = {admin: false, deletionRequested: false, installPrompt: null, ready: false, failure: '', listingFailed: false, applyProject: undefined, applyFailed: false, dirty: false};
@@ -132,6 +132,7 @@ async function enter(user) {
     store.startLive({onChange: onLive, onArrival});
     store.isAdmin().then(v => { ui.admin = v; if (route().name === 'profile') render({live: true}); });
     store.deletionRequested().then(v => { ui.deletionRequested = v; if (route().name === 'profile') render({live: true}); });
+    syncPush().then(changed => { if (changed && route().name === 'profile') render({live: true}); }).catch(err => console.warn('push', err.code || err.message));
   }
   render();
   loadRouteData(route());
@@ -162,7 +163,26 @@ const ACTIONS = {
     if (!user.emailVerified) throw Object.assign(new Error(), {code: 'auth/email-not-verified'});
     await enter(user);
   },
-  logout: async () => { store.stopLive(); await store.signOut(); state.user = null; ui.failure = ''; location.hash = '#/'; render(); },
+  google: async () => {
+    let user;
+    pub.authDraft.linking = false;
+    try { user = await accounts.loginWithGoogle(); }
+    catch (err) {
+      if (err.code !== 'auth/link-required') throw err;
+      Object.assign(pub.authDraft, {mode: 'login', linking: true, email: err.email || pub.authDraft.email});
+      go('#/login');
+      return;
+    }
+    if (!user) return;
+    location.hash = '#/home';
+    await enter(user);
+  },
+  'link-google': async () => {
+    const user = await accounts.linkGoogle();
+    if (!user) return;
+    state.user = user; render(); toast('رُبط حساب Google بحسابك.');
+  },
+  logout: async () => { await forgetDevice(); store.stopLive(); await store.signOut(); state.user = null; ui.failure = ''; location.hash = '#/'; render(); },
   retry: async () => { ui.failure = ''; await boot(); },
   'switch-role': async () => {
     const next = state.user.role === 'tester' ? 'developer' : 'tester';
@@ -172,7 +192,8 @@ const ACTIONS = {
     await enter(user);
   },
   calendar: async () => exportCalendar(),
-  'enable-notifications': enableNotifications,
+  'enable-notifications': async () => { await enableNotifications(); render({live: true}); },
+  'disable-push': async () => { await disablePush(); render({live: true}); toast('أوقفنا التذكير على هذا الجهاز.'); },
   install: async () => { ui.installPrompt?.prompt(); await ui.installPrompt?.userChoice; ui.installPrompt = null; render(); },
   'request-deletion': async () => {
     if (!await dialog({title: 'طلب حذف الحساب؟', body: 'ستراجع الإدارة طلبك خلال 14 يوماً، ويمكنك متابعة استخدام حسابك حتى ذلك الحين.', confirm: 'إرسال الطلب', danger: true})) return;
@@ -247,11 +268,14 @@ const FORMS = {
     if (!form.reportValidity()) return;
     const email = String(data.get('email')).trim(), password = String(data.get('password'));
     captureAuthDraft();
+    const linking = pub.authDraft.linking;
     const user = pub.authDraft.mode === 'login' ? await accounts.login(email, password)
       : await accounts.signup({name: String(data.get('name')), email, password, role: pub.authDraft.role});
     pub.authDraft.name = '';
+    pub.authDraft.linking = false;
     location.hash = '#/home';
     await enter(user);
+    if (linking) toast(user.linkedGoogle ? 'رُبط حساب Google. يمكنك الدخول بزره من الآن.' : 'دخلت بكلمة المرور، ولم نتمكن من ربط Google. اربطه من صفحة حسابي.', user.linkedGoogle ? '' : 'error');
   },
   'complete-profile-form': async (data, form) => {
     if (!form.reportValidity()) return;
@@ -307,7 +331,7 @@ root.addEventListener('input', event => { if (event.target.closest('form') && ev
 
 root.addEventListener('change', event => {
   const node = event.target;
-  if (node.id === 'reminder-hour') { setReminderHour(Number(node.value)); toast('حُفظ وقت التذكير.'); return; }
+  if (node.id === 'reminder-hour') { setReminderHour(Number(node.value)); syncPush().catch(err => console.warn('push', err.code || err.message)); toast('حُفظ وقت التذكير.'); return; }
   if (node.name === 'outcome') {
     const issue = node.value === 'issue';
     document.getElementById('issue-fields').hidden = !issue;
@@ -357,6 +381,7 @@ onAuthStateChanged(auth, async active => {
   try { await enter(active ? await accounts.currentUser() : null); } catch (err) { toast(humanError(err), 'error'); }
 });
 
+listenForReminders();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(console.warn));
 }

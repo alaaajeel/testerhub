@@ -3,7 +3,7 @@ import {getAuth, connectAuthEmulator} from 'firebase/auth';
 import {initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, connectFirestoreEmulator} from 'firebase/firestore';
 
 // Local verification only: the switch cannot exist on a deployed hostname.
-const emulator = location.hostname === '127.0.0.1' && new URLSearchParams(location.search).has('emulator');
+export const emulator = location.hostname === '127.0.0.1' && new URLSearchParams(location.search).has('emulator');
 const config = emulator ? {apiKey: 'demo', authDomain: 'demo.local', projectId: 'demo-testerhub', appId: '1:1:web:1'} : window.TESTERHUB_FIREBASE_CONFIG;
 
 export const app = initializeApp(config);

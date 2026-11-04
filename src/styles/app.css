@@ -163,6 +163,8 @@ h2+.person{border-top:0}
 .auth-page{max-width:440px;margin:0 auto;padding:calc(24px + env(safe-area-inset-top)) 16px 32px;text-align:center}
 .auth-card{text-align:start;margin-top:16px;padding:22px 20px}.auth-card h1{margin-bottom:14px;font-size:22px}.auth-card p{margin-bottom:12px}
 .auth-card .btn+.btn{margin-top:8px}
+.btn.google{background:#fff;border-color:#c9d3e2;color:var(--navy);gap:10px}.btn.google:hover{background:var(--blue-soft)}
+.or{display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:13px}.or::before,.or::after{content:"";flex:1;border-top:1px solid var(--line)}
 .switch-mode{text-align:center;margin:8px 0 0!important;font-size:14px}
 .legal{max-width:720px;margin:0 auto;padding:24px 20px 56px}
 .legal h1{margin:16px 0 4px}.legal h2{margin-top:24px}.legal p,.legal ul{margin-bottom:10px}

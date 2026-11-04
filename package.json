@@ -10,6 +10,7 @@
     "test:rules": "firebase emulators:exec --only auth,firestore --project demo-testerhub \"node --test --test-concurrency=1 tests/emulator/*.test.mjs\"",
     "build": "node scripts/build-site.mjs",
     "test:e2e": "npm run build && firebase emulators:exec --only auth,firestore --project demo-testerhub \"playwright test\"",
+    "reminders": "node scripts/send-reminders.mjs",
     "deploy": "npm run build && npm run preflight && firebase deploy --only firestore:rules,firestore:indexes,hosting:testiqx --project testhubiq-c7711"
   },
   "devDependencies": {
@@ -19,6 +20,7 @@
     "firebase-tools": "^14.26.0"
   },
   "dependencies": {
-    "firebase": "^12.6.0"
+    "firebase": "^12.6.0",
+    "firebase-admin": "^13.10.0"
   }
 }

@@ -16,7 +16,7 @@
       if (auth.currentUser?.uid !== u.uid) throw fail('auth/session-expired');
       const profile = snap.exists() ? snap.data() : {profileMissing: true};
       if (snap.exists() && !['tester', 'developer'].includes(profile.role)) throw fail('profile/invalid-role');
-      return {...profile, uid: u.uid, email: u.email, emailVerified: u.emailVerified};
+      return {...profile, uid: u.uid, email: u.email, emailVerified: u.emailVerified, displayName: u.displayName || '', hasGoogle: !!u.providerData?.some(p => p.providerId === 'google.com')};
     }
     async function completeProfile({name, role}) {
       name = nameValue(name);
@@ -43,6 +43,50 @@
     }
     async function login(email, password) {
       await a.signInWithEmailAndPassword(auth, email.trim(), password);
+      const linkedGoogle = await finishGoogleLink(email);
+      return {...await currentUser(), linkedGoogle};
+    }
+    // Closing the popup is a choice, not a failure.
+    const CANCELLED = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request'];
+    const googleProvider = () => {
+      const provider = new a.GoogleAuthProvider();
+      provider.setCustomParameters({prompt: 'select_account'});
+      return provider;
+    };
+    let pendingGoogle = null;
+    // Firebase keeps the UID when it merges the same email by itself, so an existing profile and its tests stay.
+    // When it refuses, the password must prove ownership first; only then are the two sign-in methods linked.
+    async function loginWithGoogle() {
+      pendingGoogle = null;
+      try { await a.signInWithPopup(auth, googleProvider()); }
+      catch (err) {
+        if (CANCELLED.includes(err.code)) return null;
+        const credential = err.code === 'auth/account-exists-with-different-credential' && a.GoogleAuthProvider.credentialFromError(err);
+        if (!credential) throw err;
+        const email = String(err.customData?.email || '').toLowerCase();
+        pendingGoogle = {credential, email};
+        throw Object.assign(fail('auth/link-required'), {email});
+      }
+      return currentUser();
+    }
+    async function finishGoogleLink(email) {
+      const pending = pendingGoogle;
+      pendingGoogle = null;
+      if (!pending || (pending.email && pending.email !== email.trim().toLowerCase())) return false;
+      // The password sign-in already succeeded; a failed link must not undo it.
+      try {
+        await a.linkWithCredential(session(), pending.credential);
+        await a.reload(session());
+        await a.getIdToken(session(), true);
+        return true;
+      } catch (err) { console.warn('google link', err.code); return false; }
+    }
+    // For a password account whose Google address is a different one.
+    async function linkGoogle() {
+      const u = session();
+      try { await a.linkWithPopup(u, googleProvider()); }
+      catch (err) { if (CANCELLED.includes(err.code)) return null; throw err; }
+      await a.getIdToken(u, true);
       return currentUser();
     }
     async function sendVerification() { await a.sendEmailVerification(session()); }
@@ -68,13 +112,19 @@
       await f.updateDoc(ref(u.uid), changes);
       return currentUser();
     }
-    return {currentUser, completeProfile, signup, login, sendVerification, checkVerification, resetPassword, updateProfile};
+    return {currentUser, completeProfile, signup, login, loginWithGoogle, linkGoogle, sendVerification, checkVerification, resetPassword, updateProfile};
   }
   function humanError(err = {}) {
     const messages = {
-      'auth/email-already-in-use': 'هذا البريد مسجل مسبقاً. سجّل الدخول أو استرجع كلمة المرور.',
-      'auth/invalid-credential': 'البريد أو كلمة المرور غير صحيحة.',
-      'auth/wrong-password': 'البريد أو كلمة المرور غير صحيحة.',
+      'auth/email-already-in-use': 'هذا البريد مسجل مسبقاً. ادخل بزر Google أو بكلمة المرور، أو استرجعها.',
+      'auth/invalid-credential': 'البريد أو كلمة المرور غير صحيحة. إذا أنشأت حسابك عبر Google فادخل بزر Google.',
+      'auth/popup-blocked': 'منع المتصفح نافذة Google. اسمح بالنوافذ المنبثقة لهذا الموقع وحاول مرة أخرى.',
+      'auth/operation-not-allowed': 'الدخول عبر Google غير متاح الآن. استخدم البريد وكلمة المرور.',
+      'auth/unauthorized-domain': 'الدخول عبر Google غير متاح من هذا العنوان. استخدم البريد وكلمة المرور.',
+      'auth/credential-already-in-use': 'حساب Google هذا مرتبط بحساب TesterHub آخر.',
+      'auth/provider-already-linked': 'حسابك مرتبط بـ Google من قبل.',
+      'auth/link-required': 'هذا البريد له حساب بكلمة مرور. أدخلها مرة واحدة لنربطه بحساب Google.',
+      'auth/wrong-password': 'البريد أو كلمة المرور غير صحيحة. إذا أنشأت حسابك عبر Google فادخل بزر Google.',
       'auth/user-not-found': 'البريد أو كلمة المرور غير صحيحة.',
       'auth/invalid-email': 'أدخل بريداً إلكترونياً صحيحاً.',
       'auth/weak-password': 'كلمة المرور ضعيفة؛ استخدم 6 أحرف على الأقل.',

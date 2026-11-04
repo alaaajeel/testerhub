@@ -292,3 +292,55 @@ test('admin console: gate, moderation, audit trail', async ({browser}) => {
  await expect(admin.locator('#listTitle')).toContainText('مشكلات');
  expect(admin.problems).toEqual([]);
 });
+
+// The Auth emulator's own sign-in page stands in for Google's; the app's popup code is the real one.
+async function googlePopup(page, email, name = 'Google Tester') {
+ const [popup] = await Promise.all([page.waitForEvent('popup'), page.click('[data-action=google]')]);
+ await popup.waitForLoadState();
+ await popup.click('#add-account-button');
+ await popup.fill('#email-input', email);
+ await popup.fill('#display-name-input', name);
+ await popup.click('#sign-in');
+}
+
+test('Google is the first choice and a new Google user only finishes a profile', async ({browser}) => {
+ const page = await open(browser);
+ await page.goto('/?emulator=1#/signup/developer');
+ await expect(page.locator('[data-action=google]')).toBeVisible();
+ await shot(page, 'google-signup');
+ await googlePopup(page, mail('googlenew') + '.gmail.com');
+ await expect(page.locator('#complete-profile-form')).toBeVisible();
+ await expect(page.locator('#complete-profile-form input[name=name]'), 'the name comes from Google').toHaveValue('Google Tester');
+ await expect(page.locator('#complete-profile-form select[name=role]'), 'the chosen account type carries over').toHaveValue('developer');
+ await shot(page, 'google-complete-profile');
+ await page.check('#complete-profile-form input[name=terms]');
+ await page.click('#complete-profile-form button[type=submit]');
+ await expect(page.locator('.nav'), 'no email verification step after Google').toBeVisible();
+ await page.goto('/?emulator=1#/profile');
+ await expect(page.getByText('حسابك مرتبط بـ Google')).toBeVisible();
+ expect(page.problems).toEqual([]);
+});
+
+test('an existing password account signs in with Google and keeps its data', async ({browser}) => {
+ const page = await open(browser), email = mail('googleold');
+ await signup(page, {name: 'Old Tester', email, role: 'tester'});
+ await page.goto('/?emulator=1#/profile');
+ await expect(page.locator('[data-action=link-google]')).toBeVisible();
+ await shot(page, 'profile-reminders');
+ await page.click('[data-action=logout]');
+ await expect(page.locator('.intro')).toBeVisible();
+ await page.click('a[href="#/login"]');
+ await googlePopup(page, email);
+ // Firebase either merges the account by itself or asks for the password once.
+ const notice = page.locator('.notice');
+ await expect(notice.or(page.locator('.nav')).first()).toBeVisible();
+ if (await notice.isVisible()) {
+  await shot(page, 'google-link-password');
+  await expect(page.locator('#auth-email')).toHaveValue(email);
+  await page.fill('#auth-password', PASSWORD);
+  await page.click('#auth-form button[type=submit]');
+ }
+ await expect(page.locator('.nav')).toBeVisible();
+ await expect(page.getByRole('heading', {name: 'أهلاً Old'}), 'the old profile, not a new one').toBeVisible();
+ expect(page.problems).toEqual([]);
+});

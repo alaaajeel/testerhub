@@ -203,6 +203,22 @@ export function testerRecord(assignments, reports, now = new Date()) {
   };
 }
 
+// The reminder job runs in UTC; a tester picks a local hour. Half-hour zones round down.
+export function reminderUtcHour(localHour, now = new Date()) {
+  const at = new Date(now);
+  at.setHours(localHour, 0, 0, 0);
+  return at.getUTCHours();
+}
+
+// The push for one tester, or null when nothing is due: a reminder must always be true when it lands.
+export function reminderMessage(assignments, now = new Date()) {
+  const due = assignments.filter(a => testerStage(a, now) === 'due');
+  if (!due.length) return null;
+  const title = 'حان وقت اختبار اليوم';
+  if (due.length > 1) return {title, body: `تطبيقات تنتظر تقريرك اليوم: ${due.length}`, url: './#/home'};
+  return {title, body: `${due[0].name}: ${taskForDay(due[0], now)}`.slice(0, 180), url: './#/report/' + encodeURIComponent(due[0].id)};
+}
+
 export function calendarFile(hour, now = new Date()) {
   const start = new Date(now);
   start.setHours(hour, 0, 0, 0);

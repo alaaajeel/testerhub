@@ -87,3 +87,28 @@ test('calendar reminder covers exactly fourteen days',() => {
  assert.match(ics, /RRULE:FREQ=DAILY;COUNT=14/);
  assert.match(ics, /BEGIN:VALARM/);
 });
+
+test('reminderUtcHour converts a local hour and stays in range', () => {
+ const hour = d.reminderUtcHour(20, now);
+ const at = new Date(now); at.setHours(20, 0, 0, 0);
+ assert.equal(hour, at.getUTCHours());
+ for (let h = 0; h < 24; h++) assert.ok(d.reminderUtcHour(h, now) >= 0 && d.reminderUtcHour(h, now) < 24);
+});
+test('reminderMessage exists only while a test is due', () => {
+ const due = {...base, id: 'p_t', name: 'تطبيق', tasks: ['مهمة'], joinedDay: '2026-11-05'};
+ assert.deepEqual(d.reminderMessage([due], now), {title: 'حان وقت اختبار اليوم', body: 'تطبيق: مهمة', url: './#/report/p_t'});
+ assert.equal(d.reminderMessage([], now), null);
+ assert.equal(d.reminderMessage([{...due, checkins: ['2026-11-10']}], now), null, 'reported');
+ assert.equal(d.reminderMessage([{...due, lastCheckinAt: '2026-11-10T08:00:00Z'}], now), null, 'cooldown');
+ assert.equal(d.reminderMessage([{...due, joinedDay: '2026-10-01'}], now), null, 'finished');
+ assert.equal(d.reminderMessage([{...due, leftAt: '2026-11-09T08:00:00Z'}], now), null, 'left');
+ assert.equal(d.reminderMessage([{...due, joinedDay: null}], now), null, 'not started');
+ const two = d.reminderMessage([due, {...due, id: 'q_t'}], now);
+ assert.equal(two.url, './#/home');
+ assert.match(two.body, /: 2$/);
+});
+test('reminderMessage keeps a long task inside a notification and escapes the route', () => {
+ const m = d.reminderMessage([{...base, id: 'a/b', name: 'x'.repeat(70), tasks: ['y'.repeat(120)], joinedDay: '2026-11-05'}], now);
+ assert.ok(m.body.length <= 180);
+ assert.equal(m.url, './#/report/a%2Fb');
+});
