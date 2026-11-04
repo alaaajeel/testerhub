@@ -1,0 +1,29 @@
+name: Admin PR security and emulator verification
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admin-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:rules
+      - run: npm run build
+      - run: npm run preflight
+      - name: Verify server functions syntax and installable dependencies
+        run: |
+          npm --prefix functions install --ignore-scripts --no-audit --no-fund
+          npm --prefix functions run verify
