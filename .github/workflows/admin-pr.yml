@@ -27,3 +27,4 @@ jobs:
         run: |
           npm --prefix functions install --ignore-scripts --no-audit --no-fund
           npm --prefix functions run verify
+          node --test functions/tests/*.test.cjs
