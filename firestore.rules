@@ -1,7 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
+    function signedIn() {
+      // A moderator block must take effect on existing sessions as well as new logins.
+      // Missing profiles are allowed only for the initial account creation flow.
+      return request.auth != null
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true);
+    }
+    function adminEmail() {
+      return request.auth != null
+        && request.auth.token.email == 'dhi98886@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+    function adminAllowed() {
+      // A role can only be provisioned manually using the Firebase console / Admin SDK.
+      // No client, including the holder, may create or edit a privileged role.
+      return signedIn() && adminEmail()
+        && exists(/databases/$(database)/documents/adminRoles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/adminRoles/$(request.auth.uid)).data.get('active', false) == true;
+    }
     function verified() { return signedIn() && request.auth.token.email_verified == true && me().data.get('suspended',false) != true; }
     function self(uid) { return signedIn() && request.auth.uid == uid; }
     function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
@@ -14,9 +32,13 @@ service cloud.firestore {
       return day is string && day.matches('\\d{4}-\\d{2}-\\d{2}')
         && timestamp.date(int(day[0:4]), int(day[5:7]), int(day[8:10])) == request.time.date();
     }
+    match /adminRoles/{uid} {
+      allow get: if adminEmail() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
     match /users/{uid} {
-      allow get: if self(uid) || (developer() && resource.data.role == 'tester' && resource.data.available == true);
-      allow list: if developer() && resource.data.role == 'tester' && resource.data.available == true;
+      allow get: if adminAllowed() || self(uid) || (developer() && resource.data.role == 'tester' && resource.data.available == true);
+      allow list: if adminAllowed() || (developer() && resource.data.role == 'tester' && resource.data.available == true);
       allow create: if self(uid)
         && request.resource.data.keys().hasOnly(['name','email','role','available','createdAt'])
         && request.resource.data.role in ['tester','developer']
@@ -36,10 +58,19 @@ service cloud.firestore {
         && (!('participationPaused' in request.resource.data) ||
             (resource.data.role == 'tester' && request.resource.data.participationPaused is bool))
         && (!request.resource.data.get('participationPaused', false) || request.resource.data.available == false);
+      // Admin may quarantine users in Firestore without disabling Firebase Auth itself.
+      // The suspended account immediately loses Firestore access via signedIn().
+      allow update: if adminAllowed()
+        && request.auth.uid != uid
+        && resource.data.email != 'dhi98886@gmail.com'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['suspended','available'])
+        && request.resource.data.suspended is bool
+        && (request.resource.data.suspended == false || request.resource.data.available == false)
+        && (request.resource.data.available == resource.data.available || request.resource.data.available == false);
       allow delete: if false;
     }
     match /projects/{projectId} {
-      allow get, list: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow get, list: if adminAllowed() || (signedIn() && resource.data.ownerUid == request.auth.uid);
       allow create: if developer()
         && request.resource.data.keys().hasOnly(['name','link','ownerUid','ownerName','createdAt','testersCount','selectedTesterUids','status','tasks'])
         && request.resource.data.ownerUid == request.auth.uid
@@ -78,11 +109,26 @@ service cloud.firestore {
         && (request.resource.data.status == 'draft'
           ? (request.resource.data.testersCount == 0 && request.resource.data.selectedTesterUids == [])
           : (request.resource.data.status == 'recruiting' && request.resource.data.testersCount > 0 && request.resource.data.testersCount <= 400));
+      // Reversible archive only; permanent deletion remains unavailable on Spark.
+      allow update: if adminAllowed()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','statusBeforeArchive','archivedAt'])
+        && (
+          (resource.data.get('status','recruiting') in ['draft','recruiting','completed','paused']
+            && request.resource.data.status == 'archived'
+            && request.resource.data.statusBeforeArchive == resource.data.get('status','recruiting')
+            && request.resource.data.archivedAt == request.time)
+          ||
+          (resource.data.get('status','recruiting') == 'archived'
+            && resource.data.get('statusBeforeArchive','') in ['draft','recruiting','completed','paused']
+            && request.resource.data.status == resource.data.statusBeforeArchive
+            && !('statusBeforeArchive' in request.resource.data)
+            && !('archivedAt' in request.resource.data))
+        );
       allow delete: if false;
     }
     match /assignments/{assignmentId} {
-      allow get, list: if signedIn()
-        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
+      allow get, list: if adminAllowed() || (signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
       allow create: if developer()
         && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt','tasks','invitationStatus'])
         && assignmentId == request.resource.data.projectId + '_' + request.resource.data.testerUid
@@ -134,8 +180,8 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /reports/{reportId} {
-      allow get, list: if signedIn()
-        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
+      allow get, list: if adminAllowed() || (signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
       allow create: if verified()
         && !(project(request.resource.data.projectId).data.get('status','recruiting') in ['deleting','archived'])
         && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','date','tested','outcome','notes','status','createdAt','submittedAt'])
@@ -169,10 +215,22 @@ service cloud.firestore {
     }
     // Admin queue and audit logs are server-only. Firebase Admin SDK bypasses client rules.
     match /adminDeleteJobs/{jobId} { allow read, write: if false; }
-    match /adminAuditLogs/{auditId} { allow read, write: if false; }
+    match /adminAuditLogs/{auditId} {
+      allow get, list: if adminAllowed();
+      allow create: if adminAllowed()
+        && request.resource.data.keys().hasOnly(['actorUid','action','targetId','targetName','createdAt'])
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project']
+        && request.resource.data.targetId is string
+        && request.resource.data.targetId.size() <= 128
+        && request.resource.data.targetName is string
+        && request.resource.data.targetName.size() <= 100
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
     match /messages/{messageId} {
-      allow get, list: if signedIn()
-        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
+      allow get, list: if adminAllowed() || (signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
       allow create: if verified()
         && !(project(request.resource.data.projectId).data.get('status','recruiting') in ['deleting','archived'])
         && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','sender','senderUid','text','at','createdAt'])

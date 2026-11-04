@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#102e67">
 <meta name="robots" content="noindex,nofollow">
-<title>إدارة المنصة | TesterHub</title>
+<title>إدارة المنصة — Spark | TesterHub</title>
 <link rel="icon" href="./assets/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -51,21 +51,18 @@ label{display:block;font-weight:700;margin:15px 0 8px}input{width:100%;padding:1
  <nav class="nav" aria-label="أقسام الإدارة">
   <button type="button" data-tab="projects" class="active">التطبيقات</button>
   <button type="button" data-tab="users">المستخدمون</button>
+  <button type="button" data-tab="adminAuditLogs">سجل الإدارة</button>
  </nav>
  <section class="card">
   <div class="topbar"><h2 id="listTitle">التطبيقات</h2><button class="btn secondary" id="refresh" type="button">تحديث</button></div>
   <div id="items" class="items" aria-live="polite"></div>
   <button id="loadMore" class="btn secondary" type="button" hidden style="margin-top:14px">عرض المزيد</button>
  </section>
- <section class="card" id="jobPanel" hidden style="margin-top:16px"><h2>متابعة الحذف النهائي</h2><p class="hint" id="jobState"></p><button id="continueJob" class="btn secondary" type="button">متابعة دفعة الحذف</button></section>
+ <div class="card" style="margin-top:16px;line-height:2">
+  <strong>وضع Spark المجاني</strong>
+  <p class="hint">تگدر توقف حساب مخالف، تعيد تنشيطه، وتأرشف التطبيقات وترجعها، وكل إجراء يتوثّق بسجل الإدارة. الإيقاف يمنع استخدام قاعدة البيانات لكنه لا يعطّل حساب Firebase Authentication. الحذف النهائي متوقف من واجهة الويب لحماية بيانات المستخدمين.</p>
+ </div>
 </section>
-<dialog id="deleteDialog" aria-labelledby="deleteTitle">
- <h2 id="deleteTitle">حذف تطبيق نهائياً</h2>
- <p class="warning">الحذف غير قابل للتراجع. سيتم حذف المشروع وتقارير المختبرين ومحادثاتهم المرتبطة به فقط، مع الاحتفاظ بحسابات المستخدمين.</p>
- <p>للتأكيد اكتب اسم التطبيق التالي حرفياً: <strong id="targetName"></strong></p>
- <label for="confirmName">اسم التطبيق للتأكيد</label><input id="confirmName" autocomplete="off">
- <footer><button id="cancelDelete" class="btn secondary">إلغاء</button><button id="executeDelete" class="btn danger" disabled>حذف نهائي</button></footer>
-</dialog>
 </main>
 </body>
 </html>

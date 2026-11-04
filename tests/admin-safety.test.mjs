@@ -1,60 +1,56 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,existsSync} from 'node:fs';
 const get=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
-const rules=get('firestore.rules'),html=get('index.html'),api=get('functions/index.cjs'),worker=get('functions/deletion.cjs'),cfg=JSON.parse(get('firebase.json'));
-test('admin UI is separate, role gated and present in the PWA build',()=>{
- assert.match(html,/checkAdminClaim/);
- assert.match(html,/token\.claims\.testerhubAdmin===true/);
- assert.match(html,/adminAuthorized\?'/);
- assert.match(html,/\.\/admin\.html/);
- assert.match(get('scripts/build-site.mjs'),/'admin\.html'/);
- assert.equal(cfg.functions.source,'functions');
+const rules=get('firestore.rules'),html=get('index.html'),admin=get('src/admin.js'),config=JSON.parse(get('firebase.json'));
+test('Spark Admin uses Firestore without Cloud Functions or Blaze',()=>{
+ assert.equal(config.functions,undefined);
+ assert.match(admin,/firebase-firestore\.js/);
+ assert.match(admin,/getCountFromServer/);
+ assert.match(admin,/getDoc\(doc\(state\.db,'adminRoles',account\.uid\)\)/);
+ assert.doesNotMatch(admin,/httpsCallable|firebase-functions|adminStartProjectDeletion/);
+ assert.doesNotMatch(admin,/deleteDoc|batch\.delete\(/);
+ assert.doesNotMatch(admin,/adminAuth\.updateUser/);
 });
-test('callable endpoints require a verified server-admin token',()=>{
- assert.match(api,/const ADMIN_EMAIL='dhi98886@gmail\.com'/);
- assert.match(api,/auth\.token\.testerhubAdmin!==true/);
- assert.match(api,/auth\.token\.email_verified!==true/);
- for(const name of ['adminOverview','adminList','adminStartProjectDeletion','adminDeletionStatus','adminContinueDeletion','adminSetUserSuspension','adminSetProjectArchive'])
-  assert.match(api,new RegExp('exports\\.'+name+'=onCall'));
+test('admin access requires BOTH a verified fixed email AND an immutable allowlisted UID',()=>{
+ assert.match(rules,/function adminEmail\(\)/);
+ assert.match(rules,/request\.auth\.token\.email == 'dhi98886@gmail\.com'/);
+ assert.match(rules,/request\.auth\.token\.email_verified == true/);
+ assert.match(rules,/function adminAllowed\(\)/);
+ assert.match(rules,/exists\(\/databases\/\$\(database\)\/documents\/adminRoles\/\$\(request\.auth\.uid\)\)/);
+ assert.match(rules,/match \/adminRoles\/\{uid\}/);
+ assert.match(rules,/allow list, create, update, delete: if false/);
+ assert.match(admin,/role\.exists\(\)&&role\.data\(\)\.active===true/);
 });
-test('permanent deletion is scoped and resumable',()=>{
- assert.match(worker,/CHUNK_SIZE=150/);
- assert.match(worker,/where\('projectId','==',id\)/);
- assert.match(worker,/adminDeleteJobs/);
- assert.match(worker,/adminAuditLogs/);
- assert.match(worker,/tx\.delete\(projectRef\)/);
- assert.match(api,/adminDeletionWorker=onSchedule/);
- assert.doesNotMatch(worker,/collection\('users'\).*delete/);
-});
-test('client Firestore rules lock all writes during project deletion',()=>{
+test('admin controls cannot delete or erase projects, histories or accounts from browser',()=>{
+ assert.doesNotMatch(admin,/deleteProject|continueJob|deleteUser|permanentDelete/);
+ assert.doesNotMatch(get('admin.html'),/id="deleteDialog"|id="executeDelete"/);
+ assert.match(get('admin.html'),/الحذف النهائي متوقف/);
  assert.match(rules,/match \/adminDeleteJobs\/\{jobId\} \{ allow read, write: if false; \}/);
- assert.match(rules,/match \/adminAuditLogs\/\{auditId\} \{ allow read, write: if false; \}/);
- assert.match(rules,/&& !\(project\(resource\.data\.projectId\)\.data\.get\('status','recruiting'\) in \['deleting','archived'\]\)/);
- assert.equal((rules.match(/project\(request\.resource\.data\.projectId\)\.data\.get\('status','recruiting'\) in \['deleting','archived'\]/g)||[]).length,2);
  assert.match(rules,/allow delete: if false/);
 });
-test('admin grant requires a verified owner and explicit local confirmation',()=>{
- const grant=get('functions/grant-admin.cjs');
- assert.match(grant,/--confirm-grant/);
- assert.match(grant,/getUserByEmail\(EMAIL\)/);
- assert.match(grant,/account\.emailVerified/);
- assert.match(grant,/setCustomUserClaims/);
- assert.doesNotMatch(get('index.html'),/setCustomUserClaims/);
+test('suspensions and reversible archives write an append-only audit atomically',()=>{
+ assert.match(admin,/batchAudit\(batch,change\?'suspend_user':'unsuspend_user'/);
+ assert.match(admin,/batchAudit\(batch,archived\?'restore_project':'archive_project'/);
+ assert.match(admin,/batch\.commit\(\)/);
+ assert.match(admin,/deleteField\(\)/);
+ assert.match(rules,/match \/adminAuditLogs\/\{auditId\}/);
+ assert.match(rules,/allow update, delete: if false/);
+ assert.match(rules,/request\.resource\.data\.createdAt == request\.time/);
 });
-
-test('suspension and archive controls are server verified and never browser Firestore writes',()=>{
- assert.match(get('functions/index.cjs'),/adminSetUserSuspension=onCall/);
- assert.match(get('functions/index.cjs'),/adminSetProjectArchive=onCall/);
- assert.match(get('functions/index.cjs'),/revokeRefreshTokens/);
- assert.match(get('src/admin.js'),/suspend-user/);
- assert.match(get('src/admin.js'),/data-action="archive"/);
- assert.match(get('firestore.rules'),/me\(\)\.data\.get\('suspended',false\) != true/);
+test('suspended users are rejected across reads and writes without Auth backend',()=>{
+ assert.match(rules,/function signedIn\(\)/);
+ assert.match(rules,/data\.get\('suspended', false\) != true/);
+ assert.match(admin,/suspended:true,available:false/);
+ assert.match(admin,/suspended:false/);
+ assert.doesNotMatch(admin,/revokeRefreshTokens/);
 });
-
-test('suspended clients cannot edit profiles or write protected test data',()=>{
- const rules=get('firestore.rules');
- assert.match(rules,/resource\.data\.get\('suspended',false\) != true/);
- assert.match(rules,/function verified\(\).*get\('suspended',false\)/);
- assert.match(get('functions/index.cjs'),/updateUser\(userUid,\{disabled:true\}\)/);
+test('existing routes and mobile admin page stay in deployable PWA build',()=>{
+ assert.match(html,/checkAdminClaim\(\)/);
+ assert.match(html,/getDoc\(storeFns\.doc\(db,'adminRoles',active\.uid\)\)/);
+ assert.match(html,/\.\/admin\.html/);
+ assert.match(get('admin.html'),/<html lang="ar" dir="rtl">/);
+ assert.match(get('admin.html'),/data-tab="adminAuditLogs"/);
+ assert.match(get('scripts/build-site.mjs'),/'admin\.html'/);
+ assert.ok(existsSync(new URL('../src/admin.js',import.meta.url)));
 });

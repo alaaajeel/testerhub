@@ -61,9 +61,5 @@
       }
     ],
     "target": "testiqx"
-  },
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs22"
   }
 }

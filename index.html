@@ -630,10 +630,12 @@ function getReminderMarker(){return previewStorage.getItem('testerhub_reminder_f
 function setReminderMarker(key){previewStorage.setItem('testerhub_reminder_fired',key)}
 
 async function checkAdminClaim(){
- if(isDemo||!auth?.currentUser)return false;
+ if(isDemo||!auth?.currentUser||!db||!storeFns)return false;
  try{
   const active=auth.currentUser,token=await active.getIdTokenResult();
-  return token.claims.testerhubAdmin===true && token.claims.email_verified===true && String(active.email||'').toLowerCase()==='dhi98886@gmail.com';
+  if(token.claims.email_verified!==true||String(active.email||'').toLowerCase()!=='dhi98886@gmail.com')return false;
+  const role=await storeFns.getDoc(storeFns.doc(db,'adminRoles',active.uid));
+  return role.exists() && role.data().active===true;
  }catch{return false}
 }
 const api={isDemo,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
