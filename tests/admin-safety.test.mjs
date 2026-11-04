@@ -15,7 +15,7 @@ test('callable endpoints require a verified server-admin token',()=>{
  assert.match(api,/const ADMIN_EMAIL='dhi98886@gmail\.com'/);
  assert.match(api,/auth\.token\.testerhubAdmin!==true/);
  assert.match(api,/auth\.token\.email_verified!==true/);
- for(const name of ['adminOverview','adminList','adminStartProjectDeletion','adminDeletionStatus','adminContinueDeletion'])
+ for(const name of ['adminOverview','adminList','adminStartProjectDeletion','adminDeletionStatus','adminContinueDeletion','adminSetUserSuspension','adminSetProjectArchive'])
   assert.match(api,new RegExp('exports\\.'+name+'=onCall'));
 });
 test('permanent deletion is scoped and resumable',()=>{
@@ -30,8 +30,8 @@ test('permanent deletion is scoped and resumable',()=>{
 test('client Firestore rules lock all writes during project deletion',()=>{
  assert.match(rules,/match \/adminDeleteJobs\/\{jobId\} \{ allow read, write: if false; \}/);
  assert.match(rules,/match \/adminAuditLogs\/\{auditId\} \{ allow read, write: if false; \}/);
- assert.match(rules,/&& project\(resource\.data\.projectId\)\.data\.get\('status','recruiting'\) != 'deleting'/);
- assert.equal((rules.match(/project\(request\.resource\.data\.projectId\)\.data\.get\('status','recruiting'\) != 'deleting'/g)||[]).length,2);
+ assert.match(rules,/&& project\(resource\.data\.projectId\)\.data\.get\('status','recruiting'\) not in \['deleting','archived'\]/);
+ assert.equal((rules.match(/project\(request\.resource\.data\.projectId\)\.data\.get\('status','recruiting'\) not in \['deleting','archived'\]/g)||[]).length,2);
  assert.match(rules,/allow delete: if false/);
 });
 test('admin grant requires a verified owner and explicit local confirmation',()=>{
@@ -41,4 +41,13 @@ test('admin grant requires a verified owner and explicit local confirmation',()=
  assert.match(grant,/account\.emailVerified/);
  assert.match(grant,/setCustomUserClaims/);
  assert.doesNotMatch(get('index.html'),/setCustomUserClaims/);
+});
+
+test('suspension and archive controls are server verified and never browser Firestore writes',()=>{
+ assert.match(get('functions/index.cjs'),/adminSetUserSuspension=onCall/);
+ assert.match(get('functions/index.cjs'),/adminSetProjectArchive=onCall/);
+ assert.match(get('functions/index.cjs'),/revokeRefreshTokens/);
+ assert.match(get('src/admin.js'),/suspend-user/);
+ assert.match(get('src/admin.js'),/data-action="archive"/);
+ assert.match(get('firestore.rules'),/me\(\)\.data\.get\('suspended',false\) != true/);
 });

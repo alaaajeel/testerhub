@@ -36,3 +36,8 @@ Rules have to block writes on deletion *before* activating permanent-delete call
 ## Existing site
 Firebase Hosting URL: https://testiqx.web.app/
 GitHub repository: https://github.com/alaaajeel/testerhub
+
+## Suspension and archiving
+- Admin may suspend/reinstate any non-admin account. Suspension disables Firebase Auth account and writes `users/{uid}.suspended=true`; the Firestore `verified()` rule rejects future protected writes immediately even if a previously-issued token is still valid. Admin identity cannot be suspended.
+- Admin may archive/reopen projects without deleting records. The project's original state is preserved in `statusBeforeArchive`. Writes to assignments/reports/messages are blocked by Firestore while archived.
+- Every action writes an immutable server-side audit record. Both actions require authenticated callable Functions and an admin custom claim.

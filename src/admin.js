@@ -15,9 +15,9 @@ function renderList(){
  const type=state.tab,arr=state[type];
  $('listTitle').textContent=type==='projects'?'إدارة التطبيقات':'إدارة المستخدمين';
  $('items').innerHTML=arr.length?arr.map(item=>{
-  if(type==='users')return '<article class="item"><div><strong>'+esc(item.name||'مستخدم')+'</strong><small>'+esc(item.email)+' — '+esc(item.role)+'</small></div><span class="tag">'+esc(item.available?'متاح للاختبار':'حساب مسجل')+'</span></article>';
-  const deleting=item.status==='deleting';
-  return '<article class="item"><div><strong>'+esc(item.name||'تطبيق')+'</strong><small>المعرف: '+esc(item.id)+' · المختبرون: '+Number(item.testersCount||0)+'</small><small>الحالة: '+esc(item.status||'recruiting')+'</small></div><div class="actions">'+(deleting?'<button class="btn secondary small" data-action="status" data-id="'+esc(item.id)+'">متابعة الحذف</button>':'<button class="btn danger small" data-action="delete" data-id="'+esc(item.id)+'">حذف نهائي</button>')+'</div></article>';
+  if(type==='users')return '<article class="item"><div><strong>'+esc(item.name||'مستخدم')+'</strong><small>'+esc(item.email)+' — '+esc(item.role)+'</small></div><div class="actions"><span class="tag'+(item.suspended?' warn':'')+'">'+esc(item.suspended?'موقوف':item.available?'متاح للاختبار':'حساب مسجل')+'</span><button class="btn secondary small" data-action="suspend-user" data-id="'+esc(item.id)+'">'+(item.suspended?'إعادة تنشيط':'إيقاف الحساب')+'</button></div></article>';
+  const deleting=item.status==='deleting',archived=item.status==='archived';
+  return '<article class="item"><div><strong>'+esc(item.name||'تطبيق')+'</strong><small>المعرف: '+esc(item.id)+' · المختبرون: '+Number(item.testersCount||0)+'</small><small>الحالة: '+esc(item.status||'recruiting')+'</small></div><div class="actions">'+(deleting?'<button class="btn secondary small" data-action="status" data-id="'+esc(item.id)+'">متابعة الحذف</button>':'<button class="btn secondary small" data-action="archive" data-id="'+esc(item.id)+'">'+(archived?'إلغاء الأرشفة':'أرشفة')+'</button><button class="btn danger small" data-action="delete" data-id="'+esc(item.id)+'">حذف نهائي</button>')+'</div></article>';
  }).join(''):'<p class="hint">ماكو سجلات بهذا القسم.</p>';
  $('loadMore').hidden=!state[type+'Cursor'];
  for(const b of document.querySelectorAll('[data-tab]'))b.classList.toggle('active',b.dataset.tab===type);
@@ -60,6 +60,25 @@ document.addEventListener('click',async event=>{
  if(tab&&!state.busy){state.tab=tab.dataset.tab;try{buttonBusy(true);await loadPage(true)}catch(e){showError(e)}finally{buttonBusy(false)}return}
  const del=event.target.closest('[data-action="delete"]');
  if(del&&!state.busy){state.project=state.projects.find(x=>x.id===del.dataset.id)||null;if(!state.project)return;$('targetName').textContent=state.project.name;$('confirmName').value='';refreshConfirm();$('deleteDialog').showModal();return}
+ const suspension=event.target.closest('[data-action="suspend-user"]');
+ if(suspension&&!state.busy){
+  const user=state.users.find(x=>x.id===suspension.dataset.id);
+  if(!user)return;
+  if(!confirm((user.suspended?'إعادة تنشيط الحساب':'إيقاف الحساب')+' — '+user.email+'؟'))return;
+  try{buttonBusy(true);await call('adminSetUserSuspension',{userUid:user.id,suspend:!user.suspended});flash(user.suspended?'تمت إعادة تنشيط الحساب':'تم إيقاف الحساب');await loadPage(true)}
+  catch(err){showError(err)}finally{buttonBusy(false)}
+  return;
+ }
+ const archiveButton=event.target.closest('[data-action="archive"]');
+ if(archiveButton&&!state.busy){
+  const project=state.projects.find(x=>x.id===archiveButton.dataset.id);
+  if(!project)return;
+  const isArchived=project.status==='archived';
+  if(!confirm((isArchived?'إلغاء أرشفة':'أرشفة')+' تطبيق '+project.name+'؟'))return;
+  try{buttonBusy(true);await call('adminSetProjectArchive',{projectId:project.id,confirmName:project.name,archive:!isArchived});flash(isArchived?'تمت إعادة التطبيق إلى وضعه السابق':'تمت أرشفة التطبيق دون حذف بياناته');await loadPage(true)}
+  catch(err){showError(err)}finally{buttonBusy(false)}
+  return;
+ }
  const stat=event.target.closest('[data-action="status"]');
  if(stat&&!state.busy){try{await monitor(stat.dataset.id)}catch(e){showError(e)}return}
 });
