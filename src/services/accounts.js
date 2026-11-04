@@ -58,7 +58,8 @@
       catch (err) { if (err.code !== 'auth/user-not-found') throw err; }
     }
     async function updateProfile({name, role}) {
-      const u = session(), changes = {};
+      // Older profiles may still carry available:true from the retired public directory.
+      const u = session(), changes = {available: false};
       if (name !== undefined) changes.name = nameValue(name);
       if (role !== undefined) {
         if (!['tester', 'developer'].includes(role)) throw fail('profile/invalid-role');
