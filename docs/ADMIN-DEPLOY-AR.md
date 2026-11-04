@@ -1,43 +1,34 @@
-# TesterHub Admin — implementation and production gate
+# لوحة إدارة TesterHub المجانية (Spark)
 
-**State:** Code-only staging. Not live until production Firebase Functions are deployed, admin claims are granted, and Firestore rules are reviewed and published.
+**الحالة:** نسخة Spark تعمل باستخدام Firebase Authentication + Firestore فقط، بدون Cloud Functions وبدون خطة Blaze.
 
-## Single administrator
-The only eligible administrator is the *verified* Firebase Auth account \`dhi98886@gmail.com\` plus custom claim \`testerhubAdmin: true\`. Email alone never grants access. The admin page does not use normal Firestore SDK reads; all admin data comes from callable Functions. Do not grant admin rights from client code or a Firestore profile role.
+## الحماية
+- لا توجد صلاحية Admin مبنية على عنوان البريد وحده.
+- يلزم تسجيل الدخول بالبريد المؤكَّد **dhi98886@gmail.com** ووجود سجل صالح يدويّاً في `adminRoles/{Firebase Auth UID}` يحتوي `active: true` (Boolean).
+- إنشاء أو تغيير هذا السجل من تطبيق الويب **ممنوع تماماً** بقواعد Firestore؛ يُنشأ مرة واحدة من Firebase Console بواسطة مالك المشروع.
+- لا يمكن للمستخدم اختيار دور Admin عند التسجيل؛ الدور في `users` يبقى tester أو developer.
+- قواعد الإدارة لا تُوسّع صلاحيات المطورين والمختبرين الآخرين؛ كل عملية إدارية مقيّدة بشروط Firestore ومؤرشفة بسجل غير قابل للتعديل من الويب.
 
-## What the admin console can do
-- Read counts for users, apps, assignments, reports, messages and deletion jobs.
-- Browse paginated user and application lists.
-- Initiate permanent deletion by typing the exact application name.
-- Poll a durable deletion job and manually continue it.
-- A Cloud Scheduler function resumes queued jobs every five minutes after proper deployment. It is not operational until deployed.
+## الوظائف المتاحة
+- عرض أعداد المستخدمين، المشاريع، المشاركات، التقارير، والرسائل.
+- قوائم المستخدمين والتطبيقات مع ترقيم صفحات.
+- إيقاف مستخدم أو إعادة تنشيطه (وسم `users/{uid}.suspended`، مع إخفائه من دليل المتاحين عند الإيقاف).
+- أرشفة مشروع وإلغاء الأرشفة مع بقاء التقارير والمحادثات؛ القواعد تمنع كتابة تقارير ورسائل أو تحديث تكليفات على التطبيقات المؤرشفة.
+- سجل تدقيق قابل للقراءة من المشرف فقط `adminAuditLogs`، وتُكتب أحداث الإدارة في دفعة مع التغييرات.
 
-## Permanent deletion model
-1. Callable function validates the server-issued admin claim and fixed admin email.
-2. Firestore transaction changes \`projects/{id}.status\` to \`deleting\` and creates \`adminDeleteJobs/{id}\`.
-3. **New** report/message writes and all assignment updates are rejected by the updated Firestore security rules while the project is deleting. Existing historical data is readable during the operation.
-4. The worker deletes at most 150 scoped documents per run, from \`messages\`, \`reports\`, \`assignments\`, \`bugs\`, \`bugReports\`. Only a strict projectId match qualifies; user profiles and data for other projects are never deleted.
-5. When related records are exhausted, the project document is removed and an audit record is created in \`adminAuditLogs\`. A job can be resumed after a client disconnect or worker interruption.
-6. The worker does **not** delete Firebase Storage objects; if image uploads are introduced later, add scoped Storage cleanup. There is no recovery after permanent deletion.
-7. The platform remains live in GitHub Pages and Firebase while this PR is under review.
+## الحدود المهمة
+- الإيقاف يمنع **Firestore** فور تطبيق القواعد، لكنه **لا يعطّل حساب Firebase Authentication**؛ تعطيل Auth يتطلب الدخول إلى Firebase Console أو خادماً موثوقاً.
+- الحذف النهائي من واجهة الويب **غير متاح** لحماية البيانات. يتم عبر الإجراءات الإدارية اليدوية المدروسة على Firebase Console إذا لزم الأمر. لا يجوز حذف تطبيق مع تقارير ورسائل دون استراتيجية حفظ/حذف سجلات مرتبطة.
+- Cloud Functions السابقة موجودة في مجلد `functions/` ككود غير مفعّل، ولا تدخل استضافة PWA، وتم حذف إعداد نشر Functions من `firebase.json`.
+- تخزين الملفات والصور والإشعارات بالخلفية لم تُفعّل بتغيير الإدارة.
 
-## Deployment checklist (requires authorized owner, not a chatbot secret)
-1. In Firebase Console for \`testhubiq-c7711\`, check the actual deployed rules against repository \`firestore.rules\`. Merge differences; never blindly overwrite newer rules.
-2. Test the changed rules against the Emulator and with two real users, including project locking and denial of message/report/checkin after lock.
-3. From an authenticated local computer or Cloud Shell, install the Firebase CLI and deploy **functions** to this existing project. Enable Blaze for 2nd-gen Cloud Functions and Cloud Scheduler if required. Deployment: \`firebase deploy --only functions --project testhubiq-c7711\`. Avoid deploying \`firestore\` or overwriting Hosting.
-4. Grant the claim from a trusted Cloud Shell/ADC environment: \`cd functions && npm install && node grant-admin.cjs --confirm-grant\`. Confirm that ADC has permission; do not upload credentials or print private keys.
-5. Sign out and sign back in with the verified admin account; visit \`https://testiqx.web.app/admin.html\` after deploying that web file.
-6. Test with a sacrificial project containing >200 messages/reports. Verify that unrelated applications, user accounts, and messages are retained, with audit trail.
-7. Only after passing production smoke tests, enable access to non-test data.
+## خطوات تفعيل مالك المشروع (بدون مفاتيح خاصة)
+1. افتح Firebase Console → المشروع `testhubiq-c7711` → Authentication → Users.
+2. تأكد أن `dhi98886@gmail.com` حساب موجود و**Email verified = true**. انسخ قيمة **User UID** كما هي (احتفظ بها لنفسك).
+3. في Firestore Database → Data، أنشئ Collection جديدة باسم `adminRoles`. أنشئ Document ID يساوي **User UID** نفسه. أضف الحقل `active` من نوع **Boolean** وقيمته **true**.
+4. افتح Firestore Database → Rules. راجع **النسخة المنشورة الموجودة** مع آخر ملف `firestore.rules` في GitHub، وادمج أي تغييرات جديدة. ثم انشر القواعد المعدّلة. لا تنشر قواعد قديمة فوق تغييرات إنتاجية أحدث، ولا تختر قواعد عامة تسمح بالقراءة/الكتابة للجميع.
+5. بعد نجاح مراجعة قواعد Firestore والاختبارات، انشر ملفات الموقع إلى `testiqx.web.app` عبر وسيلة نشر Firebase Hosting المصرح بها. إعدادات GitHub Pages لا تنشر Firebase Hosting تلقائياً إلا بعد تفويض GitHub الصحيح.
+6. سجّل خروج وادخل مرة ثانية بحساب المدير، ثم افتح `https://testiqx.web.app/admin.html`.
+7. جرّب إيقاف حساب تجريبي فقط، أرشفة تطبيق تجريبي، وإرجاعهما. تأكد أن بيانات المختبرين الحاليين محفوظة.
 
-## Required release order
-Rules have to block writes on deletion *before* activating permanent-delete callables. Deploy the web UI after Functions are available; otherwise it will show a safe "service unavailable" error.
-
-## Existing site
-Firebase Hosting URL: https://testiqx.web.app/
-GitHub repository: https://github.com/alaaajeel/testerhub
-
-## Suspension and archiving
-- Admin may suspend/reinstate any non-admin account. Suspension disables Firebase Auth account and writes `users/{uid}.suspended=true`; the Firestore `verified()` rule rejects future protected writes immediately even if a previously-issued token is still valid. Admin identity cannot be suspended.
-- Admin may archive/reopen projects without deleting records. The project's original state is preserved in `statusBeforeArchive`. Writes to assignments/reports/messages are blocked by Firestore while archived.
-- Every action writes an immutable server-side audit record. Both actions require authenticated callable Functions and an admin custom claim.
+**تنبيه:** واجهة الإدارة أو موقع GitHub Pages وحدهما لا يثبتان أن قواعد Firestore الحالية منشورة على قاعدة الإنتاج. اختبر بعد التفعيل بأجهزة وحسابات حقيقية.
