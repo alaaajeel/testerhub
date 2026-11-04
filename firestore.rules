@@ -27,7 +27,7 @@ service cloud.firestore {
         && request.resource.data.available is bool
         && request.resource.data.createdAt == request.time
         && (request.resource.data.role == 'tester' || request.resource.data.available == false);
-      allow update: if self(uid)
+      allow update: if self(uid) && resource.data.get('suspended',false) != true
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','available','participationPaused'])
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 80

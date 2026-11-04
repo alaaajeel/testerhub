@@ -50,3 +50,19 @@ test('project documents cannot be permanently deleted from client SDK',async()=>
  const {deleteDoc}=await import('firebase/firestore');
  await assertFails(deleteDoc(doc(db('d1'),'projects',projectId)));
 });
+
+test('suspended tester cannot submit reports or messages, and cannot reactivate their own profile',async()=>{
+ await env.withSecurityRulesDisabled(async ctx=>{
+  await updateDoc(doc(ctx.firestore(),'users','t1'),{suspended:true});
+  await updateDoc(doc(ctx.firestore(),'projects',projectId),{status:'recruiting'});
+ });
+ await assertFails(updateDoc(doc(db('t1'),'users','t1'),{name:'Forged User'}));
+ await assertFails(setDoc(doc(db('t1'),'messages','new-msg'),{projectId,assignmentId:projectId+'_t1',testerUid:'t1',ownerUid:'d1',senderUid:'t1',sender:'tester',text:'Message from suspended account',at:new Date().toISOString(),createdAt:serverTimestamp()}));
+ await env.withSecurityRulesDisabled(async ctx=>updateDoc(doc(ctx.firestore(),'users','t1'),{suspended:false}));
+ await assertSucceeds(updateDoc(doc(db('t1'),'users','t1'),{name:'Enabled User'}));
+});
+test('archived projects reject new protected messages and existing report updates',async()=>{
+ await env.withSecurityRulesDisabled(async ctx=>updateDoc(doc(ctx.firestore(),'projects',projectId),{status:'archived'}));
+ await assertFails(setDoc(doc(db('t1'),'messages','archive-msg'),{projectId,assignmentId:projectId+'_t1',testerUid:'t1',ownerUid:'d1',senderUid:'t1',sender:'tester',text:'This app is archived',at:new Date().toISOString(),createdAt:serverTimestamp()}));
+ await assertFails(updateDoc(doc(db('d1'),'reports','legacy-issue'),{status:'fixed'}));
+});

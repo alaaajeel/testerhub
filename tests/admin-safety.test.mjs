@@ -51,3 +51,10 @@ test('suspension and archive controls are server verified and never browser Fire
  assert.match(get('src/admin.js'),/data-action="archive"/);
  assert.match(get('firestore.rules'),/me\(\)\.data\.get\('suspended',false\) != true/);
 });
+
+test('suspended clients cannot edit profiles or write protected test data',()=>{
+ const rules=get('firestore.rules');
+ assert.match(rules,/resource\.data\.get\('suspended',false\) != true/);
+ assert.match(rules,/function verified\(\).*get\('suspended',false\)/);
+ assert.match(get('functions/index.cjs'),/updateUser\(userUid,\{disabled:true\}\)/);
+});

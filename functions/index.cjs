@@ -79,7 +79,7 @@ exports.adminStartProjectDeletion=onCall(callable,async request=>{
 exports.adminSetUserSuspension=onCall(callable,async request=>{
  const uid=requireAdmin(request),userUid=String(request.data?.userUid||'');
  const suspend=request.data?.suspend;
- if(!/^[A-Za-z0-9]{6,128}$/.test(userUid)||typeof suspend!=='boolean')
+ if(!/^[A-Za-z0-9_-]{6,128}$/.test(userUid)||typeof suspend!=='boolean')
   throw new HttpsError('invalid-argument','Invalid suspension request');
  if(userUid===uid)throw new HttpsError('failed-precondition','Cannot suspend current admin');
  const person=await adminAuth.getUser(userUid);
@@ -118,7 +118,7 @@ exports.adminSetProjectArchive=onCall(callable,async request=>{
    return 'archived';
   }
   if(data.status!=='archived')return data.status||'recruiting';
-  const restoreTo=data.statusBeforeArchive==='draft'?'draft':'recruiting';
+  const restoreTo=['draft','recruiting','completed','paused'].includes(data.statusBeforeArchive)?data.statusBeforeArchive:'recruiting';
   tx.update(ref,{status:restoreTo,statusBeforeArchive:FieldValue.delete(),archivedAt:FieldValue.delete()});
   return restoreTo;
  });
