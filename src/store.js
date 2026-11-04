@@ -10,7 +10,7 @@ export const accounts = globalThis.TesterHubAccounts.createAccounts({auth, authF
 export const humanError = err => globalThis.TesterHubAccounts.humanError(err);
 
 const emptyData = () => ({projects: [], assignments: [], applications: [], reports: [], messages: []});
-export const state = {user: null, data: emptyData(), listings: null, listingsAt: 0, synced: false};
+export const state = {user: null, data: emptyData(), listings: null, listingsAt: 0, synced: false, loadFailed: false};
 
 const tidy = doc => ({id: doc.id, ...doc.data()});
 const code = name => Object.assign(new Error(name), {code: name});
@@ -31,6 +31,7 @@ export function stopLive() {
   state.data = emptyData();
   state.listings = null;
   state.synced = false;
+  state.loadFailed = false;
 }
 
 export function startLive(handlers) {
@@ -60,6 +61,8 @@ export function startLive(handlers) {
       if (arrivals.length) onArrival(name, arrivals);
     }, err => {
       console.warn('listener', name, err.code);
+      // Empty lists after a failed load would read as "you have nothing", which is false.
+      state.loadFailed = true;
       pending.delete(name);
       state.synced = pending.size === 0;
       onChange(name);

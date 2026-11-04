@@ -96,7 +96,7 @@ function render({live = false} = {}) {
   const keepScroll = live && main ? scrollHost().scrollTop : null;
   ui.skeleton = !state.synced && !live;
   const body = ui.skeleton ? '<div class="skeleton"></div><div class="skeleton"></div>' : screen(r);
-  root.innerHTML = `<div class="shell">${navigation(r.name)}<div class="content"><div class="offline" id="offline" ${navigator.onLine ? 'hidden' : ''}>لا يوجد اتصال بالإنترنت. تعرض الصفحة آخر بيانات محفوظة، ولن يُحفظ شيء حتى يعود الاتصال.</div><main id="main" tabindex="-1">${body}</main></div></div>`;
+  root.innerHTML = `<div class="shell">${navigation(r.name)}<div class="content"><div class="offline" id="offline" ${navigator.onLine ? 'hidden' : ''}>لا يوجد اتصال بالإنترنت. تعرض الصفحة آخر بيانات محفوظة، ولن يُحفظ شيء حتى يعود الاتصال.</div>${state.loadFailed ? '<div class="offline" role="alert">تعذر تحميل بعض بياناتك، فقد تكون القوائم هنا ناقصة. حدّث الصفحة بعد قليل.</div>' : ''}<main id="main" tabindex="-1">${body}</main></div></div>`;
   if (keepScroll !== null) scrollHost().scrollTop = keepScroll;
   const thread = document.getElementById('thread');
   if (thread) thread.scrollIntoView({block: 'end'});
