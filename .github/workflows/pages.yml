@@ -1,7 +1,8 @@
-name: Deploy TesterHub to GitHub Pages
+name: Redirect old GitHub Pages address to Firebase Hosting
 on:
   push:
     branches: [main]
+    paths: [scripts/pages-redirect/**, .github/workflows/pages.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,60 +16,12 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
         with:
-          node-version: 22
-          cache: npm
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-      - run: npm ci
-      - run: npm run test:rules
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Validate project
-        run: |
-          node --test tests/*.test.mjs
-          node scripts/preflight.mjs
-          npm run build
-      - name: Upload static website
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-      - name: Deploy Pages
-        id: deployment
+          path: scripts/pages-redirect
+      - id: deployment
         uses: actions/deploy-pages@v4
-
-  firebase_hosting:
-    name: Firebase Hosting — enabled only after owner authorization
-    needs: deploy
-    # Prevent accidentally replacing an existing Firebase Hosting site before owner verifies it.
-    if: ${{ vars.ENABLE_FIREBASE_HOSTING_DEPLOY == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout same tested revision
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Build the exact static site
-        run: npm run build
-      - name: Deploy Hosting only (never deploy Firestore rules from CI)
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESTHUBIQ_C7711 }}
-          projectId: testhubiq-c7711
-          channelId: live
-          target: testiqx
-          entryPoint: .

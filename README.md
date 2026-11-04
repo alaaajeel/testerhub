@@ -1,39 +1,38 @@
-# TesterHub v0.3.2 — نسخة Firebase Config لمشروع TestHubiq
+# TesterHub
 
-تطبيق ويب عربي PWA بواجهات المختبر والمطور، تقارير يومية، بلاغات، محادثة، ونقاط تحفيزية.
+منصة عربية تجمع مطوري Android والمختبرين حول اختبار مغلق حقيقي لمدة 14 يوماً.
+الإنتاج: https://testiqx.web.app — مشروع Firebase `testhubiq-c7711` على خطة Spark المجانية.
 
-## ما هو جاهز
-- واجهة قابلة للتثبيت عبر Chrome بعد نشرها على HTTPS.
-- إنشاء حسابات Firebase Auth (بريد + كلمة مرور) بعد تفعيل Firebase.
-- قوائم المختبرين الموافقين على إظهار البريد، وإضافة التطبيق، وحجز المختبرين.
-- تأكيد الانضمام إلى اختبار Google Play (إقرار شخصي، لا تحقق مباشر من Google).
-- تقرير يومي: تأكيد تجربة ميزة، نتيجتها، ملاحظة اختيارية أو بلاغ مفصل.
-- محادثات وتحديث حالة البلاغ بين المطور والمختبر، مخزنة في Firestore إذا فعّلت الخدمة.
-- حفظ نقاط XP بناءً على تقارير الأيام، وليس حقلاً قابلاً للكتابة.
-- تنبيه داخل التطبيق أو تصدير تقويم ICS. **الإشعارات بالخلفية والهاتف مغلق غير مفعّلة**.
+TesterHub لا تتحقق من Google Play ولا تضمن قبول أي تطبيق، وهدفها تحسين جودة التطبيق باختبار حقيقي.
 
-## تطوير المشروع الحالي
+## كيف يعمل
+1. ينشر المطور تطبيقه ورابط الاختبار ومهامه.
+2. يتصفح المختبر التطبيقات ويقدّم على ما يهمه. بريده يصل إلى هذا المطور فقط.
+3. يقبل المطور الطلب، ويضيف البريد في Play Console، ثم يؤكد الإضافة.
+4. ينضم المختبر ويثبّت التطبيق، ثم يسجّل تقريراً يومياً لمدة 14 يوماً.
+5. البلاغات منظمة: المطور يصلح، والمختبر الذي وجد المشكلة يؤكد الإصلاح.
+6. يحصل المطور على ملخص مبني على البيانات المسجلة فقط.
 
-المستودع قائم والموقع الحالي: https://alaaajeel.github.io/testerhub/ . Firebase الحالي هو `testhubiq-c7711`؛ لا تنشئ مشروعاً جديداً.
+## البنية
+- `src/domain.js` منطق المنتج، بلا واجهة ولا Firebase.
+- `src/store.js` كل اتصال بـ Firestore. المستمعون المباشرون هم مصدر البيانات الوحيد؛ لا استطلاع دوري، حمايةً لحصة Spark.
+- `src/views/` الشاشات، و`src/main.js` التوجيه والأحداث.
+- `src/admin.js` لوحة الإدارة، وصلاحيتها مستند `adminRoles/{uid}` الذي لا يكتبه أي عميل ويب.
+- `firestore.rules` حدود الأمان الفعلية.
+- `docs/archive/` وثائق المراحل السابقة للرجوع إليها فقط.
 
-تغييرات المرحلة الأولى وحالة النشر والمتطلبات: [تقرير المرحلة الأولى](docs/PHASE-1-AR.md). قائمة الاستكمال: [حالة التنفيذ](docs/IMPLEMENTATION-STATUS.md).
+## التطوير
+يحتاج Node 22 وJava 21 للمحاكيات.
 
-بعد موافقة ومراجعة القواعد ونشرها، ينشر Pages ملفات dist عند الدمج إلى main. لا يُنشر Firebase تلقائياً.
+```bash
+npm ci
+npm test
+npm run test:rules
+npx playwright install chromium
+npm run test:e2e
+npm run deploy
+```
 
-## تشغيل المعاينة محلياً
-`python -m http.server 8000` ثم افتح `http://localhost:8000`. مع `firebase-config.js` = null تكون المعاينة تجريبية ومحلية، وليست مزامنة حقيقية.
+اختبار المتصفح يشغّل البناء الفعلي وFirebase SDK الحقيقي على محاكيات محلية عبر `?emulator=1`، ولا يعمل هذا المفتاح إلا على `127.0.0.1`.
 
-## الاختبارات
-شغّل `npm ci` ثم `npm test` و`npm run test:rules` (Java 21 موصى به). للمتصفح: `npx playwright install chromium` ثم `npm run test:e2e`. للبناء: `npm run build`.
-
-هذه الاختبارات تفصل بين سلوك الخدمة، قواعد Emulator، وواجهة Chromium مع Firebase doubles. لا تغني عن تجربة إنتاج بين حسابين على أجهزة فعلية.
-
-## حدود الأمان والنشاط
-- التطبيق يتلقى إقراراً من المختبر بأنه جرّب التطبيق، لكنه لا يستطيع التحقق المستقل من استعمال التطبيق على Google Play.
-- التقييد اليومي يعتمد على تحقق العميل وقواعد Firestore وتحديث ذرّي، وقد يحتاج تقوية إضافية بخادم موثوق لمنع التلاعب بزمن الجهاز أو تعدد الحسابات.
-- الملفات عامة عند استخدام GitHub Pages؛ لا تضف أي أسرار أو كلمات مرور إلى المستودع.
-- جرى ضبط Firebase Web Config لمشروع `testhubiq-c7711` داخل الملفات فقط؛ لم يتم إثبات نجاح تسجيل دخول حقيقي أو نشر قواعد Firestore، ولم يُنشر الموقع.
-
-## GitHub Pages deployment
-
-Site publishing uses the committed `.github/workflows/pages.yml` workflow on pushes to `main`. In repository Settings → Pages, set Source to **GitHub Actions**. Check Actions → Deploy TesterHub to GitHub Pages for the deployment status. Firebase Authentication and Firestore must be configured and verified separately.
+قائمة التحقق على الإنتاج بحسابين حقيقيين: [docs/ACCEPTANCE-AR.md](docs/ACCEPTANCE-AR.md). دليل الإدارة: `docs-admin.html`.

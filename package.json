@@ -1,20 +1,24 @@
 {
   "name": "testerhub-pwa",
   "private": true,
-  "version": "0.3.3",
+  "version": "1.0.0-beta.1",
   "type": "module",
-  "description": "TesterHub PWA with Firebase Web Auth, daily test reports and messaging",
+  "description": "TesterHub: real closed testing between Android developers and testers",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "preflight": "node scripts/preflight.mjs",
     "test:rules": "firebase emulators:exec --only auth,firestore --project demo-testerhub \"node --test --test-concurrency=1 tests/emulator/*.test.mjs\"",
     "build": "node scripts/build-site.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "npm run build && firebase emulators:exec --only auth,firestore --project demo-testerhub \"playwright test\"",
+    "deploy": "npm run build && npm run preflight && firebase deploy --only firestore:rules,firestore:indexes,hosting:testiqx --project testhubiq-c7711"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",
     "@playwright/test": "^1.56.1",
-    "firebase": "^12.6.0",
+    "esbuild": "^0.28.2",
     "firebase-tools": "^14.26.0"
+  },
+  "dependencies": {
+    "firebase": "^12.6.0"
   }
 }

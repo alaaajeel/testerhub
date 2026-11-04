@@ -18,7 +18,7 @@
       if (snap.exists() && !['tester', 'developer'].includes(profile.role)) throw fail('profile/invalid-role');
       return {...profile, uid: u.uid, email: u.email, emailVerified: u.emailVerified};
     }
-    async function completeProfile({name, role, available}) {
+    async function completeProfile({name, role}) {
       name = nameValue(name);
       if (!['tester', 'developer'].includes(role)) throw fail('profile/invalid-role');
       const u = session();
@@ -26,16 +26,20 @@
       await f.runTransaction(db, async tx => {
         const target = ref(u.uid), existing = await tx.get(target);
         if (existing.exists()) return;
-        tx.set(target, {name, role, email: u.email, available: role === 'tester' && !!available, createdAt: f.serverTimestamp()});
+        const now = f.serverTimestamp();
+        tx.set(target, {name, role, email: u.email, available: false, createdAt: now, termsAcceptedAt: now});
       });
       return currentUser();
     }
     async function signup(input) {
       nameValue(input.name);
       if (!['tester', 'developer'].includes(input.role)) throw fail('profile/invalid-role');
-      await a.createUserWithEmailAndPassword(auth, input.email.trim().toLowerCase(), input.password);
+      const created = await a.createUserWithEmailAndPassword(auth, input.email.trim().toLowerCase(), input.password);
       // If the profile write fails, keep the Auth user: recovery resumes with the same UID.
-      return completeProfile(input);
+      const profile = await completeProfile(input);
+      // A failed first send is recoverable from the verification screen.
+      if (created?.user) await a.sendEmailVerification(created.user).catch(() => {});
+      return profile;
     }
     async function login(email, password) {
       await a.signInWithEmailAndPassword(auth, email.trim(), password);
@@ -53,13 +57,13 @@
       try { await a.sendPasswordResetEmail(auth, email.trim()); }
       catch (err) { if (err.code !== 'auth/user-not-found') throw err; }
     }
-    async function updateProfile({name, available, participationPaused}) {
-      const u = session(), changes = {};
+    async function updateProfile({name, role}) {
+      // Older profiles may still carry available:true from the retired public directory.
+      const u = session(), changes = {available: false};
       if (name !== undefined) changes.name = nameValue(name);
-      if (available !== undefined) changes.available = !!available;
-      if (participationPaused !== undefined) {
-        changes.participationPaused = !!participationPaused;
-        if (participationPaused) changes.available = false;
+      if (role !== undefined) {
+        if (!['tester', 'developer'].includes(role)) throw fail('profile/invalid-role');
+        changes.role = role;
       }
       await f.updateDoc(ref(u.uid), changes);
       return currentUser();
@@ -81,8 +85,10 @@
       'auth/session-expired': 'انتهت الجلسة. سجّل الدخول مرة أخرى.',
       'auth/requires-recent-login': 'سجّل الدخول من جديد لإكمال العملية.',
       'auth/email-not-verified': 'أكد ملكية بريدك ثم اضغط «تحققت من بريدي».',
-      'permission-denied': 'رفضت قاعدة البيانات العملية. لم يتم تأكيد الحفظ؛ حدّث الجلسة أو تواصل مع الإدارة.',
-      'unavailable': 'تعذر الاتصال بقاعدة البيانات. لم يتم تأكيد الحفظ.',
+      'permission-denied': 'لا تملك صلاحية هذه العملية، ولم يُحفظ شيء. حدّث الصفحة وحاول مرة أخرى.',
+      'unavailable': 'تعذر الاتصال بالخادم، ولم يُحفظ شيء. تحقق من الإنترنت وحاول مرة أخرى.',
+      'app/offline': 'لا يوجد اتصال بالإنترنت، ولم يُحفظ شيء. حاول بعد عودة الاتصال.',
+      'app/timeout': 'تأخر الخادم في الرد ولم نتأكد من الحفظ. تحقق من الإنترنت ثم حدّث الصفحة.',
       'profile/invalid-name': 'الاسم يجب أن يكون بين حرفين و80 حرفاً.',
       'profile/invalid-role': 'نوع الحساب غير مدعوم. تواصل مع إدارة المنصة.'
     };
