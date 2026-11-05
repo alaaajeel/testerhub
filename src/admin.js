@@ -5,15 +5,28 @@ const {getFirestore,doc,getDoc,collection,query,where,orderBy,documentId,limit,s
 
 const $=id=>document.getElementById(id);
 const PAGE_SIZE=25;
+const PERMISSIONS=[
+ ['viewUsers','عرض المستخدمين','يرى الأسماء والإيميلات'],
+ ['suspendUsers','إيقاف الحسابات وتنشيطها','يتضمن عرض المستخدمين'],
+ ['archiveProjects','أرشفة التطبيقات وإرجاعها',''],
+ ['deleteProjects','حذف التطبيقات نهائياً','يتيح قراءة تقارير ورسائل كل التطبيقات، فامنحه لمن تثق به فقط'],
+ ['viewReports','عرض بلاغات المشاكل',''],
+ ['processDeletions','معالجة طلبات حذف الحسابات','يرى إيميلات أصحاب الطلبات'],
+ ['viewAudit','عرض سجل الإدارة','']
+];
 const TABS={
  projects:{title:'التطبيقات',order:()=>documentId(),search:'اسم التطبيق'},
- users:{title:'المستخدمون',order:()=>documentId(),search:'البريد الكامل'},
- issues:{title:'بلاغات المشاكل',collection:'reports',order:()=>'date',desc:true,filter:()=>where('outcome','==','issue')},
- deletionRequests:{title:'طلبات حذف الحسابات',order:()=>'createdAt',desc:true},
- adminAuditLogs:{title:'سجل إجراءات الإدارة',order:()=>'createdAt',desc:true}
+ users:{title:'المستخدمون',perm:'viewUsers',order:()=>documentId(),search:'البريد الكامل'},
+ issues:{title:'بلاغات المشاكل',perm:'viewReports',collection:'reports',order:()=>'date',desc:true,filter:()=>where('outcome','==','issue')},
+ deletionRequests:{title:'طلبات حذف الحسابات',perm:'processDeletions',order:()=>'createdAt',desc:true},
+ staffRoles:{title:'المشرفون',ownerOnly:true,order:()=>'grantedAt',desc:true},
+ adminAuditLogs:{title:'سجل إجراءات الإدارة',perm:'viewAudit',order:()=>'createdAt',desc:true}
 };
 const STATUS={draft:['مسودة',''],recruiting:['يستقبل المختبرين','good'],paused:['متوقف','warn'],completed:['مكتمل',''],archived:['مؤرشف','warn'],deleting:['حذف غير مكتمل','bad']};
-const state={tab:'projects',rows:[],cursor:null,hasMore:false,filter:'',details:{},busy:false,account:null,db:null};
+const state={tab:'projects',rows:[],cursor:null,hasMore:false,filter:'',details:{},busy:false,account:null,db:null,owner:false,perms:{},staffIds:new Set()};
+// Hides what this account cannot use; the security rules are what actually enforce it.
+const allowed=permission=>state.owner||state.perms[permission]===true;
+const tabAllowed=name=>TABS[name].ownerOnly?state.owner:!TABS[name].perm||allowed(TABS[name].perm);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const msg=err=>String(err?.code||'').includes('permission-denied')?'رُفضت العملية. تأكد من صلاحية الإدارة.':String(err?.message||err||'تعذر تنفيذ العملية.');
 // The Arabic-Indic zero looks like a dot, which is misleading in a metrics panel.
@@ -41,41 +54,100 @@ function confirmDialog({title,body='',action='تأكيد',danger=false,typed=nul
   el.showModal();
  });
 }
+// Returns the ticked permissions, or null if cancelled. Suspending needs seeing users, so it brings that along.
+function permissionsDialog({title,current={},action}){
+ return new Promise(resolve=>{
+  const el=document.createElement('dialog');
+  el.innerHTML='<form method="dialog"><h2>'+esc(title)+'</h2><p>اختر ما يستطيع هذا المشرف فعله فقط. يرى قائمة التطبيقات دائماً، ويجب أن يكون بريده مؤكداً.</p>'+PERMISSIONS.map(p=>'<label class="perm"><input type="checkbox" name="'+p[0]+'"'+(current[p[0]]===true?' checked':'')+'><span>'+esc(p[1])+(p[2]?'<small>'+esc(p[2])+'</small>':'')+'</span></label>').join('')+'<footer><button class="btn soft" value="cancel" formnovalidate>إلغاء</button><button class="btn" value="ok" id="ok">'+esc(action)+'</button></footer></form>';
+  document.body.append(el);
+  const box=name=>el.querySelector('input[name="'+name+'"]');
+  const sync=()=>{if(box('suspendUsers').checked)box('viewUsers').checked=true;el.querySelector('#ok').disabled=!PERMISSIONS.some(p=>box(p[0]).checked)};
+  el.addEventListener('change',sync);sync();
+  el.addEventListener('close',()=>{const ok=el.returnValue==='ok',result=Object.fromEntries(PERMISSIONS.map(p=>[p[0],box(p[0]).checked]));el.remove();resolve(ok?result:null)});
+  el.showModal();
+ });
+}
+async function loadStaffIds(){
+ if(!state.owner)return;
+ const snap=await getDocs(query(collection(state.db,'staffRoles'),limit(100)));
+ state.staffIds=new Set(snap.docs.map(x=>x.id));
+}
+async function promoteUser(person){
+ busy(false);
+ const permissions=await permissionsDialog({title:'ترقية '+(person.email||person.name)+' إلى مشرف',action:'ترقية'});
+ busy(true);
+ if(!permissions)return false;
+ const batch=writeBatch(state.db);
+ batch.set(doc(state.db,'staffRoles',person.id),{active:true,permissions,email:String(person.email||'').slice(0,200),name:String(person.name||'').slice(0,100),grantedBy:state.account.uid,grantedAt:serverTimestamp()});
+ batchAudit(batch,'grant_staff',person.id,person.email||person.name);
+ await batch.commit();
+ state.staffIds.add(person.id);
+ toast('أصبح هذا الحساب مشرفاً، ويرى لوحة الإدارة بعد إعادة فتحها.');
+}
+async function editStaff(member){
+ busy(false);
+ const permissions=await permissionsDialog({title:'صلاحيات '+(member.email||member.name),current:member.permissions,action:'حفظ'});
+ busy(true);
+ if(!permissions)return false;
+ const batch=writeBatch(state.db);
+ batch.update(doc(state.db,'staffRoles',member.id),{permissions,grantedBy:state.account.uid,grantedAt:serverTimestamp()});
+ batchAudit(batch,'update_staff',member.id,member.email||member.name);
+ await batch.commit();
+ member.permissions=permissions;
+ toast('حُفظت الصلاحيات.');
+}
+async function revokeStaff(member){
+ const batch=writeBatch(state.db);
+ batch.delete(doc(state.db,'staffRoles',member.id));
+ batchAudit(batch,'revoke_staff',member.id,member.email||member.name);
+ await batch.commit();
+ state.staffIds.delete(member.id);
+ state.rows=state.rows.filter(x=>x.id!==member.id);
+ toast('سُحبت الصلاحيات، وبقي حسابه العادي كما هو.');
+}
 async function authorized(account){
  const token=await getIdTokenResult(account,true);
  if(token.claims.email_verified!==true)return false;
  const role=await getDoc(doc(state.db,'adminRoles',account.uid));
- return role.exists()&&role.data().active===true;
+ if(role.exists()&&role.data().active===true){state.owner=true;return true}
+ const staff=await getDoc(doc(state.db,'staffRoles',account.uid));
+ if(!staff.exists()||staff.data().active!==true)return false;
+ state.owner=false;state.perms=staff.data().permissions||{};
+ return true;
 }
 async function overview(){
- const names=['users','projects','assignments','reports','messages'];
- const titles=['المستخدمون','التطبيقات','المشاركات','التقارير','الرسائل'];
- const counts=await Promise.all(names.map(n=>getCountFromServer(collection(state.db,n))));
- $('metrics').innerHTML=names.map((name,i)=>'<div class="metric"><small>'+esc(titles[i])+'</small><strong>'+number(counts[i].data().count)+'</strong></div>').join('');
+ const all=[['users','المستخدمون',allowed('viewUsers')],['projects','التطبيقات',true],['assignments','المشاركات',allowed('deleteProjects')],['reports','التقارير',allowed('deleteProjects')||allowed('viewReports')],['messages','الرسائل',allowed('deleteProjects')]].filter(x=>x[2]);
+ const counts=await Promise.all(all.map(x=>getCountFromServer(collection(state.db,x[0]))));
+ $('metrics').innerHTML=all.map((x,i)=>'<div class="metric"><small>'+esc(x[1])+'</small><strong>'+number(counts[i].data().count)+'</strong></div>').join('');
 }
 const button=(action,id,label,tone='soft')=>'<button class="btn '+tone+'" type="button" data-action="'+action+'" data-id="'+esc(id)+'">'+label+'</button>';
 function projectRow(item){
  const status=item.status||'recruiting',[label,tone]=STATUS[status]||[status,''],d=state.details[item.id];
  const archived=status==='archived',deleting=status==='deleting';
- return '<article class="item"><div class="info"><strong>'+esc(item.name||'تطبيق')+'</strong><small>المطور: '+esc(item.ownerName||'—')+'</small></div><div class="actions"><span class="tag '+tone+'">'+esc(label)+'</span>'+button('details',item.id,d?'إخفاء':'تفاصيل')+(deleting?'':button('archive',item.id,archived?'إلغاء الأرشفة':'أرشفة','warn'))+button('delete',item.id,deleting?'إكمال الحذف':'حذف','danger')+'</div>'+(d?'<div class="detail">'+(item.link?'<div dir="ltr">'+esc(item.link)+'</div>':'')+'المعرّف: <span dir="ltr">'+esc(item.id)+'</span><br>المشاركات: '+number(d.assignments)+' · التقارير: '+number(d.reports)+' · الرسائل: '+number(d.messages)+'</div>':'')+'</article>';
+ return '<article class="item"><div class="info"><strong>'+esc(item.name||'تطبيق')+'</strong><small>المطور: '+esc(item.ownerName||'—')+'</small></div><div class="actions"><span class="tag '+tone+'">'+esc(label)+'</span>'+(allowed('deleteProjects')?button('details',item.id,d?'إخفاء':'تفاصيل'):'')+(deleting||!allowed('archiveProjects')?'':button('archive',item.id,archived?'إلغاء الأرشفة':'أرشفة','warn'))+(allowed('deleteProjects')?button('delete',item.id,deleting?'إكمال الحذف':'حذف','danger'):'')+'</div>'+(d?'<div class="detail">'+(item.link?'<div dir="ltr">'+esc(item.link)+'</div>':'')+'المعرّف: <span dir="ltr">'+esc(item.id)+'</span><br>المشاركات: '+number(d.assignments)+' · التقارير: '+number(d.reports)+' · الرسائل: '+number(d.messages)+'</div>':'')+'</article>';
 }
 function userRow(item){
  const self=item.id===state.account.uid;
- const tag=item.suspended?'<span class="tag bad">موقوف</span>':item.available?'<span class="tag good">متاح للاختبار</span>':'<span class="tag">مسجّل</span>';
- return '<article class="item"><div class="info"><strong>'+esc(item.name||'مستخدم')+'</strong><small dir="ltr" style="text-align:right">'+esc(item.email||'')+'</small><small>'+(item.role==='developer'?'مطور':'مختبر')+'</small></div><div class="actions">'+tag+(self?'<span class="tag">حسابك</span>':button('suspend',item.id,item.suspended?'إعادة التنشيط':'إيقاف الحساب',item.suspended?'soft':'danger'))+'</div></article>';
+ const isStaff=state.staffIds.has(item.id);
+ const tag=(isStaff?'<span class="tag">مشرف</span>':'')+(item.suspended?'<span class="tag bad">موقوف</span>':item.available?'<span class="tag good">متاح للاختبار</span>':'<span class="tag">مسجّل</span>');
+ return '<article class="item"><div class="info"><strong>'+esc(item.name||'مستخدم')+'</strong><small dir="ltr" style="text-align:right">'+esc(item.email||'')+'</small><small>'+(item.role==='developer'?'مطور':'مختبر')+'</small></div><div class="actions">'+tag+(self?'<span class="tag">حسابك</span>':(state.owner&&!isStaff?button('promote',item.id,'ترقية إلى مشرف'):'')+(allowed('suspendUsers')&&(state.owner||!isStaff)?button('suspend',item.id,item.suspended?'إعادة التنشيط':'إيقاف الحساب',item.suspended?'soft':'danger'):''))+'</div></article>';
 }
 function issueRow(item){
  const fixed=item.status==='fixed';
  return '<article class="item"><div class="info"><strong>'+esc(item.notes||'بلاغ')+'</strong><small>'+esc(item.tested||'')+'</small><small>'+esc(item.date||'')+'</small></div><span class="tag '+(fixed?'good':'warn')+'">'+(fixed?'تم الإصلاح':'مفتوح')+'</span></article>';
 }
 function auditRow(item){
- const names={suspend_user:'إيقاف حساب',unsuspend_user:'إعادة تنشيط حساب',archive_project:'أرشفة تطبيق',restore_project:'إلغاء أرشفة تطبيق',delete_project:'حذف تطبيق نهائياً',process_deletion:'معالجة طلب حذف حساب'};
+ const names={suspend_user:'إيقاف حساب',unsuspend_user:'إعادة تنشيط حساب',archive_project:'أرشفة تطبيق',restore_project:'إلغاء أرشفة تطبيق',delete_project:'حذف تطبيق نهائياً',process_deletion:'معالجة طلب حذف حساب',grant_staff:'ترقية مشرف',update_staff:'تعديل صلاحيات مشرف',revoke_staff:'سحب صلاحيات مشرف'};
  return '<article class="item"><div class="info"><strong>'+esc(names[item.action]||item.action||'إجراء')+'</strong><small>'+esc(item.targetName||item.targetId||'')+'</small></div><small>'+esc(stamped(item.createdAt))+'</small></article>';
+}
+function staffRow(item){
+ const list=PERMISSIONS.filter(p=>item.permissions?.[p[0]]===true).map(p=>p[1]).join('، ')||'بلا صلاحيات';
+ return '<article class="item"><div class="info"><strong>'+esc(item.name||'مشرف')+'</strong><small dir="ltr" style="text-align:right">'+esc(item.email||item.id)+'</small><small>'+esc(list)+'</small></div><div class="actions">'+button('edit-staff',item.id,'تعديل الصلاحيات')+button('revoke-staff',item.id,'سحب الصلاحيات','danger')+'</div></article>';
 }
 function deletionRow(item){
  return '<article class="item"><div class="info"><strong dir="ltr" style="text-align:right">'+esc(item.email||item.id)+'</strong><small>'+esc(stamped(item.createdAt))+'</small></div>'+(item.status==='open'?button('process-deletion',item.id,'تمت المعالجة'):'<span class="tag good">تمت المعالجة</span>')+'</article>';
 }
-const ROWS={projects:projectRow,users:userRow,issues:issueRow,deletionRequests:deletionRow,adminAuditLogs:auditRow};
+const ROWS={projects:projectRow,users:userRow,issues:issueRow,staffRoles:staffRow,deletionRequests:deletionRow,adminAuditLogs:auditRow};
 function renderList(){
  const type=state.tab,source=TABS[type];
  const needle=state.filter.trim().toLowerCase();
@@ -157,11 +229,12 @@ async function processDeletion(item){
  toast('سُجّل الطلب كمعالَج.');
 }
 const PROMPTS={
+ 'revoke-staff':item=>({title:'سحب صلاحيات '+(item.email||item.name)+'؟',body:'يفقد الوصول إلى لوحة الإدارة فوراً، ويبقى حسابه العادي كما هو.',danger:true}),
  'process-deletion':item=>({title:'هل نفّذت الحذف فعلاً؟',body:'نفّذ الحذف أولاً من Firebase Console: احذف حساب '+(item.email||item.id)+' من Authentication، ومستند users الخاص به من Firestore، ثم أكد هنا.',action:'نعم، نُفّذ'}),
  suspend:item=>({title:(item.suspended?'إعادة تنشيط ':'إيقاف ')+(item.email||item.name||item.id)+'؟',body:item.suspended?'':'الإيقاف يمنع استخدام البيانات فوراً وتبقى بياناته محفوظة. حساب الدخول نفسه يُعطَّل من Firebase Console.',danger:!item.suspended}),
  archive:item=>({title:(item.status==='archived'?'إلغاء أرشفة ':'أرشفة ')+item.name+'؟',body:item.status==='archived'?'':'تتوقف التقارير والرسائل الجديدة، ولا تُحذف البيانات القديمة.'})
 };
-const ACTIONS={'process-deletion':processDeletion,suspend:setSuspension,archive:archiveProject,details:loadDetails,delete:removeProject};
+const ACTIONS={promote:promoteUser,'edit-staff':editStaff,'revoke-staff':revokeStaff,'process-deletion':processDeletion,suspend:setSuspension,archive:archiveProject,details:loadDetails,delete:removeProject};
 document.addEventListener('click',event=>{
  const tab=event.target.closest('[data-tab]');
  if(tab){state.tab=tab.dataset.tab;state.filter='';$('searchInput').value='';guarded(()=>page(true));return}
@@ -173,7 +246,7 @@ document.addEventListener('click',event=>{
   if(PROMPTS[name]){busy(false);const ok=await confirmDialog(PROMPTS[name](item));busy(true);if(!ok)return}
   const done=await ACTIONS[name](item);
   renderList();
-  if(name!=='details'&&done!==false)await overview();
+  if(!['details','promote','edit-staff','revoke-staff'].includes(name)&&done!==false)await overview();
  });
 });
 $('refresh').addEventListener('click',()=>guarded(()=>Promise.all([overview(),page(true)])));
@@ -202,8 +275,9 @@ if(!window.TESTERHUB_FIREBASE_CONFIG){
    if(!await authorized(account)){gate('هذا الحساب لا يملك صلاحية الإدارة. <a href="./index.html">العودة للتطبيق</a>');return}
    state.account=account;
    $('gate').hidden=true;$('console').hidden=false;$('tabs').hidden=false;
-   $('identity').textContent='حساب المشرف: '+account.email;
-   await guarded(()=>Promise.all([overview(),page(true)]));
+   $('identity').textContent=(state.owner?'مالك المشروع: ':'حساب المشرف: ')+account.email;
+   for(const b of document.querySelectorAll('[data-tab]'))b.hidden=!tabAllowed(b.dataset.tab);
+   await guarded(()=>Promise.all([overview(),loadStaffIds(),page(true)]));
   }catch(err){gate('تعذر التحقق من الصلاحية: '+esc(msg(err)))}
  });
 }

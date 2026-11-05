@@ -61,6 +61,9 @@ dialog::backdrop{background:#061b3c8a}
 dialog h2{margin:0 0 8px;font-size:17px}dialog p{margin:0 0 10px;color:var(--muted);white-space:pre-line}
 dialog label{display:block;font-weight:600;font-size:13.5px;margin-bottom:6px}
 dialog input{width:100%;min-height:44px;padding:9px 12px;border:1px solid #c6d5e8;border-radius:11px}
+dialog .perm{display:flex;gap:10px;align-items:flex-start;font-weight:500;margin:0;padding:8px 0;border-top:1px solid #e8eef7;cursor:pointer}
+dialog .perm input{width:20px;height:20px;min-height:0;flex:none;margin-top:3px;accent-color:var(--mint)}
+dialog .perm small{display:block;color:var(--muted);font-size:12px;font-weight:400}
 dialog footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 @media(max-width:560px){.brand span{display:none}.item .actions{width:100%}.tools{flex-basis:100%}.tools input{max-width:none}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -77,6 +80,7 @@ dialog footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
   <button type="button" data-tab="users">المستخدمون</button>
   <button type="button" data-tab="issues">بلاغات المشاكل</button>
   <button type="button" data-tab="deletionRequests">طلبات الحذف</button>
+  <button type="button" data-tab="staffRoles">المشرفون</button>
   <button type="button" data-tab="adminAuditLogs">سجل الإدارة</button>
  </nav>
 </header>

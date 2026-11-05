@@ -27,19 +27,55 @@ service cloud.firestore {
       return day is string && day.matches('\\d{4}-\\d{2}-\\d{2}')
         && timestamp.date(int(day[0:4]), int(day[5:7]), int(day[8:10])) == request.time.date();
     }
+    // Supervisors hold only what the owner ticked. Nothing here lets one change staffRoles.
+    function validStaffPermissions(p) {
+      return p is map && p.size() >= 1
+        && p.keys().hasOnly(['viewUsers','suspendUsers','archiveProjects','deleteProjects','viewReports','processDeletions','viewAudit'])
+        && p.values().hasOnly([true, false]);
+    }
+    function activeStaff() {
+      return signedIn() && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/staffRoles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/staffRoles/$(request.auth.uid)).data.get('active', false) == true;
+    }
+    function staff(permission) {
+      return activeStaff()
+        && get(/databases/$(database)/documents/staffRoles/$(request.auth.uid)).data.permissions.get(permission, false) == true;
+    }
     // A project's records are removed only after the project is locked, so nothing new can arrive
     // and an interrupted deletion can be resumed. The project document itself is removed last.
     function canPurge(pid, ownerUid) {
-      return adminAllowed() || (developer() && ownerUid == request.auth.uid
+      return adminAllowed() || staff('deleteProjects') || (developer() && ownerUid == request.auth.uid
         && project(pid).data.get('status','') == 'deleting');
     }
     match /adminRoles/{uid} {
       allow get: if signedIn() && request.auth.token.email_verified == true && request.auth.uid == uid;
       allow list, create, update, delete: if false;
     }
+    match /staffRoles/{uid} {
+      allow get: if adminAllowed() || (request.auth != null && request.auth.uid == uid);
+      allow list: if adminAllowed();
+      allow create: if adminAllowed()
+        && uid != request.auth.uid
+        && !exists(/databases/$(database)/documents/adminRoles/$(uid))
+        && exists(/databases/$(database)/documents/users/$(uid))
+        && request.resource.data.keys().hasOnly(['active','permissions','email','name','grantedBy','grantedAt'])
+        && request.resource.data.active == true
+        && validStaffPermissions(request.resource.data.permissions)
+        && request.resource.data.email is string && request.resource.data.email.size() <= 200
+        && request.resource.data.name is string && request.resource.data.name.size() <= 100
+        && request.resource.data.grantedBy == request.auth.uid
+        && request.resource.data.grantedAt == request.time;
+      allow update: if adminAllowed()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['permissions','grantedBy','grantedAt'])
+        && validStaffPermissions(request.resource.data.permissions)
+        && request.resource.data.grantedBy == request.auth.uid
+        && request.resource.data.grantedAt == request.time;
+      allow delete: if adminAllowed();
+    }
     match /users/{uid} {
-      allow get: if adminAllowed() || (request.auth != null && request.auth.uid == uid) || (developer() && resource.data.role == 'tester' && resource.data.available == true);
-      allow list: if adminAllowed() || (developer() && resource.data.role == 'tester' && resource.data.available == true);
+      allow get: if adminAllowed() || staff('viewUsers') || (request.auth != null && request.auth.uid == uid) || (developer() && resource.data.role == 'tester' && resource.data.available == true);
+      allow list: if adminAllowed() || staff('viewUsers') || (developer() && resource.data.role == 'tester' && resource.data.available == true);
       allow create: if self(uid)
         && request.resource.data.keys().hasOnly(['name','email','role','available','createdAt'])
         && request.resource.data.role in ['tester','developer']
@@ -61,7 +97,8 @@ service cloud.firestore {
         && (!request.resource.data.get('participationPaused', false) || request.resource.data.available == false);
       // Admin may quarantine users in Firestore without disabling Firebase Auth itself.
       // The suspended account immediately loses Firestore access via signedIn().
-      allow update: if adminAllowed()
+      // A supervisor can never act on the owner or on another supervisor.
+      allow update: if (adminAllowed() || (staff('suspendUsers') && !exists(/databases/$(database)/documents/staffRoles/$(uid))))
         && request.auth.uid != uid
         && !exists(/databases/$(database)/documents/adminRoles/$(uid))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['suspended','available'])
@@ -71,7 +108,7 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /projects/{projectId} {
-      allow get, list: if adminAllowed() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow get, list: if adminAllowed() || activeStaff() || (signedIn() && resource.data.ownerUid == request.auth.uid);
       allow create: if developer()
         && request.resource.data.keys().hasOnly(['name','link','ownerUid','ownerName','createdAt','testersCount','selectedTesterUids','status','tasks'])
         && request.resource.data.ownerUid == request.auth.uid
@@ -123,9 +160,9 @@ service cloud.firestore {
       // First step of deletion. An owner cannot use it to escape an admin archive.
       allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'deleting'
-        && (adminAllowed() || (developer() && resource.data.ownerUid == request.auth.uid
+        && (adminAllowed() || staff('deleteProjects') || (developer() && resource.data.ownerUid == request.auth.uid
           && resource.data.get('status','recruiting') in ['draft','recruiting','completed','paused']));
-      allow update: if adminAllowed()
+      allow update: if (adminAllowed() || staff('archiveProjects'))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','statusBeforeArchive','archivedAt'])
         && (
           (resource.data.get('status','recruiting') in ['draft','recruiting','completed','paused']
@@ -139,17 +176,17 @@ service cloud.firestore {
             && !('statusBeforeArchive' in request.resource.data)
             && !('archivedAt' in request.resource.data))
         );
-      allow delete: if adminAllowed() || (developer() && resource.data.ownerUid == request.auth.uid
+      allow delete: if adminAllowed() || staff('deleteProjects') || (developer() && resource.data.ownerUid == request.auth.uid
         && resource.data.get('status','') == 'deleting');
     }
     // Left by the short-lived application flow; readable and removable only for cleanup.
     match /applications/{applicationId} {
-      allow get, list: if adminAllowed() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow get, list: if adminAllowed() || staff('deleteProjects') || (signedIn() && resource.data.ownerUid == request.auth.uid);
       allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
       allow create, update: if false;
     }
     match /assignments/{assignmentId} {
-      allow get, list: if adminAllowed() || (signedIn()
+      allow get, list: if adminAllowed() || staff('deleteProjects') || (signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
       allow create: if developer()
         && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt','tasks','invitationStatus'])
@@ -202,7 +239,7 @@ service cloud.firestore {
       allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
     }
     match /reports/{reportId} {
-      allow get, list: if adminAllowed() || (signedIn()
+      allow get, list: if adminAllowed() || staff('deleteProjects') || staff('viewReports') || (signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
       allow create: if verified()
         && !(project(request.resource.data.projectId).data.get('status','recruiting') in ['deleting','archived'])
@@ -237,14 +274,14 @@ service cloud.firestore {
     }
     // Spark has no trusted server: deletion is requested here and carried out by the admin.
     match /deletionRequests/{uid} {
-      allow get: if adminAllowed() || (request.auth != null && request.auth.uid == uid);
-      allow list: if adminAllowed();
+      allow get: if adminAllowed() || staff('processDeletions') || (request.auth != null && request.auth.uid == uid);
+      allow list: if adminAllowed() || staff('processDeletions');
       allow create: if request.auth != null && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['email','status','createdAt'])
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.status == 'open'
         && request.resource.data.createdAt == request.time;
-      allow update: if adminAllowed()
+      allow update: if (adminAllowed() || staff('processDeletions'))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','processedAt'])
         && request.resource.data.status == 'processed'
         && request.resource.data.processedAt == request.time;
@@ -273,11 +310,15 @@ service cloud.firestore {
     // Admin queue and audit logs are server-only. Firebase Admin SDK bypasses client rules.
     match /adminDeleteJobs/{jobId} { allow read, write: if false; }
     match /adminAuditLogs/{auditId} {
-      allow get, list: if adminAllowed();
-      allow create: if adminAllowed()
+      allow get, list: if adminAllowed() || staff('viewAudit');
+      allow create: if (adminAllowed()
+          || (staff('suspendUsers') && request.resource.data.action in ['suspend_user','unsuspend_user'])
+          || (staff('archiveProjects') && request.resource.data.action in ['archive_project','restore_project'])
+          || (staff('deleteProjects') && request.resource.data.action == 'delete_project')
+          || (staff('processDeletions') && request.resource.data.action == 'process_deletion'))
         && request.resource.data.keys().hasOnly(['actorUid','action','targetId','targetName','createdAt'])
         && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion']
+        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion','grant_staff','update_staff','revoke_staff']
         && request.resource.data.targetId is string
         && request.resource.data.targetId.size() <= 128
         && request.resource.data.targetName is string
@@ -286,7 +327,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
     match /messages/{messageId} {
-      allow get, list: if adminAllowed() || (signedIn()
+      allow get, list: if adminAllowed() || staff('deleteProjects') || (signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
       allow create: if verified()
         && !(project(request.resource.data.projectId).data.get('status','recruiting') in ['deleting','archived'])

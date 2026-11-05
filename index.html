@@ -645,7 +645,9 @@ async function checkAdminClaim(){
   const active=auth.currentUser,token=await active.getIdTokenResult();
   if(token.claims.email_verified!==true)return false;
   const role=await storeFns.getDoc(storeFns.doc(db,'adminRoles',active.uid));
-  return role.exists() && role.data().active===true;
+  if(role.exists() && role.data().active===true)return true;
+  const staff=await storeFns.getDoc(storeFns.doc(db,'staffRoles',active.uid));
+  return staff.exists() && staff.data().active===true;
  }catch{return false}
 }
 async function projectDeletionCounts(projectId){

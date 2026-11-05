@@ -19,6 +19,7 @@ test('admin access requires a verified account AND an immutable allowlisted UID,
  assert.match(rules,/match \/adminRoles\/\{uid\}/);
  assert.match(rules,/allow list, create, update, delete: if false/);
  assert.match(admin,/role\.exists\(\)&&role\.data\(\)\.active===true/);
+ assert.match(rules,/match \/staffRoles\/\{uid\}[\s\S]*?allow create: if adminAllowed\(\)/);
 });
 test('project deletion locks first, removes the project last, and needs the typed name',()=>{
  const service=get('src/services/deletion.js');
