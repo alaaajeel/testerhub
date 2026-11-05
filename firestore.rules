@@ -299,6 +299,23 @@ service cloud.firestore {
         && request.resource.data.processedAt == request.time;
       allow delete: if false;
     }
+    // One private thread per user with the platform team. Users may write even while suspended, to appeal.
+    match /supportMessages/{messageId} {
+      allow get, list: if adminAllowed() || (request.auth != null && resource.data.uid == request.auth.uid);
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uid','sender','senderUid','text','createdAt'])
+        && request.resource.data.senderUid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 2 && request.resource.data.text.size() <= 1000
+        && request.resource.data.createdAt == request.time
+        && ((request.resource.data.sender == 'user'
+              && request.auth.token.email_verified == true
+              && request.resource.data.uid == request.auth.uid)
+          || (request.resource.data.sender == 'admin'
+              && adminAllowed()
+              && exists(/databases/$(database)/documents/users/$(request.resource.data.uid))));
+      allow update, delete: if false;
+    }
     // Only the push job (Admin SDK) reads tokens to send; no other account can, admins included.
     // The id is the token's hash, so a browser is one document, owned by whoever signed in there last.
     function validPushDevice(deviceId, d) {

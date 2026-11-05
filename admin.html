@@ -64,6 +64,13 @@ dialog input{width:100%;min-height:44px;padding:9px 12px;border:1px solid #c6d5e
 dialog .perm{display:flex;gap:10px;align-items:flex-start;font-weight:500;margin:0;padding:8px 0;border-top:1px solid #e8eef7;cursor:pointer}
 dialog .perm input{width:20px;height:20px;min-height:0;flex:none;margin-top:3px;accent-color:var(--mint)}
 dialog .perm small{display:block;color:var(--muted);font-size:12px;font-weight:400}
+.detail .sub{font-weight:600;margin-top:10px;color:var(--navy)}
+.detail .line{border-top:1px solid #e3eaf5;padding:6px 0;overflow-wrap:anywhere}
+.detail .line small{color:var(--muted)}
+.bubble{max-width:85%;padding:9px 13px;border-radius:14px;background:#f2f6fc;border:1px solid var(--line);margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.bubble.admin{background:var(--mint-soft);border-color:#bfe9da;margin-inline-start:auto}
+.bubble b{display:block;font-size:12.5px}.bubble small{display:block;color:var(--muted);font-size:11.5px}
+#support-form{display:flex;gap:8px;align-items:flex-end;margin-top:12px}#support-form textarea{flex:1;min-height:70px;padding:9px 12px;border:1px solid #c6d5e8;border-radius:11px;font:inherit;resize:vertical}
 dialog footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 @media(max-width:560px){.brand span{display:none}.item .actions{width:100%}.tools{flex-basis:100%}.tools input{max-width:none}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -77,6 +84,10 @@ dialog footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
  <div class="bar"><div class="brand"><img src="./assets/brand-icon.svg" alt="">TesterHub <span>لوحة الإدارة</span></div><a class="back" href="./index.html">العودة للتطبيق</a></div>
  <nav class="tabs" id="tabs" aria-label="أقسام الإدارة" hidden>
   <button type="button" data-tab="projects" class="active">التطبيقات</button>
+  <button type="button" data-tab="assignments">المشاركات</button>
+  <button type="button" data-tab="reportsAll">التقارير</button>
+  <button type="button" data-tab="messages">رسائل المستخدمين</button>
+  <button type="button" data-tab="support">رسائل الإدارة</button>
   <button type="button" data-tab="users">المستخدمون</button>
   <button type="button" data-tab="issues">بلاغات المشاكل</button>
   <button type="button" data-tab="deletionRequests">طلبات الحذف</button>
@@ -92,6 +103,7 @@ dialog footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
   <section class="card">
    <div class="head"><h1 id="listTitle">التطبيقات</h1>
     <div class="tools"><form id="search" class="tools" hidden><input id="searchInput" type="search" autocomplete="off"><button class="btn soft" id="searchButton" type="submit">بحث</button></form><button class="btn soft" id="refresh" type="button">تحديث</button></div></div>
+   <p id="listNote" class="who" hidden></p>
    <div id="items" aria-live="polite"></div>
    <button id="more" class="btn soft" type="button" hidden>عرض المزيد</button>
   </section>
