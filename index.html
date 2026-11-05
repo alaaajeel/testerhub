@@ -19,6 +19,7 @@
   <script src="./firebase-config.js"></script>
   <script src="./src/services/accounts.js"></script>
   <script src="./src/services/deletion.js"></script>
+  <script src="./src/services/push.js"></script>
   
   
   
@@ -281,7 +282,7 @@ button:focus-visible,input:focus-visible,select:focus-visible {outline:3px solid
       <p>كل شيء بمكان واحد: إيميلات المختبرين، روابط Google Play، ومتابعة 14 يوم — بدون تعقيد.</p>
       <div class="showcase-features"><span>✓ واجهة عربية</span><span>✓ تثبيت على الهاتف</span><span>✓ متابعة يومية</span></div>
       <div class="role-preview"><button id="previewTester" type="button" class="on">واجهة المختبر</button><button id="previewDeveloper" type="button">واجهة المطور</button></div>
-      <div class="subtle-note" id="modeDescription">وضع المعاينة يحفظ البيانات على جهازك فقط. بعد ربط Firebase تعمل الحسابات والاختبارات بين الأجهزة.</div>
+      <div class="subtle-note" id="modeDescription">سجّل الدخول بحسابك وتابع اختباراتك من أي جهاز.</div>
       <button id="installDesktop" type="button" class="install-outline">＋ تثبيت TesterHub</button>
     </aside>
     <section class="phone-wrap" aria-label="تطبيق TesterHub">
@@ -307,7 +308,7 @@ const previewStorage = (() => {
 
 const DEMO_KEY='testerhub_pwa_demo_v2';
 const isDemo=!firebaseConfig?.apiKey || !firebaseConfig?.projectId;
-let auth,db,authFns,storeFns,accountService,fbReady=false;
+let auth,db,authFns,storeFns,accountService,pushService,fbReady=false;
 const dayKey=(date=new Date())=>date.toISOString().slice(0,10);
 const daysSince=(dateKey)=>{if(!dateKey)return 0;const [y,m,d]=dateKey.split('-').map(Number);if(!y)return 0;const now=new Date();return Math.max(1,Math.floor((Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate())-Date.UTC(y,m-1,d))/86400000)+1)};
 const seedTesters=()=>Array.from({length:20},(_,i)=>({uid:`t${i+1}`,name:`مختبر ${i+1}`,email:`tester${String(i+1).padStart(2,'0')}@example.com`,available:true,lastActive:i<18,role:'tester'}));
@@ -340,6 +341,14 @@ async function initialize(){
  const app=initializeApp(firebaseConfig);auth=a.getAuth(app);db=f.getFirestore(app);authFns=a;storeFns=f;fbReady=true;
  auth.languageCode="ar";
  accountService=TesterHubAccounts.createAccounts({auth,authFns,db,storeFns});
+ // Push stays off until the public key is set in firebase-config.js; the SDK loads only when it is in use.
+ pushService=TesterHubPush.createPush({db,f,storage:previewStorage,getHour:()=>getReminderHour(),
+  available:()=>!!window.TESTERHUB_VAPID_KEY&&location.protocol==='https:'&&'Notification' in window&&'serviceWorker' in navigator&&'PushManager' in window&&Notification.permission==='granted',
+  getToken:async()=>{
+   const m=await import(`https://www.gstatic.com/firebasejs/${version}/firebase-messaging.js`);
+   if(!await m.isSupported())return null;
+   return m.getToken(m.getMessaging(app),{vapidKey:window.TESTERHUB_VAPID_KEY,serviceWorkerRegistration:await navigator.serviceWorker.ready});
+  }});
  await auth.authStateReady();
  authFns.onAuthStateChanged(auth, async active=>{
   if(!user||active?.uid===user.uid)return;
@@ -354,7 +363,7 @@ async function currentUser(){
 }
 async function switchDemo(role){const d=demoState();d.role=role;save(d);return currentUser()}
 async function signup(input){
- if(isDemo)throw Error('فعّل Firebase لإنشاء حسابات حقيقية.');
+ if(isDemo)throw Error('إنشاء الحسابات غير متاح في وضع المعاينة.');
  return accountService.signup(input);
 }
 async function login(email,password){if(isDemo)throw Error('وضع المعاينة لا يستخدم تسجيل الدخول');return accountService.login(email,password)}
@@ -762,13 +771,13 @@ function noticeCard(text,description,buttonAction,target){
 function notificationPanel(){
  if(!noticeOpen||!user)return '';
  let body='';
- if(noticeState==='loading')body='<div class="notice-status">جاري التحقق من Firebase ومزامنة التكليفات والرسائل…</div>';
- else if(noticeState==='stale')body='<div class="notice-status">وصل تحديث جديد من Firebase؛ اضغط تحديث الإشعارات للتأكد من آخر حالة.</div>';
+ if(noticeState==='loading')body='<div class="notice-status">جاري تحديث التكليفات والرسائل…</div>';
+ else if(noticeState==='stale')body='<div class="notice-status">وصل تحديث جديد؛ اضغط تحديث الإشعارات للتأكد من آخر حالة.</div>';
  else if(noticeState==='error')body='<div class="notice-status error">'+clean(noticeError||'تعذّر التحقق من البيانات الآن، حاول مرة ثانية.')+'</div>';
  else if(noticeState==='verified'){
   if(user.role==='tester'){
    const work=classifyTesterWork(primaryAssignments());
-   if(!dashboard.assignments.length)body+=noticeCard('لا توجد تطبيقات مسندة لحسابك','تم التحقق من Firebase: ما عندك تكليفات اختبار حالياً.');
+   if(!dashboard.assignments.length)body+=noticeCard('لا توجد تطبيقات مسندة لحسابك','ما عندك تكليفات اختبار حالياً.');
    for(const a of work.invites)body+=noticeCard((a.invitationStatus==='pending'?'دعوة اختبار جديدة: ':'دعوة مقبولة: ')+a.name,a.invitationStatus==='pending'?'بانتظار ردك على الدعوة. القبول هنا لا يؤكد اشتراك Google Play.':'اقبلت الدعوة؛ انضم للاختبار المغلق ثم أكد بدء المشاركة.','notice-go-tests','tests');
    for(const a of work.due)body+=noticeCard('اختبار مطلوب اليوم: '+a.name,'ماكو تقرير محفوظ لهذا اليوم، والاختبار جاهز للتنفيذ.','notice-go-tests','tests');
    for(const a of work.cooldown)body+=noticeCard('بانتظار موعد التقرير التالي: '+a.name,'تم تقديم تقرير سابق قبل أقل من 14 ساعة. الاختبار بعده ضمن المتابعة.','notice-go-tests','tests');
@@ -780,7 +789,7 @@ function notificationPanel(){
    const empty=mineProjects().filter(p=>!dashboard.assignments.some(a=>a.projectId===p.id));
    for(const p of empty)body+=noticeCard('دعوات غير مكتملة: '+p.name,'هذا التطبيق لا يحتوي تكليفات مختبرين محفوظة.','notice-go-project',p.id);
    for(const r of issues.slice(0,8))body+=noticeCard('بلاغ مشكلة: '+(dashboard.projects.find(p=>p.id===r.projectId)?.name||'تطبيقك'),r.notes||'مشكلة تحتاج مراجعة.','notice-go-project',r.projectId);
-   if(!issues.length&&!empty.length)body+=noticeCard('ماكو بلاغات مفتوحة','تم التحقق من التقارير والتكليفات في Firebase.');
+   if(!issues.length&&!empty.length)body+=noticeCard('ماكو بلاغات مفتوحة','تم التحقق من التقارير والتكليفات.');
   }
   const messages=(dashboard.messages||[]).filter(messageIsIncoming).slice().sort((a,b)=>messageTime(b)-messageTime(a)).slice(0,5);
   if(messages.length){
@@ -790,7 +799,7 @@ function notificationPanel(){
  }
  return '<div class="notices-overlay"><button class="notices-backdrop" type="button" data-action="close-notices" aria-label="إغلاق الإشعارات"></button>'+
  '<section class="notices-sheet" role="dialog" aria-modal="true" aria-label="الإشعارات"><header class="notices-header"><div><strong>الإشعارات</strong><small>'+
- (noticeState==='verified'?'متزامنة مع Firebase · '+new Date(noticeLastVerified).toLocaleTimeString('ar-IQ',{hour:'numeric',minute:'2-digit'}):'حالة التحقق')+
+ (noticeState==='verified'?'آخر تحديث · '+new Date(noticeLastVerified).toLocaleTimeString('ar-IQ',{hour:'numeric',minute:'2-digit'}):'حالة التحقق')+
  '</small></div><button type="button" data-action="close-notices" aria-label="إغلاق">✕</button></header><div class="notices-list">'+body+
  '</div><footer class="notices-footer"><button type="button" data-action="sync-notices">تحديث الإشعارات</button>'+
  '<span>تعرض بيانات TesterHub، وليس تحقق Google Play الرسمي.</span></footer></section></div>';
@@ -808,7 +817,7 @@ async function syncNotificationPanel(){
  }catch(err){
   console.warn('Notification verification failed',err);
   noticeState='error';
-  noticeError='تعذّر التأكد من الاختبارات من Firebase. افحص الإنترنت أو الصلاحيات واضغط تحديث. ما نكدر نأكد أنه ما عندك مهام اليوم.';
+  noticeError='تعذّر التأكد من الاختبارات. افحص الإنترنت أو الصلاحيات واضغط تحديث. ما نكدر نأكد أنه ما عندك مهام اليوم.';
  }
  render();
 }
@@ -863,7 +872,7 @@ function projectDetails(id){
 
  <div class="section-title">المختبرون المشاركون</div>${assignments.length?assignments.map((a,i)=>{const count=threadMessages(a.id).length;return `<div class="surface" style="padding:12px"><div class="row between"><div><div class="bold">مختبر ${i+1}</div><div class="tiny">${a.joinedDay?'اليوم '+currentDay(a)+' من 14':a.invitationStatus==='pending'?'بانتظار رد المختبر':a.invitationStatus==='accepted'?'قبل الدعوة، بانتظار بدء الاختبار':a.invitationStatus==='declined'?'رفض الدعوة':invitationExpired(a)?'انتهت مهلة الدعوة':'بانتظار تأكيد الانضمام'}</div></div><span class="${lastActive(a)?'flag':'chip'}">${lastActive(a)?'نشط':'غير نشط'}</span></div><div class="progress" style="margin:10px 0 0"><i style="width:${(a.checkins?.length||0)/14*100}%"></i></div><div class="tiny" style="margin-top:7px">${a.checkins?.length||0} يوم بتقرير مؤكّد</div><button class="item-link" data-action="open-chat" data-id="${clean(a.id)}">${ico('message',17)} مراسلة المختبر ${count?`<span class="message-counter">${count}</span>`:'<span>‹</span>'}</button></div>`}).join(''):'<div class="tab-empty">لم ينضم مختبرون بعد</div>'}`;
 }
-function profile(){return `${adminAuthorized?'<div class="surface"><a class="cta blue wide" style="display:block;text-align:center;text-decoration:none;padding:12px" href="./admin.html">🛡 لوحة إدارة المنصة</a></div>':''}${profileEditor()}<div class="surface"><div class="user-bar"><div><div class="bold">${clean(user.name)}</div><small class="email-ltr">${clean(user.email)}</small></div><div class="app-mark" style="width:54px;height:54px;border-radius:50%;background:linear-gradient(125deg,#2a78dc,#0eae8b);color:#fff;display:grid;place-items:center">${ico('user',28)}</div></div><div class="divider"></div><span class="chip">${user.role==='developer'?'حساب مطور':'حساب مختبر'}</span></div>${user.role==='tester'?`<div class="surface"><div class="lead">المشاركة بالاختبارات</div><label class="checks"><input type="checkbox" data-change="availability" ${user.available?'checked':''}/><span>إظهار بريدي للمطورين كأحد المختبرين المتاحين</span></label><div class="small">لن يظهر بريدك إلا للمطورين المسجلين، لغرض إضافتك إلى قائمة الاختبار.</div></div><div class="surface"><div class="lead">تذكيري اليومي</div><div class="setting-row"><span class="small">وقت التذكير</span><select id="reminder-hour">${Array.from({length:24},(_,i)=>`<option value="${i}" ${i===api.getReminderHour()?'selected':''}>${(i%12)||12}:00 ${i<12?'ص':'م'}</option>`).join('')}</select></div><button class="cta outline wide" data-action="enable-reminder">${ico('bell',16)} السماح بإشعار التذكير</button><button class="cta outline wide" style="margin-top:8px" data-action="calendar-reminder">${ico('calendar',16)} إضافة تذكير 14 يوم إلى تقويم الهاتف</button><div class="card-note">تذكير المتصفح يظهر أثناء فتح التطبيق. التذكير بالتقويم يحتاج استيراد ملف المواعيد داخل تطبيق التقويم حتى يصلك والهاتف مقفل.</div></div>`:''}<div class="surface"><div class="lead">التطبيق</div><button class="item-link" data-action="install">${ico('add',20)} تثبيت على الشاشة الرئيسية <span>‹</span></button>${api.isDemo?`<button class="item-link" data-action="switch-demo">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button><button class="item-link" data-action="reset-demo">إعادة بيانات المعاينة <span>‹</span></button>`:`<button class="item-link" data-action="logout">${ico('power',20)} تسجيل الخروج <span>‹</span></button>`}</div>`}
+function profile(){return `${adminAuthorized?'<div class="surface"><a class="cta blue wide" style="display:block;text-align:center;text-decoration:none;padding:12px" href="./admin.html">🛡 لوحة إدارة المنصة</a></div>':''}${profileEditor()}<div class="surface"><div class="user-bar"><div><div class="bold">${clean(user.name)}</div><small class="email-ltr">${clean(user.email)}</small></div><div class="app-mark" style="width:54px;height:54px;border-radius:50%;background:linear-gradient(125deg,#2a78dc,#0eae8b);color:#fff;display:grid;place-items:center">${ico('user',28)}</div></div><div class="divider"></div><span class="chip">${user.role==='developer'?'حساب مطور':'حساب مختبر'}</span></div>${user.role==='tester'?`<div class="surface"><div class="lead">المشاركة بالاختبارات</div><label class="checks"><input type="checkbox" data-change="availability" ${user.available?'checked':''}/><span>إظهار بريدي للمطورين كأحد المختبرين المتاحين</span></label><div class="small">لن يظهر بريدك إلا للمطورين المسجلين، لغرض إضافتك إلى قائمة الاختبار.</div></div><div class="surface"><div class="lead">تذكيري اليومي</div><div class="setting-row"><span class="small">وقت التذكير</span><select id="reminder-hour">${Array.from({length:24},(_,i)=>`<option value="${i}" ${i===api.getReminderHour()?'selected':''}>${(i%12)||12}:00 ${i<12?'ص':'م'}</option>`).join('')}</select></div><button class="cta outline wide" data-action="enable-reminder">${ico('bell',16)} السماح بإشعار التذكير</button><button class="cta outline wide" style="margin-top:8px" data-action="calendar-reminder">${ico('calendar',16)} إضافة تذكير 14 يوم إلى تقويم الهاتف</button><div class="card-note">${window.TESTERHUB_VAPID_KEY?'بعد السماح تصلك الإشعارات حتى والتطبيق مغلق، وقد تتأخر قليلاً.':'تذكير المتصفح يظهر أثناء فتح التطبيق. التذكير بالتقويم يحتاج استيراد ملف المواعيد داخل تطبيق التقويم حتى يصلك والهاتف مقفل.'}</div></div>`:''}<div class="surface"><div class="lead">التطبيق</div>${user.role==='developer'?`<button class="item-link" data-action="enable-reminder">${ico('bell',20)} السماح بالإشعارات <span>‹</span></button>`:''}<button class="item-link" data-action="install">${ico('add',20)} تثبيت على الشاشة الرئيسية <span>‹</span></button>${api.isDemo?`<button class="item-link" data-action="switch-demo">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button><button class="item-link" data-action="reset-demo">إعادة بيانات المعاينة <span>‹</span></button>`:`<button class="item-link" data-action="logout">${ico('power',20)} تسجيل الخروج <span>‹</span></button>`}</div>`}
 function profileEditor(){if(api.isDemo)return '';return `<div class="surface"><form id="profile-form"><div class="field"><label for="profile-name">الاسم</label><input id="profile-name" name="name" minlength="2" maxlength="80" required value="${clean(user.name)}" /></div>${user.role==='tester'?`<label class="checks"><input type="checkbox" name="paused" ${user.participationPaused?'checked':''}/><span>إيقاف المشاركة الجديدة مؤقتاً وإخفاء بريدي</span></label><p class="small">المشاركات الحالية وتواريخها تبقى محفوظة؛ هذا الخيار لا يوقف عداد الاختبار الجاري.</p>`:''}<button class="cta blue" type="submit">حفظ الحساب</button></form></div>`}
 function accountGate(){return `<div class="login-shell"><div class="auth-card"><h2>${user.profileMissing?'إكمال بيانات حسابك':'تأكيد البريد الإلكتروني'}</h2><p>${clean(user.email)}</p>${user.profileMissing?`<p>حساب الدخول موجود. أكمل ملفك بنفس الحساب دون إنشاء حساب جديد.</p><form id="complete-profile-form"><div class="field"><label for="recover-name">الاسم</label><input id="recover-name" name="name" minlength="2" maxlength="80" required /></div><div class="field"><label for="recover-role">نوع الحساب</label><select id="recover-role" name="role"><option value="tester">مختبر</option><option value="developer">مطور</option></select></div><label class="checks"><input type="checkbox" name="available"/><span>إذا اخترت مختبر: أوافق على مشاركة بريدي مع المطورين للاختبارات.</span></label><button class="cta blue" type="submit">إكمال الحساب</button></form>`:`<p>أكد ملكية بريدك حتى تفتح لوحة الحساب. المشاركات والتقارير القديمة تبقى محفوظة.</p><button class="cta blue wide" data-action="send-verification">إرسال رسالة تأكيد البريد</button><button class="item-link" data-action="check-verification">تحققت من بريدي — تحديث الحالة</button>`}<button class="item-link" data-action="logout">تسجيل الخروج</button></div></div>`}
 function authScreen(){return `<div class="login-shell"><div class="auth-logo"><img src="./assets/brand-icon.svg" alt="" /> TesterHub</div><div class="auth-card"><div class="auth-switch"><button data-auth="login" class="${authMode==='login'?'selected':''}">تسجيل الدخول</button><button data-auth="signup" class="${authMode==='signup'?'selected':''}">إنشاء حساب</button></div><h2>${authMode==='login'?'أهلاً بعودتك 👋':'إنشاء حساب جديد'}</h2><p>${authMode==='login'?'ادخل ببريدك حتى تتابع اختباراتك':'خطوات قليلة فقط وتبدأ رحلتك مع المختبرين'}</p><form id="auth-form">${authMode==='signup'?`<div class="field"><label>نوع الحساب</label><div class="auth-switch"><button type="button" data-role="tester" class="${signupRole==='tester'?'selected':''}">مختبر</button><button type="button" data-role="developer" class="${signupRole==='developer'?'selected':''}">مطور</button></div></div><div class="field"><label for="auth-name">الاسم</label><input id="auth-name" name="name" minlength="2" required placeholder="اسمك" /></div>`:''}<div class="field"><label for="auth-email">البريد الإلكتروني</label><input id="auth-email" type="email" name="email" autocomplete="email" placeholder="example@gmail.com" required /><div class="help">${authMode==='signup'&&signupRole==='tester'?'استعمل نفس البريد الذي تشترك به في اختبارات Google Play':'بريد واحد لحسابك'}</div></div><div class="field"><label for="auth-password">كلمة المرور</label><input id="auth-password" name="password" type="password" minlength="6" autocomplete="${authMode==='login'?'current-password':'new-password'}" required placeholder="••••••••" /></div>${authMode==='signup'&&signupRole==='tester'?`<label class="checks"><input name="available" type="checkbox" /><span>أوافق على ظهور بريدي الإلكتروني للمطورين لإضافتي إلى اختبارات Google Play.</span></label>`:''}<button class="cta blue wide" type="submit">${authMode==='login'?'دخول':'إنشاء الحساب'}</button></form><button class="text-button" type="button" data-action="reset-password">نسيت كلمة المرور؟</button><div class="auth-footer">${authMode==='login'?'ليس لديك حساب؟':'عندك حساب؟'} <button class="text-button" data-auth="${authMode==='login'?'signup':'login'}">${authMode==='login'?'سجّل الآن':'سجّل الدخول'}</button></div></div></div>`}
@@ -890,6 +899,7 @@ function startLiveSync(){
  if(liveSyncUid===user.uid)return;
  stopLiveSync();liveSyncUid=user.uid;
  const uid=user.uid,role=user.role;
+ pushService?.sync(uid).catch(err=>console.warn('Push registration:',err));
  const specs=role==='developer'?
   [['projects','ownerUid'],['assignments','ownerUid'],['reports','ownerUid'],['messages','ownerUid']]:
   [['assignments','testerUid'],['reports','testerUid'],['messages','testerUid']];
@@ -967,7 +977,7 @@ function finishLaunchSplash(){
 async function start(){
  const hosted = /(^|\.)github\.io$/.test(location.hostname) || location.hostname.endsWith('.web.app') || location.hostname.endsWith('.firebaseapp.com');
  if (isDemo && hosted && new URLSearchParams(location.search).get('demo') !== '1') {
-  app.innerHTML = '<div class="loading" style="padding:24px;line-height:2;text-align:center"><strong>TesterHub قيد الإعداد</strong><p>واجهة الموقع منشورة، لكن لم يتم ربط Firebase بعد. لا توجد حسابات حقيقية متاحة حالياً.</p><p>يمكن للمشرف استخدام ?demo=1 لمعاينة بيانات تجريبية فقط.</p></div>';
+  app.innerHTML = '<div class="loading" style="padding:24px;line-height:2;text-align:center"><strong>TesterHub قيد الإعداد</strong><p>واجهة الموقع منشورة، لكن لم يكتمل إعدادها بعد. لا توجد حسابات حقيقية متاحة حالياً.</p><p>يمكن للمشرف استخدام ?demo=1 لمعاينة بيانات تجريبية فقط.</p></div>';
   finishLaunchSplash();
   return;
  }
@@ -1055,7 +1065,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='mark-fixed'){await api.resolveLatestIssue(id);await refresh();tab='chat';toast('تم إبلاغ المختبر بأن المشكلة انحلّت');return}
  if(action==='project-details'){selectedProjectId=id;tab='details';render();return}
  if(action==='edit-draft'){draftEditingId=id;tab='new';render();return}
- if(action==='refresh-tests'){await refresh();toast('تم تحديث الاختبارات من Firebase');return}
+ if(action==='refresh-tests'){await refresh();toast('تم تحديث الاختبارات');return}
  if(action==='delete-project'){
   const p=mineProjects().find(x=>x.id===id);if(!p)return;
   const c=await api.projectDeletionCounts(id);
@@ -1077,15 +1087,16 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='install'){await install();return}
  if(action==='switch-demo'){user=await api.switchDemo(user.role==='tester'?'developer':'tester');tab='home';await refresh();return}
  if(action==='reset-demo'){if(!confirm('إعادة بيانات المعاينة؟'))return;api.resetDemo();user=await api.currentUser();tab='home';await refresh();toast('تمت إعادة بيانات المعاينة');return}
- if(action==='logout'){stopLiveSync();await api.logout();user=null;adminAuthorized=false;noticeOpen=false;drawerOpen=false;dashboard={projects:[],assignments:[],testers:[]};tab='home';render();return}
+ if(action==='logout'){await Promise.race([pushService?.remove(),new Promise(done=>setTimeout(done,3000))]).catch(err=>console.warn('Push removal:',err));stopLiveSync();await api.logout();user=null;adminAuthorized=false;noticeOpen=false;drawerOpen=false;dashboard={projects:[],assignments:[],testers:[]};tab='home';render();return}
  if(action==='calendar-reminder'){exportCalendarReminder();return}
  if(action==='enable-reminder'){
   if(!('Notification' in window)||!('serviceWorker' in navigator))throw Error('التنبيهات تحتاج متصفح Chrome يدعم إشعارات تطبيقات الويب');
   const permission=await Notification.requestPermission();
   if(permission==='granted'){
-   if(!await showPwaNotification('TesterHub — إشعار تجريبي','سوف يظهر تذكير عند فتح التطبيق بعد موعد التذكير.','testerhub-test'))
+   const closedAppPush=pushService?.available()?await pushService.sync(user.uid,{force:true}):false;
+   if(!await showPwaNotification('TesterHub — إشعار تجريبي',closedAppPush?'ستصلك الإشعارات حتى والتطبيق مغلق.':'سوف يظهر تذكير عند فتح التطبيق بعد موعد التذكير.','testerhub-test'))
     throw Error('تعذّر عرض الإشعار. افتح الموقع في Chrome وثبّت التطبيق ثم حاول مجدداً.');
-   toast('تم السماح بالإشعارات');
+   toast(closedAppPush?'تم تفعيل الإشعارات على هذا الجهاز':'تم السماح بالإشعارات');
   }else toast('لم تسمح بالإشعارات');
   return;
  }
@@ -1093,7 +1104,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
 });
 window.addEventListener('keydown',event=>{if(event.key==='Escape'&&(drawerOpen||noticeOpen)){drawerOpen=false;noticeOpen=false;render();}});
 app.addEventListener('change',event=>{const node=event.target;
- if(node.name==='outcome'){const note=document.getElementById('test-note'),label=document.getElementById('test-note-label');if(note&&label){const issue=node.value==='issue';note.required=true;note.minLength=10;note.placeholder=issue?'مثلاً: عند الضغط على تسجيل الدخول يعلّق التطبيق وتظهر شاشة بيضاء...':'ملاحظات إضافية إذا عندك شيء يفيد المطور...';label.textContent=issue?'اكتب تفاصيل المشكلة (مطلوب)':'اكتب ما لاحظته أثناء المهمة (مطلوب)';}return;}if(node.id==='reminder-hour'){try{api.setReminderHour(Number(node.value));toast('تم تحديث وقت التذكير')}catch(err){toast(err.message)}return}
+ if(node.name==='outcome'){const note=document.getElementById('test-note'),label=document.getElementById('test-note-label');if(note&&label){const issue=node.value==='issue';note.required=true;note.minLength=10;note.placeholder=issue?'مثلاً: عند الضغط على تسجيل الدخول يعلّق التطبيق وتظهر شاشة بيضاء...':'ملاحظات إضافية إذا عندك شيء يفيد المطور...';label.textContent=issue?'اكتب تفاصيل المشكلة (مطلوب)':'اكتب ما لاحظته أثناء المهمة (مطلوب)';}return;}if(node.id==='reminder-hour'){try{api.setReminderHour(Number(node.value));pushService?.sync(user.uid).catch(err=>console.warn('Push registration:',err));toast('تم تحديث وقت التذكير')}catch(err){toast(err.message)}return}
  if(node.dataset.change==='availability'){pending(async()=>{try{await api.setAvailability(node.checked);user=await api.currentUser();toast(user.available?'تم إظهار بريدك للمطورين':'تم إخفاء بريدك من القائمة')}finally{render()}})}
 });
 app.addEventListener('submit',event=>{event.preventDefault();const form=event.target;
@@ -1107,7 +1118,7 @@ app.addEventListener('submit',event=>{event.preventDefault();const form=event.ta
  if(form.id==='chat-form')pending(async()=>{
   const f=new FormData(form);await api.sendMessage(selectedAssignmentId,String(f.get('message')||''),user.role);await refresh();tab='chat';toast(api.isDemo?'انحفظت الرسالة في المعاينة':'تم إرسال الرسالة للمطور أو المختبر');
  });
- if(form.id==='project-form')pending(async()=>{const f=new FormData(form),name=String(f.get('name')||'').trim(),link=String(f.get('link')||'').trim(),tasks=String(f.get('tasks')||''),intent=event.submitter?.value||'publish',selected=new Set(f.getAll('testerUid')),testers=dashboard.testers.filter(t=>t.available&&selected.has(t.uid));let id;if(intent==='draft'){id=await api.saveProjectDraft({name,link,tasks},draftEditingId);toast('تم حفظ المسودة في Firebase')}else{if(!testers.length)throw Error('اختر مختبراً واحداً على الأقل');if(!f.get('confirmed'))throw Error('أكد أنك أضفت الإيميلات إلى Google Play Console');if(draftEditingId){id=draftEditingId;await api.publishProjectDraft(id,{name,link,tasks},testers)}else id=await api.createProject({name,link,tasks},testers);toast('تم إرسال الدعوات للمختبرين الذين اخترتهم')}draftEditingId=null;await refresh();selectedProjectId=id;tab='details';render()});
+ if(form.id==='project-form')pending(async()=>{const f=new FormData(form),name=String(f.get('name')||'').trim(),link=String(f.get('link')||'').trim(),tasks=String(f.get('tasks')||''),intent=event.submitter?.value||'publish',selected=new Set(f.getAll('testerUid')),testers=dashboard.testers.filter(t=>t.available&&selected.has(t.uid));let id;if(intent==='draft'){id=await api.saveProjectDraft({name,link,tasks},draftEditingId);toast('تم حفظ المسودة')}else{if(!testers.length)throw Error('اختر مختبراً واحداً على الأقل');if(!f.get('confirmed'))throw Error('أكد أنك أضفت الإيميلات إلى Google Play Console');if(draftEditingId){id=draftEditingId;await api.publishProjectDraft(id,{name,link,tasks},testers)}else id=await api.createProject({name,link,tasks},testers);toast('تم إرسال الدعوات للمختبرين الذين اخترتهم')}draftEditingId=null;await refresh();selectedProjectId=id;tab='details';render()});
 
 });
 let reminderInFlight=false;
