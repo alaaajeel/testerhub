@@ -1,0 +1,10 @@
+*{box-sizing:border-box}
+html,body{margin:0;background:#f3f7ff;color:#15264c;font:15px/1.9 "IBM Plex Sans Arabic","Noto Sans Arabic",Roboto,Arial,sans-serif}
+main{max-width:720px;margin:0 auto;padding:24px 20px 48px}
+.brand{display:inline-flex;align-items:center;gap:9px;color:#142e60;font-weight:700;font-size:18px;text-decoration:none}
+h1{font-size:26px;margin:18px 0 2px;color:#16356c}
+h2{font-size:17px;margin:24px 0 4px;color:#1d467d}
+p{margin:0 0 10px}ul{margin:0 0 10px;padding-inline-start:22px}li{margin-bottom:4px}
+.note{color:#7282a5;font-size:13px}
+footer{display:flex;gap:18px;border-top:1px solid #e0e8f5;margin-top:28px;padding-top:14px;font-size:14px}
+a{color:#1559b7}

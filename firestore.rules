@@ -38,7 +38,7 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
     match /users/{uid} {
-      allow get: if adminAllowed() || self(uid) || (developer() && resource.data.role == 'tester' && resource.data.available == true);
+      allow get: if adminAllowed() || (request.auth != null && request.auth.uid == uid) || (developer() && resource.data.role == 'tester' && resource.data.available == true);
       allow list: if adminAllowed() || (developer() && resource.data.role == 'tester' && resource.data.available == true);
       allow create: if self(uid)
         && request.resource.data.keys().hasOnly(['name','email','role','available','createdAt'])
@@ -110,6 +110,16 @@ service cloud.firestore {
         && (request.resource.data.status == 'draft'
           ? (request.resource.data.testersCount == 0 && request.resource.data.selectedTesterUids == [])
           : (request.resource.data.status == 'recruiting' && request.resource.data.testersCount > 0 && request.resource.data.testersCount <= 400));
+      // Testers may leave mid-test, so the owner can invite more. Earlier selections can only grow.
+      allow update: if developer() && resource.data.ownerUid == request.auth.uid
+        && resource.data.get('status','recruiting') == 'recruiting'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['selectedTesterUids','testersCount'])
+        && request.resource.data.selectedTesterUids is list
+        && request.resource.data.selectedTesterUids.hasAll(resource.data.get('selectedTesterUids',[]))
+        && request.resource.data.selectedTesterUids.toSet().size() == request.resource.data.selectedTesterUids.size()
+        && request.resource.data.testersCount is int
+        && request.resource.data.testersCount == request.resource.data.selectedTesterUids.size()
+        && request.resource.data.testersCount <= 400;
       // First step of deletion. An owner cannot use it to escape an admin archive.
       allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'deleting'
@@ -225,6 +235,21 @@ service cloud.firestore {
         && request.resource.data.status == 'fixed';
       allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
     }
+    // Spark has no trusted server: deletion is requested here and carried out by the admin.
+    match /deletionRequests/{uid} {
+      allow get: if adminAllowed() || (request.auth != null && request.auth.uid == uid);
+      allow list: if adminAllowed();
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['email','status','createdAt'])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time;
+      allow update: if adminAllowed()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','processedAt'])
+        && request.resource.data.status == 'processed'
+        && request.resource.data.processedAt == request.time;
+      allow delete: if false;
+    }
     // Only the push job (Admin SDK) reads tokens to send; no other account can, admins included.
     // The id is the token's hash, so a browser is one document, owned by whoever signed in there last.
     function validPushDevice(deviceId, d) {
@@ -252,7 +277,7 @@ service cloud.firestore {
       allow create: if adminAllowed()
         && request.resource.data.keys().hasOnly(['actorUid','action','targetId','targetName','createdAt'])
         && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','delete_project']
+        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion']
         && request.resource.data.targetId is string
         && request.resource.data.targetId.size() <= 128
         && request.resource.data.targetName is string
