@@ -16,5 +16,8 @@
     "@playwright/test": "^1.56.1",
     "firebase": "^12.6.0",
     "firebase-tools": "^14.26.0"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.10.0"
   }
 }

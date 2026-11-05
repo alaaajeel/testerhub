@@ -178,7 +178,7 @@ $('search').addEventListener('submit',event=>{
  });
 });
 if(!window.TESTERHUB_FIREBASE_CONFIG){
- gate('تعذر العثور على إعدادات Firebase. افتح TesterHub من الرابط الرسمي.');
+ gate('تعذر تحميل الإعدادات. افتح TesterHub من الرابط الرسمي.');
 }else{
  const app=initializeApp(window.TESTERHUB_FIREBASE_CONFIG),auth=getAuth(app);
  state.db=getFirestore(app);
