@@ -67,6 +67,11 @@ test('no credential ships with the site or the repository', () => {
  assert.match(read('.github/workflows/push.yml'), /secrets\.FIREBASE_SERVICE_ACCOUNT/);
  assert.match(read('.gitignore'), /service-account/);
 });
+test('the scheduled job skips quietly until the secret exists', () => {
+ const workflow = read('.github/workflows/push.yml').replace(/\r\n/g, '\n');
+ assert.match(workflow, /configured=false/);
+ assert.match(workflow, /- run: node scripts\/send-push\.mjs\n\s+if: steps\.secret\.outputs\.configured == 'true'/);
+});
 test('the public job log carries counts only', () => {
  assert.match(read('scripts/send-push.mjs'), /console\.log\(JSON\.stringify\(\{activity, reminders\}\)\)/);
  assert.doesNotMatch(read('scripts/send-push.mjs').replace(/\/\/.*/g, ''), /token|\.text/);

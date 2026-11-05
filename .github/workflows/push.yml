@@ -16,12 +16,27 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      # Until the owner adds the secret there is nothing to send, which is not a failure.
+      - id: secret
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Push is not set up yet: add the FIREBASE_SERVICE_ACCOUNT secret."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.secret.outputs.configured == 'true'
       - uses: actions/setup-node@v4
+        if: steps.secret.outputs.configured == 'true'
         with:
           node-version: 22
           cache: npm
       - run: npm ci --omit=dev --ignore-scripts
+        if: steps.secret.outputs.configured == 'true'
       - run: node scripts/send-push.mjs
+        if: steps.secret.outputs.configured == 'true'
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
