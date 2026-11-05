@@ -9,4 +9,4 @@ window.TESTERHUB_FIREBASE_CONFIG = {
   "measurementId": "G-6881JSTLT1"
 };
 /* Public Web Push key from Firebase Console; while empty, notifications work only with the app open. */
-window.TESTERHUB_VAPID_KEY = "";
+window.TESTERHUB_VAPID_KEY = "BKcpYCraioiBLe_oFiYUkNbvWAZpp-RSwvH79Mu0-6RVE-ddoPGWp4sK6VIU51E3glB6XqM8KFicfuD0ll-8PgY";
