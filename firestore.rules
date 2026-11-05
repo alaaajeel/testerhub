@@ -42,6 +42,11 @@ service cloud.firestore {
       return activeStaff()
         && get(/databases/$(database)/documents/staffRoles/$(request.auth.uid)).data.permissions.get(permission, false) == true;
     }
+    // Testers are sent to this link, so it may only ever point at Google Groups.
+    function validGroupLink(d) {
+      return !('groupLink' in d) || (d.groupLink is string && d.groupLink.size() <= 500
+        && (d.groupLink == '' || d.groupLink.matches('https://groups\\.google\\.com/[^ ]+')));
+    }
     // A project's records are removed only after the project is locked, so nothing new can arrive
     // and an interrupted deletion can be resumed. The project document itself is removed last.
     function canPurge(pid, ownerUid) {
@@ -110,7 +115,8 @@ service cloud.firestore {
     match /projects/{projectId} {
       allow get, list: if adminAllowed() || activeStaff() || (signedIn() && resource.data.ownerUid == request.auth.uid);
       allow create: if developer()
-        && request.resource.data.keys().hasOnly(['name','link','ownerUid','ownerName','createdAt','testersCount','selectedTesterUids','status','tasks'])
+        && request.resource.data.keys().hasOnly(['name','link','ownerUid','ownerName','createdAt','testersCount','selectedTesterUids','status','tasks','groupLink'])
+        && validGroupLink(request.resource.data)
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerName == me().data.name
         && request.resource.data.name is string
@@ -133,7 +139,8 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time;
       allow update: if developer() && resource.data.ownerUid == request.auth.uid
         && resource.data.get('status','recruiting') == 'draft'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','link','status','testersCount','selectedTesterUids','tasks'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','link','status','testersCount','selectedTesterUids','tasks','groupLink'])
+        && validGroupLink(request.resource.data)
         && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 70
         && request.resource.data.link is string && request.resource.data.link.size() <= 2000
         && (request.resource.data.status == 'draft' || request.resource.data.link.matches('https://play\\.google\\.com/.*'))
@@ -147,6 +154,10 @@ service cloud.firestore {
         && (request.resource.data.status == 'draft'
           ? (request.resource.data.testersCount == 0 && request.resource.data.selectedTesterUids == [])
           : (request.resource.data.status == 'recruiting' && request.resource.data.testersCount > 0 && request.resource.data.testersCount <= 400));
+      allow update: if developer() && resource.data.ownerUid == request.auth.uid
+        && resource.data.get('status','recruiting') == 'recruiting'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groupLink'])
+        && validGroupLink(request.resource.data);
       // Testers may leave mid-test, so the owner can invite more. Earlier selections can only grow.
       allow update: if developer() && resource.data.ownerUid == request.auth.uid
         && resource.data.get('status','recruiting') == 'recruiting'
@@ -189,7 +200,7 @@ service cloud.firestore {
       allow get, list: if adminAllowed() || staff('deleteProjects') || (signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
       allow create: if developer()
-        && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt','tasks','invitationStatus'])
+        && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt','tasks','invitationStatus','groupLink'])
         && assignmentId == request.resource.data.projectId + '_' + request.resource.data.testerUid
         && request.resource.data.ownerUid == request.auth.uid
         && project(request.resource.data.projectId).data.ownerUid == request.auth.uid
@@ -198,6 +209,7 @@ service cloud.firestore {
         && request.resource.data.name == project(request.resource.data.projectId).data.name
         && request.resource.data.link == project(request.resource.data.projectId).data.link
         && request.resource.data.get('tasks',[]) == project(request.resource.data.projectId).data.get('tasks',[])
+        && request.resource.data.get('groupLink','') == project(request.resource.data.projectId).data.get('groupLink','')
         && request.resource.data.testerUid != request.auth.uid
         && profile(request.resource.data.testerUid).data.available == true
         && request.resource.data.joinedDay == null
