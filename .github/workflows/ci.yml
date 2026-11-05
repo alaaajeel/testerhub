@@ -2,11 +2,11 @@ name: TesterHub checks
 on:
   pull_request:
   push:
-    branches: [main]
+    branches-ignore: [main]
 permissions:
   contents: read
 jobs:
-  checks:
+  accounts-security:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +20,8 @@ jobs:
           java-version: 21
       - run: npm ci
       - run: npm test
+      - run: npm run preflight
       - run: npm run test:rules
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-      - run: npm run preflight
+      - run: npm run build

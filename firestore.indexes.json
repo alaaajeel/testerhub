@@ -1,17 +1,33 @@
 {
   "indexes": [
-    {"collectionGroup": "messages", "queryScope": "COLLECTION", "fields": [
-      {"fieldPath": "ownerUid", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]},
-    {"collectionGroup": "messages", "queryScope": "COLLECTION", "fields": [
-      {"fieldPath": "testerUid", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]},
-    {"collectionGroup": "reports", "queryScope": "COLLECTION", "fields": [
-      {"fieldPath": "ownerUid", "order": "ASCENDING"}, {"fieldPath": "date", "order": "DESCENDING"}]},
-    {"collectionGroup": "reports", "queryScope": "COLLECTION", "fields": [
-      {"fieldPath": "testerUid", "order": "ASCENDING"}, {"fieldPath": "date", "order": "DESCENDING"}]},
-    {"collectionGroup": "projects", "queryScope": "COLLECTION", "fields": [
-      {"fieldPath": "status", "order": "ASCENDING"}, {"fieldPath": "listed", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]},
-    {"collectionGroup": "reports", "queryScope": "COLLECTION", "fields": [
-      {"fieldPath": "outcome", "order": "ASCENDING"}, {"fieldPath": "date", "order": "DESCENDING"}]}
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "role",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "available",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "outcome",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    }
   ],
   "fieldOverrides": []
 }

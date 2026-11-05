@@ -1,106 +1,120 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function path(name, id) { return /databases/$(database)/documents/$(name)/$(id); }
-    function me() { return get(path('users', request.auth.uid)); }
-    function self(uid) { return request.auth != null && request.auth.uid == uid; }
-    // A moderator block must take effect on existing sessions as well as new logins.
-    // Missing profiles are allowed only for the initial account creation flow.
     function signedIn() {
+      // A moderator block must take effect on existing sessions as well as new logins.
+      // Missing profiles are allowed only for the initial account creation flow.
       return request.auth != null
-        && (!exists(path('users', request.auth.uid)) || me().data.get('suspended', false) != true);
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true);
     }
-    function verified() { return signedIn() && request.auth.token.email_verified == true; }
-    function developer() { return verified() && me().data.role == 'developer'; }
-    function tester() { return verified() && me().data.role == 'tester'; }
-    // Authority comes only from adminRoles/{uid}, which no web client can write.
     function adminAllowed() {
-      return verified()
-        && exists(path('adminRoles', request.auth.uid))
-        && get(path('adminRoles', request.auth.uid)).data.get('active', false) == true;
+      // A role can only be provisioned manually using the Firebase console / Admin SDK.
+      // No client, including the holder, may create or edit a privileged role.
+      return signedIn() && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/adminRoles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/adminRoles/$(request.auth.uid)).data.get('active', false) == true;
     }
-    function project(pid) { return get(path('projects', pid)); }
-    function assignment(id) { return get(path('assignments', id)); }
-    function projectOpen(pid) { return !(project(pid).data.get('status', 'recruiting') in ['deleting', 'archived']); }
+    function verified() { return signedIn() && request.auth.token.email_verified == true && me().data.get('suspended',false) != true; }
+    function self(uid) { return signedIn() && request.auth.uid == uid; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function developer() { return verified() && me().data.role == 'developer'; }
+    function profile(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
+    function project(pid) { return get(/databases/$(database)/documents/projects/$(pid)); }
+    function assignment(id) { return get(/databases/$(database)/documents/assignments/$(id)); }
+    function assignmentAfter(id) { return getAfter(/databases/$(database)/documents/assignments/$(id)); }
     function currentUtcDay(day) {
       return day is string && day.matches('\\d{4}-\\d{2}-\\d{2}')
         && timestamp.date(int(day[0:4]), int(day[5:7]), int(day[8:10])) == request.time.date();
     }
-    function optionalText(data, field, max) {
-      return !(field in data) || (data[field] is string && data[field].size() <= max);
+    // A project's records are removed only after the project is locked, so nothing new can arrive
+    // and an interrupted deletion can be resumed. The project document itself is removed last.
+    function canPurge(pid, ownerUid) {
+      return adminAllowed() || (developer() && ownerUid == request.auth.uid
+        && project(pid).data.get('status','') == 'deleting');
     }
-
     match /adminRoles/{uid} {
-      allow get: if verified() && request.auth.uid == uid;
+      allow get: if signedIn() && request.auth.token.email_verified == true && request.auth.uid == uid;
       allow list, create, update, delete: if false;
     }
-
     match /users/{uid} {
-      // Suspended users may still read their own profile so the app can explain the suspension.
-      allow get: if self(uid) || adminAllowed();
-      allow list: if adminAllowed();
+      allow get: if adminAllowed() || self(uid) || (developer() && resource.data.role == 'tester' && resource.data.available == true);
+      allow list: if adminAllowed() || (developer() && resource.data.role == 'tester' && resource.data.available == true);
       allow create: if self(uid)
-        && request.resource.data.keys().hasOnly(['name','email','role','available','createdAt','termsAcceptedAt'])
+        && request.resource.data.keys().hasOnly(['name','email','role','available','createdAt'])
         && request.resource.data.role in ['tester','developer']
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 2
         && request.resource.data.name.size() <= 80
-        && request.resource.data.available == false
+        && request.resource.data.available is bool
         && request.resource.data.createdAt == request.time
-        && request.resource.data.termsAcceptedAt == request.time;
-      // One person can both test and publish: the role is a mode switch, never a privilege.
-      allow update: if signedIn() && self(uid)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','role','available','participationPaused'])
+        && (request.resource.data.role == 'tester' || request.resource.data.available == false);
+      allow update: if self(uid) && resource.data.get('suspended',false) != true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','available','participationPaused'])
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 80
-        && request.resource.data.role in ['tester','developer']
-        && request.resource.data.available == false;
+        && request.resource.data.available is bool
+        && (resource.data.role == 'tester' || request.resource.data.available == false)
+        && (!('participationPaused' in request.resource.data) ||
+            (resource.data.role == 'tester' && request.resource.data.participationPaused is bool))
+        && (!request.resource.data.get('participationPaused', false) || request.resource.data.available == false);
+      // Admin may quarantine users in Firestore without disabling Firebase Auth itself.
+      // The suspended account immediately loses Firestore access via signedIn().
       allow update: if adminAllowed()
         && request.auth.uid != uid
-        && !exists(path('adminRoles', uid))
+        && !exists(/databases/$(database)/documents/adminRoles/$(uid))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['suspended','available'])
         && request.resource.data.suspended is bool
-        && request.resource.data.available == false;
+        && (request.resource.data.suspended == false || request.resource.data.available == false)
+        && (request.resource.data.available == resource.data.available || request.resource.data.available == false);
       allow delete: if false;
     }
-
-    function validProject(d) {
-      return d.name is string && d.name.size() >= 2 && d.name.size() <= 100
-        && d.link is string && d.link.size() <= 2000
-        && d.tasks is list && d.tasks.size() <= 14 && d.tasks.join('|').size() <= 1680
-        && optionalText(d, 'description', 600)
-        && (!('listed' in d) || d.listed is bool)
-        && (!('testersWanted' in d) || (d.testersWanted is int && d.testersWanted >= 1 && d.testersWanted <= 100))
-        && (d.get('status', 'recruiting') == 'draft'
-          || (d.link.matches('https://play\\.google\\.com/.*') && d.tasks.size() >= 1));
-    }
-    function allowedTransition(from, to) {
-      return from == to
-        || (from == 'draft' && to == 'recruiting')
-        || (from == 'recruiting' && to in ['paused','completed'])
-        || (from == 'paused' && to in ['recruiting','completed'])
-        || (from == 'completed' && to == 'recruiting');
-    }
     match /projects/{projectId} {
-      // Open listings are readable by verified users; they contain no tester data.
-      allow get, list: if adminAllowed()
-        || (signedIn() && resource.data.ownerUid == request.auth.uid)
-        || (verified() && resource.data.get('status','') == 'recruiting' && resource.data.get('listed',false) == true);
+      allow get, list: if adminAllowed() || (signedIn() && resource.data.ownerUid == request.auth.uid);
       allow create: if developer()
-        && request.resource.data.keys().hasOnly(['name','link','ownerUid','ownerName','createdAt','status','tasks','description','listed','testersWanted'])
+        && request.resource.data.keys().hasOnly(['name','link','ownerUid','ownerName','createdAt','testersCount','selectedTesterUids','status','tasks'])
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerName == me().data.name
-        && request.resource.data.status in ['draft','recruiting']
-        && validProject(request.resource.data)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.link is string
+        && request.resource.data.link.size() <= 2000
+        && (request.resource.data.get('status','recruiting') == 'draft' || request.resource.data.link.matches('https://play\\.google\\.com/.*'))
+        && request.resource.data.tasks is list
+        && (request.resource.data.get('status','recruiting') == 'draft' ? request.resource.data.tasks.size() <= 14 : request.resource.data.tasks.size() >= 1 && request.resource.data.tasks.size() <= 14)
+        && request.resource.data.tasks.join('|').size() <= 1680
+        && request.resource.data.selectedTesterUids is list
+        && request.resource.data.selectedTesterUids.size() == request.resource.data.testersCount
+        && request.resource.data.selectedTesterUids.toSet().size() == request.resource.data.testersCount
+        && request.resource.data.testersCount is int
+        && (request.resource.data.get('status','recruiting') == 'draft'
+          ? (request.resource.data.testersCount == 0 && request.resource.data.selectedTesterUids == [] && request.resource.data.link.size() <= 2000)
+          : (request.resource.data.get('status','recruiting') == 'recruiting' && request.resource.data.testersCount > 0))
+        && request.resource.data.testersCount <= 400
         && request.resource.data.createdAt == request.time;
       allow update: if developer() && resource.data.ownerUid == request.auth.uid
-        && resource.data.get('status','recruiting') in ['draft','recruiting','paused','completed']
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','link','status','tasks','description','listed','testersWanted'])
-        && request.resource.data.get('status','recruiting') in ['draft','recruiting','paused','completed']
-        && allowedTransition(resource.data.get('status','recruiting'), request.resource.data.get('status','recruiting'))
-        && validProject(request.resource.data);
-      // Reversible archive only; permanent deletion remains unavailable on Spark.
+        && resource.data.get('status','recruiting') == 'draft'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','link','status','testersCount','selectedTesterUids','tasks'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 70
+        && request.resource.data.link is string && request.resource.data.link.size() <= 2000
+        && (request.resource.data.status == 'draft' || request.resource.data.link.matches('https://play\\.google\\.com/.*'))
+        && request.resource.data.tasks is list
+        && (request.resource.data.status == 'draft' ? request.resource.data.tasks.size() <= 14 : request.resource.data.tasks.size() >= 1 && request.resource.data.tasks.size() <= 14)
+        && request.resource.data.tasks.join('|').size() <= 1680
+        && request.resource.data.selectedTesterUids is list
+        && request.resource.data.selectedTesterUids.size() == request.resource.data.testersCount
+        && request.resource.data.selectedTesterUids.toSet().size() == request.resource.data.testersCount
+        && request.resource.data.testersCount is int
+        && (request.resource.data.status == 'draft'
+          ? (request.resource.data.testersCount == 0 && request.resource.data.selectedTesterUids == [])
+          : (request.resource.data.status == 'recruiting' && request.resource.data.testersCount > 0 && request.resource.data.testersCount <= 400));
+      // First step of deletion. An owner cannot use it to escape an admin archive.
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'deleting'
+        && (adminAllowed() || (developer() && resource.data.ownerUid == request.auth.uid
+          && resource.data.get('status','recruiting') in ['draft','recruiting','completed','paused']));
       allow update: if adminAllowed()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','statusBeforeArchive','archivedAt'])
         && (
@@ -115,71 +129,36 @@ service cloud.firestore {
             && !('statusBeforeArchive' in request.resource.data)
             && !('archivedAt' in request.resource.data))
         );
-      // Only an unpublished draft can be discarded; nothing references it yet.
-      allow delete: if developer() && resource.data.ownerUid == request.auth.uid && resource.data.get('status','') == 'draft';
+      allow delete: if adminAllowed() || (developer() && resource.data.ownerUid == request.auth.uid
+        && resource.data.get('status','') == 'deleting');
     }
-
-    // A tester's email reaches only the developer of the test they chose to apply to.
+    // Left by the short-lived application flow; readable and removable only for cleanup.
     match /applications/{applicationId} {
-      allow get, list: if adminAllowed() || (signedIn()
-        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
-      allow create: if tester()
-        && request.resource.data.keys().hasOnly(['projectId','projectName','ownerUid','testerUid','testerName','testerEmail','device','note','status','createdAt'])
-        && applicationId == request.resource.data.projectId + '_' + request.auth.uid
-        && request.resource.data.testerUid == request.auth.uid
-        && request.resource.data.testerName == me().data.name
-        && request.resource.data.testerEmail is string
-        && request.resource.data.testerEmail.size() <= 120
-        && request.resource.data.testerEmail.matches('[^@ ]+@[^@ ]+\\.[^@ ]+')
-        && project(request.resource.data.projectId).data.get('status','') == 'recruiting'
-        && project(request.resource.data.projectId).data.get('listed',false) == true
-        && project(request.resource.data.projectId).data.ownerUid != request.auth.uid
-        && request.resource.data.ownerUid == project(request.resource.data.projectId).data.ownerUid
-        && request.resource.data.projectName == project(request.resource.data.projectId).data.name
-        && optionalText(request.resource.data, 'device', 80)
-        && optionalText(request.resource.data, 'note', 300)
-        && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt == request.time;
-      allow update: if developer() && resource.data.ownerUid == request.auth.uid
-        && resource.data.status == 'pending'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','decidedAt'])
-        && request.resource.data.status in ['approved','rejected']
-        && request.resource.data.decidedAt == request.time;
-      allow update: if verified() && resource.data.testerUid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-        && ((resource.data.status == 'pending' && request.resource.data.status == 'withdrawn')
-          || (resource.data.status == 'withdrawn' && request.resource.data.status == 'pending'));
-      allow delete: if false;
+      allow get, list: if adminAllowed() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
+      allow create, update: if false;
     }
-
     match /assignments/{assignmentId} {
       allow get, list: if adminAllowed() || (signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
-      // Created in one batch with the application approval, never without it.
       allow create: if developer()
-        && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt','tasks','invitationStatus','source','testerName','testerEmail'])
+        && request.resource.data.keys().hasOnly(['projectId','testerUid','ownerUid','name','link','joinedDay','checkins','createdAt','tasks','invitationStatus'])
         && assignmentId == request.resource.data.projectId + '_' + request.resource.data.testerUid
         && request.resource.data.ownerUid == request.auth.uid
         && project(request.resource.data.projectId).data.ownerUid == request.auth.uid
         && project(request.resource.data.projectId).data.get('status','recruiting') == 'recruiting'
-        && getAfter(path('applications', assignmentId)).data.status == 'approved'
-        && getAfter(path('applications', assignmentId)).data.testerUid == request.resource.data.testerUid
-        && request.resource.data.testerName == getAfter(path('applications', assignmentId)).data.testerName
-        && request.resource.data.testerEmail == getAfter(path('applications', assignmentId)).data.testerEmail
+        && request.resource.data.testerUid in project(request.resource.data.projectId).data.selectedTesterUids
         && request.resource.data.name == project(request.resource.data.projectId).data.name
         && request.resource.data.link == project(request.resource.data.projectId).data.link
-        && request.resource.data.tasks == project(request.resource.data.projectId).data.tasks
-        && request.resource.data.source == 'application'
-        && request.resource.data.invitationStatus == 'accepted'
+        && request.resource.data.get('tasks',[]) == project(request.resource.data.projectId).data.get('tasks',[])
+        && profile(request.resource.data.testerUid).data.role == 'tester'
+        && profile(request.resource.data.testerUid).data.available == true
         && request.resource.data.joinedDay == null
         && request.resource.data.checkins == []
+        && request.resource.data.invitationStatus == 'pending'
         && request.resource.data.createdAt == request.time;
-      // The developer records that the email was really added in Play Console.
-      allow update: if developer() && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['addedToPlayAt'])
-        && request.resource.data.addedToPlayAt == request.time;
       allow update: if verified() && self(resource.data.testerUid)
-        && projectOpen(resource.data.projectId) && (
+        && !(project(resource.data.projectId).data.get('status','recruiting') in ['deleting','archived']) && (
         (resource.data.get('invitationStatus','legacy') == 'pending'
           && resource.data.createdAt is timestamp
           && request.time < resource.data.createdAt + duration.value(7, 'd')
@@ -190,19 +169,13 @@ service cloud.firestore {
         ||
         (resource.data.joinedDay == null
           && resource.data.get('invitationStatus','legacy') in ['accepted','legacy']
-          && (resource.data.get('source','invite') != 'application' || 'addedToPlayAt' in resource.data)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['joinedDay','joinedAt'])
           && request.resource.data.joinedDay is string
           && currentUtcDay(request.resource.data.joinedDay)
           && request.resource.data.joinedAt == request.time
           && request.resource.data.checkins == [])
         ||
-        (!('leftAt' in resource.data)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leftAt'])
-          && request.resource.data.leftAt == request.time)
-        ||
         (resource.data.joinedAt is timestamp
-          && !('leftAt' in resource.data)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checkins','lastCheckinAt'])
           && request.resource.data.lastCheckinAt == request.time
           && request.resource.data.checkins is list
@@ -211,20 +184,19 @@ service cloud.firestore {
           && request.resource.data.checkins.hasAll(resource.data.checkins)
           && !(request.resource.data.checkins[request.resource.data.checkins.size()-1] in resource.data.checkins)
           && currentUtcDay(request.resource.data.checkins[request.resource.data.checkins.size()-1])
-          && getAfter(path('reports', assignmentId + '_' + request.resource.data.checkins[request.resource.data.checkins.size()-1])).data.date == request.resource.data.checkins[request.resource.data.checkins.size()-1]
-          && getAfter(path('reports', assignmentId + '_' + request.resource.data.checkins[request.resource.data.checkins.size()-1])).data.testerUid == resource.data.testerUid
+          && getAfter(/databases/$(database)/documents/reports/$(assignmentId + '_' + request.resource.data.checkins[request.resource.data.checkins.size()-1])).data.date == request.resource.data.checkins[request.resource.data.checkins.size()-1]
+          && getAfter(/databases/$(database)/documents/reports/$(assignmentId + '_' + request.resource.data.checkins[request.resource.data.checkins.size()-1])).data.testerUid == resource.data.testerUid
           && request.time < resource.data.joinedAt + duration.value(15, 'd')
           && (!('lastCheckinAt' in resource.data) || request.time >= resource.data.lastCheckinAt + duration.value(14, 'h')))
       );
-      allow delete: if false;
+      allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
     }
-
     match /reports/{reportId} {
       allow get, list: if adminAllowed() || (signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
       allow create: if verified()
-        && projectOpen(request.resource.data.projectId)
-        && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','date','tested','outcome','notes','status','createdAt','submittedAt','steps','expected','severity','device'])
+        && !(project(request.resource.data.projectId).data.get('status','recruiting') in ['deleting','archived'])
+        && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','date','tested','outcome','notes','status','createdAt','submittedAt'])
         && reportId == request.resource.data.assignmentId + '_' + request.resource.data.date
         && request.resource.data.testerUid == request.auth.uid
         && assignment(request.resource.data.assignmentId).data.testerUid == request.auth.uid
@@ -235,15 +207,8 @@ service cloud.firestore {
         && request.resource.data.outcome in ['ok','issue']
         && request.resource.data.status == (request.resource.data.outcome == 'issue' ? 'new' : 'ok')
         && request.resource.data.notes is string
+        && request.resource.data.notes.size() >= 10
         && request.resource.data.notes.size() <= 800
-        && (request.resource.data.outcome == 'ok' || (
-          request.resource.data.notes.size() >= 10
-          && request.resource.data.get('steps','') is string
-          && request.resource.data.get('steps','').size() >= 5
-          && request.resource.data.get('severity','') in ['low','medium','high']))
-        && optionalText(request.resource.data, 'steps', 800)
-        && optionalText(request.resource.data, 'expected', 400)
-        && optionalText(request.resource.data, 'device', 80)
         && request.resource.data.tested is string
         && request.resource.data.tested.size() <= 150
         && (assignment(request.resource.data.assignmentId).data.get('tasks',[]).size() == 0
@@ -252,28 +217,34 @@ service cloud.firestore {
         && request.resource.data.createdAt is string
         && request.resource.data.submittedAt == request.time
         && !(request.resource.data.date in assignment(request.resource.data.assignmentId).data.checkins)
-        && request.resource.data.date in getAfter(path('assignments', request.resource.data.assignmentId)).data.checkins;
-      allow update: if verified() && projectOpen(resource.data.projectId)
-        && resource.data.outcome == 'issue'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','statusAt'])
-        && request.resource.data.get('statusAt', request.time) == request.time
-        && (
-          (resource.data.ownerUid == request.auth.uid
-            && resource.data.status in ['new','reopened']
-            && request.resource.data.status in ['fixed','wontfix'])
-          ||
-          (resource.data.testerUid == request.auth.uid
-            && resource.data.status == 'fixed'
-            && request.resource.data.status in ['verified','reopened'])
-        );
-      allow delete: if false;
+        && request.resource.data.date in assignmentAfter(request.resource.data.assignmentId).data.checkins;
+      allow update: if verified() && resource.data.ownerUid == request.auth.uid
+        && !(project(resource.data.projectId).data.get('status','recruiting') in ['deleting','archived'])
+        && resource.data.outcome == 'issue' && resource.data.status == 'new'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'fixed';
+      allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
     }
-
+    // Admin queue and audit logs are server-only. Firebase Admin SDK bypasses client rules.
+    match /adminDeleteJobs/{jobId} { allow read, write: if false; }
+    match /adminAuditLogs/{auditId} {
+      allow get, list: if adminAllowed();
+      allow create: if adminAllowed()
+        && request.resource.data.keys().hasOnly(['actorUid','action','targetId','targetName','createdAt'])
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','delete_project']
+        && request.resource.data.targetId is string
+        && request.resource.data.targetId.size() <= 128
+        && request.resource.data.targetName is string
+        && request.resource.data.targetName.size() <= 100
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
     match /messages/{messageId} {
       allow get, list: if adminAllowed() || (signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
       allow create: if verified()
-        && projectOpen(request.resource.data.projectId)
+        && !(project(request.resource.data.projectId).data.get('status','recruiting') in ['deleting','archived'])
         && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','sender','senderUid','text','at','createdAt'])
         && request.resource.data.senderUid == request.auth.uid
         && request.resource.data.sender in ['tester','developer']
@@ -287,57 +258,8 @@ service cloud.firestore {
         && request.resource.data.text.size() <= 830
         && request.resource.data.at is string
         && request.resource.data.createdAt == request.time;
-      allow update, delete: if false;
-    }
-
-    // Abuse reports go to the admin queue and are not visible to anyone else.
-    match /flags/{flagId} {
-      allow get, list: if adminAllowed();
-      allow create: if verified()
-        && request.resource.data.keys().hasOnly(['reporterUid','targetType','targetId','targetName','reason','status','createdAt'])
-        && request.resource.data.reporterUid == request.auth.uid
-        && request.resource.data.targetType in ['project','user']
-        && request.resource.data.targetId is string && request.resource.data.targetId.size() <= 128
-        && request.resource.data.targetName is string && request.resource.data.targetName.size() <= 100
-        && request.resource.data.reason is string
-        && request.resource.data.reason.size() >= 5 && request.resource.data.reason.size() <= 500
-        && request.resource.data.status == 'open'
-        && request.resource.data.createdAt == request.time;
-      allow update: if adminAllowed()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','closedAt'])
-        && request.resource.data.status == 'closed'
-        && request.resource.data.closedAt == request.time;
-      allow delete: if false;
-    }
-
-    // Spark has no trusted server: deletion is requested here and carried out by the admin.
-    match /deletionRequests/{uid} {
-      allow get: if self(uid) || adminAllowed();
-      allow list: if adminAllowed();
-      allow create: if request.auth != null && self(uid)
-        && request.resource.data.keys().hasOnly(['email','status','createdAt'])
-        && request.resource.data.email == request.auth.token.email
-        && request.resource.data.status == 'open'
-        && request.resource.data.createdAt == request.time;
-      allow update: if adminAllowed()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','processedAt'])
-        && request.resource.data.status == 'processed'
-        && request.resource.data.processedAt == request.time;
-      allow delete: if false;
-    }
-
-    match /adminAuditLogs/{auditId} {
-      allow get, list: if adminAllowed();
-      allow create: if adminAllowed()
-        && request.resource.data.keys().hasOnly(['actorUid','action','targetId','targetName','createdAt'])
-        && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','close_flag','process_deletion']
-        && request.resource.data.targetId is string
-        && request.resource.data.targetId.size() <= 128
-        && request.resource.data.targetName is string
-        && request.resource.data.targetName.size() <= 100
-        && request.resource.data.createdAt == request.time;
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
     }
   }
 }
