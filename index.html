@@ -112,6 +112,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .notice{font-size:11px;line-height:1.8;padding:10px 12px;border-radius:12px;background:#eaf3ff;color:#386397;margin:12px 0}
 .section-actions{display:flex;gap:8px}
 .section-actions .cta{flex:1}
+.section-actions:has([data-action="open-group"]){flex-wrap:wrap}
+.section-actions:has([data-action="open-group"]) .cta{flex:1 1 45%}
 .setting-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;gap:10px}
 .setting-row select{border:1px solid #d7e4f6;padding:7px;border-radius:9px;background:#f9fbff;font-size:13px}
 .warning{margin-top:9px}
