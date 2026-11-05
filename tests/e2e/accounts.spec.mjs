@@ -46,7 +46,7 @@ test('signup consent is opt-in and verification gate blocks dashboards',async({p
 });
 test('orphan account recovers same UID then requires verification',async({page})=>{
  await setup(page,{loggedIn:true});await expect(page.locator('#complete-profile-form')).toBeVisible();
- await page.locator('#recover-name').fill('مطور جديد');await page.locator('#recover-role').selectOption('developer');
+ await page.locator('#recover-name').fill('مطور جديد');await expect(page.locator('#recover-role')).toHaveCount(0);
  await page.locator('#complete-profile-form button').click();await expect(page.locator('[data-action="check-verification"]')).toBeVisible();
  expect(await page.evaluate(()=>window.fakeAuth.currentUser.uid)).toBe('u1');
 });
