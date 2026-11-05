@@ -53,9 +53,13 @@
       try { await a.sendPasswordResetEmail(auth, email.trim()); }
       catch (err) { if (err.code !== 'auth/user-not-found') throw err; }
     }
-    async function updateProfile({name, available, participationPaused}) {
+    async function updateProfile({name, role, available, participationPaused}) {
       const u = session(), changes = {};
       if (name !== undefined) changes.name = nameValue(name);
+      if (role !== undefined) {
+        if (!['tester', 'developer'].includes(role)) throw fail('profile/invalid-role');
+        changes.role = role;
+      }
       if (available !== undefined) changes.available = !!available;
       if (participationPaused !== undefined) {
         changes.participationPaused = !!participationPaused;

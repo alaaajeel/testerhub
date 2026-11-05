@@ -74,8 +74,8 @@ service cloud.firestore {
       allow delete: if adminAllowed();
     }
     match /users/{uid} {
-      allow get: if adminAllowed() || staff('viewUsers') || (request.auth != null && request.auth.uid == uid) || (developer() && resource.data.role == 'tester' && resource.data.available == true);
-      allow list: if adminAllowed() || staff('viewUsers') || (developer() && resource.data.role == 'tester' && resource.data.available == true);
+      allow get: if adminAllowed() || staff('viewUsers') || (request.auth != null && request.auth.uid == uid) || (developer() && resource.data.available == true);
+      allow list: if adminAllowed() || staff('viewUsers') || (developer() && resource.data.available == true);
       allow create: if self(uid)
         && request.resource.data.keys().hasOnly(['name','email','role','available','createdAt'])
         && request.resource.data.role in ['tester','developer']
@@ -87,13 +87,13 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && (request.resource.data.role == 'tester' || request.resource.data.available == false);
       allow update: if self(uid) && resource.data.get('suspended',false) != true
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','available','participationPaused'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','role','available','participationPaused'])
+        // One person can both test and publish: the role is a view switch, never a privilege.
+        && request.resource.data.role in ['tester','developer']
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 80
         && request.resource.data.available is bool
-        && (resource.data.role == 'tester' || request.resource.data.available == false)
-        && (!('participationPaused' in request.resource.data) ||
-            (resource.data.role == 'tester' && request.resource.data.participationPaused is bool))
+        && (!('participationPaused' in request.resource.data) || request.resource.data.participationPaused is bool)
         && (!request.resource.data.get('participationPaused', false) || request.resource.data.available == false);
       // Admin may quarantine users in Firestore without disabling Firebase Auth itself.
       // The suspended account immediately loses Firestore access via signedIn().
@@ -198,7 +198,7 @@ service cloud.firestore {
         && request.resource.data.name == project(request.resource.data.projectId).data.name
         && request.resource.data.link == project(request.resource.data.projectId).data.link
         && request.resource.data.get('tasks',[]) == project(request.resource.data.projectId).data.get('tasks',[])
-        && profile(request.resource.data.testerUid).data.role == 'tester'
+        && request.resource.data.testerUid != request.auth.uid
         && profile(request.resource.data.testerUid).data.available == true
         && request.resource.data.joinedDay == null
         && request.resource.data.checkins == []
