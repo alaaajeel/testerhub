@@ -58,7 +58,7 @@ test('admin can suspend a tester with an audit entry; tester immediately loses F
  batch.update(doc(a,'users','tester1'),{suspended:true,available:false});
  batch.set(doc(a,'adminAuditLogs','s1'),{actorUid:ADMIN_ID,action:'suspend_user',targetId:'tester1',targetName:'tester1@example.com',createdAt:serverTimestamp()});
  await assertSucceeds(batch.commit());
- await assertFails(getDoc(doc(db('tester1'),'users','tester1')));
+ await assertFails(getDoc(doc(db('tester1'),'projects','p1')));
  await assertFails(getDoc(doc(db('tester1'),'assignments','p1_tester1')));
  await assertSucceeds(getDoc(doc(a,'adminAuditLogs','s1')));
 });

@@ -9,6 +9,7 @@ const TABS={
  projects:{title:'التطبيقات',order:()=>documentId(),search:'اسم التطبيق'},
  users:{title:'المستخدمون',order:()=>documentId(),search:'البريد الكامل'},
  issues:{title:'بلاغات المشاكل',collection:'reports',order:()=>'date',desc:true,filter:()=>where('outcome','==','issue')},
+ deletionRequests:{title:'طلبات حذف الحسابات',order:()=>'createdAt',desc:true},
  adminAuditLogs:{title:'سجل إجراءات الإدارة',order:()=>'createdAt',desc:true}
 };
 const STATUS={draft:['مسودة',''],recruiting:['يستقبل المختبرين','good'],paused:['متوقف','warn'],completed:['مكتمل',''],archived:['مؤرشف','warn'],deleting:['حذف غير مكتمل','bad']};
@@ -68,10 +69,13 @@ function issueRow(item){
  return '<article class="item"><div class="info"><strong>'+esc(item.notes||'بلاغ')+'</strong><small>'+esc(item.tested||'')+'</small><small>'+esc(item.date||'')+'</small></div><span class="tag '+(fixed?'good':'warn')+'">'+(fixed?'تم الإصلاح':'مفتوح')+'</span></article>';
 }
 function auditRow(item){
- const names={suspend_user:'إيقاف حساب',unsuspend_user:'إعادة تنشيط حساب',archive_project:'أرشفة تطبيق',restore_project:'إلغاء أرشفة تطبيق',delete_project:'حذف تطبيق نهائياً'};
+ const names={suspend_user:'إيقاف حساب',unsuspend_user:'إعادة تنشيط حساب',archive_project:'أرشفة تطبيق',restore_project:'إلغاء أرشفة تطبيق',delete_project:'حذف تطبيق نهائياً',process_deletion:'معالجة طلب حذف حساب'};
  return '<article class="item"><div class="info"><strong>'+esc(names[item.action]||item.action||'إجراء')+'</strong><small>'+esc(item.targetName||item.targetId||'')+'</small></div><small>'+esc(stamped(item.createdAt))+'</small></article>';
 }
-const ROWS={projects:projectRow,users:userRow,issues:issueRow,adminAuditLogs:auditRow};
+function deletionRow(item){
+ return '<article class="item"><div class="info"><strong dir="ltr" style="text-align:right">'+esc(item.email||item.id)+'</strong><small>'+esc(stamped(item.createdAt))+'</small></div>'+(item.status==='open'?button('process-deletion',item.id,'تمت المعالجة'):'<span class="tag good">تمت المعالجة</span>')+'</article>';
+}
+const ROWS={projects:projectRow,users:userRow,issues:issueRow,deletionRequests:deletionRow,adminAuditLogs:auditRow};
 function renderList(){
  const type=state.tab,source=TABS[type];
  const needle=state.filter.trim().toLowerCase();
@@ -144,11 +148,20 @@ async function removeProject(project){
  state.rows=state.rows.filter(x=>x.id!==project.id);
  toast('تم حذف التطبيق وكل بياناته.');
 }
+async function processDeletion(item){
+ const batch=writeBatch(state.db);
+ batch.update(doc(state.db,'deletionRequests',item.id),{status:'processed',processedAt:serverTimestamp()});
+ batchAudit(batch,'process_deletion',item.id,item.email);
+ await batch.commit();
+ item.status='processed';
+ toast('سُجّل الطلب كمعالَج.');
+}
 const PROMPTS={
+ 'process-deletion':item=>({title:'هل نفّذت الحذف فعلاً؟',body:'نفّذ الحذف أولاً من Firebase Console: احذف حساب '+(item.email||item.id)+' من Authentication، ومستند users الخاص به من Firestore، ثم أكد هنا.',action:'نعم، نُفّذ'}),
  suspend:item=>({title:(item.suspended?'إعادة تنشيط ':'إيقاف ')+(item.email||item.name||item.id)+'؟',body:item.suspended?'':'الإيقاف يمنع استخدام البيانات فوراً وتبقى بياناته محفوظة. حساب الدخول نفسه يُعطَّل من Firebase Console.',danger:!item.suspended}),
  archive:item=>({title:(item.status==='archived'?'إلغاء أرشفة ':'أرشفة ')+item.name+'؟',body:item.status==='archived'?'':'تتوقف التقارير والرسائل الجديدة، ولا تُحذف البيانات القديمة.'})
 };
-const ACTIONS={suspend:setSuspension,archive:archiveProject,details:loadDetails,delete:removeProject};
+const ACTIONS={'process-deletion':processDeletion,suspend:setSuspension,archive:archiveProject,details:loadDetails,delete:removeProject};
 document.addEventListener('click',event=>{
  const tab=event.target.closest('[data-tab]');
  if(tab){state.tab=tab.dataset.tab;state.filter='';$('searchInput').value='';guarded(()=>page(true));return}
