@@ -899,8 +899,9 @@ function startLiveSync(){
   liveSubscriptions.push(storeFns.onSnapshot(q,snap=>{
    const ids=new Set(snap.docs.map(d=>d.id));
    if(!initialized){
+    // Waiting for a server-confirmed snapshot here swallowed the first real change.
     knownIds=ids;
-    if(!snap.metadata.fromCache)initialized=true;
+    initialized=true;
     return;
    }
    if(user?.uid!==uid)return;
