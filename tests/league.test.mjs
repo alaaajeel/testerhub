@@ -41,3 +41,14 @@ test('both roles reach the league; no money or prize wording',()=>{
  const page=from('function leagueSection(','function rewards(');
  assert.doesNotMatch(page,/دينار|دولار|USD|جائزة مالية|سحب/);
 });
+test('the daily league is the first tab and sample rows are labelled and leave once five real members rank',()=>{
+ assert.match(html,/leagueKind='day'/);
+ assert.match(html,/\['day','اليوم'\],\['week','هذا الأسبوع'\],\['month','هذا الشهر'\]/);
+ const ctx=vm.createContext({clean:x=>String(x),formatNum:String});
+ const f=vm.runInContext(from('const LEAGUE_SAMPLE_UNTIL=','function leagueSection(')+';leagueSamples',ctx);
+ const two=f(2);
+ assert.equal((two.match(/league-row sample/g)||[]).length,3);
+ assert.match(two,/ليست أسماء حقيقية/);
+ assert.doesNotMatch(two,/league-rank top/);
+ assert.equal(f(5),'');assert.equal(f(9),'');
+});

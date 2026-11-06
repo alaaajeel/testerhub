@@ -231,12 +231,12 @@ html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 .retest-notice{margin:0 0 8px}
 .badge-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .xp-badge{font-size:11px;font-weight:700;background:#fff7e3;color:#8a5a00;border:1px solid #f3dca5;border-radius:99px;padding:4px 9px}
-.segmented{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#eef3fb;border-radius:12px;padding:4px;margin:10px 0}
+.segmented{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));grid-auto-flow:column;gap:4px;background:#eef3fb;border-radius:12px;padding:4px;margin:10px 0}
 .segmented button{min-height:38px;border:0;border-radius:9px;background:transparent;font:inherit;font-size:13px;font-weight:700;color:#5b6b8c;cursor:pointer}
 .segmented button.active{background:#fff;color:#1559b7;box-shadow:0 2px 6px rgba(21,70,141,.12)}
 .league-list{display:grid;gap:6px}
 .league-row{display:flex;align-items:center;gap:10px;min-height:48px;padding:7px 10px;border:1px solid #e1eaf7;border-radius:12px;background:#fbfcff;min-width:0}
-.league-row.mine{border-color:#0caa79;background:#ebfaf3}
+.league-sample{margin-top:12px;padding:10px;border:1px dashed #b9c7dc;border-radius:14px;display:grid;gap:6px}.league-row.sample{opacity:.72;border-style:dashed}.league-row.sample .league-rank{font-size:11px;width:auto;padding:0 8px}.league-row.mine{border-color:#0caa79;background:#ebfaf3}
 .league-rank{width:28px;height:28px;flex:none;display:grid;place-items:center;border-radius:50%;background:#eef2f8;font-size:12px;font-weight:800;color:#5b6b8c}
 .league-rank.top{background:linear-gradient(135deg,#f5c242,#e3a33e);color:#fff}
 .league-who{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -763,6 +763,8 @@ const XP_CYCLE_MIN_ACCEPTED=7;
 const LEGACY_XP_CUTOFF=String(window.TESTERHUB_XP_START||'2026-11-06');
 const xpWeekKey=(ms=Date.now())=>'W'+Math.floor((ms+259200000)/604800000);
 const xpMonthKey=(ms=Date.now())=>{const d=new Date(ms);return 'M'+(d.getUTCFullYear()*100+d.getUTCMonth()+1)};
+// The same UTC day the rules compute from the event's server time.
+const xpDayKey=(ms=Date.now())=>{const d=new Date(ms);return 'D'+(d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate())};
 const xpKindForReport=r=>needsFollowUp(r)?'bug':'report';
 function pendingXpEvents({reports=[],assignments=[],eventIds=new Set(),ledgers=new Map()}){
  const out=[],seen=new Set(eventIds),newlyAccepted=new Map(),byId=new Map(assignments.map(a=>[a.id,a]));
@@ -798,13 +800,13 @@ async function awardXp(ev,firstForAssignment){
   const now=Date.now(),bump=(o,extra={})=>{o.points=(o.points||0)+ev.points;for(const k of ['report','bug','retest','cycle'])o[k+'s']=(o[k+'s']||0)+(ev.kind===k?1:0);Object.assign(o,extra);return o};
   d.xp.events[ev.id]={...ev,week:xpWeekKey(now),month:xpMonthKey(now),createdAt:new Date(now).toISOString()};
   const total=d.xp.totals[ev.testerUid]??={uid:ev.testerUid};bump(total,{apps:(total.apps||0)+(d.xp.ledgers[ev.assignmentId]?0:1)});
-  for(const period of [xpWeekKey(now),xpMonthKey(now)])bump(d.xp.periods[period+'_'+ev.testerUid]??={uid:ev.testerUid,period});
+  for(const period of [xpDayKey(now),xpWeekKey(now),xpMonthKey(now)])bump(d.xp.periods[period+'_'+ev.testerUid]??={uid:ev.testerUid,period});
   bump(d.xp.ledgers[ev.assignmentId]??={testerUid:ev.testerUid,ownerUid:ev.ownerUid,projectId:ev.projectId});
   save(d);return true;
  }
  const active=await currentUser();
  if(!active)throw Error('سجّل الدخول أولاً');
- const {doc,writeBatch,serverTimestamp,increment}=storeFns,now=Date.now(),week=xpWeekKey(now),month=xpMonthKey(now);
+ const {doc,writeBatch,serverTimestamp,increment}=storeFns,now=Date.now(),week=xpWeekKey(now),month=xpMonthKey(now),day=xpDayKey(now);
  const counters={points:increment(ev.points),reports:increment(ev.kind==='report'?1:0),bugs:increment(ev.kind==='bug'?1:0),
   retests:increment(ev.kind==='retest'?1:0),cycles:increment(ev.kind==='cycle'?1:0),lastEventId:ev.id,updatedAt:serverTimestamp()};
  const batch=writeBatch(db);
@@ -813,6 +815,7 @@ async function awardXp(ev,firstForAssignment){
  batch.set(doc(db,'xpTotals',ev.testerUid),{uid:ev.testerUid,...counters,apps:increment(firstForAssignment?1:0)},{merge:true});
  batch.set(doc(db,'xpPeriods',week+'_'+ev.testerUid),{uid:ev.testerUid,period:week,...counters},{merge:true});
  batch.set(doc(db,'xpPeriods',month+'_'+ev.testerUid),{uid:ev.testerUid,period:month,...counters},{merge:true});
+ batch.set(doc(db,'xpPeriods',day+'_'+ev.testerUid),{uid:ev.testerUid,period:day,...counters},{merge:true});
  batch.set(doc(db,'xpAssignments',ev.assignmentId),{testerUid:ev.testerUid,ownerUid:ev.ownerUid,projectId:ev.projectId,...counters},{merge:true});
  await batch.commit();
  return true;
@@ -835,7 +838,7 @@ async function syncMyXp(){
   const ledgers=new Map(Object.entries(d.xp.ledgers).filter(([,l])=>l.testerUid===active.uid));
   const pending=pendingXpEvents({reports:d.reports.filter(r=>r.testerUid===active.uid),assignments:mine,eventIds:new Set(Object.keys(d.xp.events)),ledgers});
   const added=await awardPending(pending,ledgers);
-  const fresh=demoState().xp;
+  const fresh=demoState().xp||{totals:{},ledgers:{}};
   return {added,totals:fresh.totals[active.uid]||null,ledgers:Object.fromEntries(Object.entries(fresh.ledgers).filter(([,l])=>l.testerUid===active.uid))};
  }
  const {collection,query,where,getDocs,getDocFromServer,doc}=storeFns;
@@ -882,9 +885,9 @@ const xpBadges=t=>XP_BADGES.filter(([,ok])=>ok(t||{})).map(([name])=>name);
 const LEAGUE_SIZE=20;
 // Ranks by points; ties are ordered by account id so the list does not jump between loads.
 function rankLeague(rows){return rows.slice().sort((a,b)=>(b.points||0)-(a.points||0)||String(a.uid).localeCompare(String(b.uid))).map((r,i)=>({...r,rank:i+1}))}
-async function getLeague(kind='week'){
+async function getLeague(kind='day'){
  const active=await currentUser();if(!active)return null;
- const period=kind==='month'?xpMonthKey():xpWeekKey();
+ const period=kind==='month'?xpMonthKey():kind==='week'?xpWeekKey():xpDayKey();
  if(isDemo){
   const d=demoState(),x=d.xp||{periods:{},totals:{}},names=d.publicProfiles||{};
   const all=rankLeague(Object.values(x.periods||{}).filter(p=>p.period===period));
@@ -1339,7 +1342,7 @@ function testerTests(){
  const group=(title,items)=>items.length?`<section aria-label="${clean(title)}"><div class="section-title">${title} · ${items.length}</div>${items.map(assignmentCard).join('')}</section>`:'';
  return `<div class="surface"><div class="row between"><div><div class="lead">اختباراتي</div><div class="small">ابدأ بالمطلوب اليوم، ثم راجع الدعوات. التواريخ محفوظة بتوقيت UTC.</div></div><button class="cta outline" data-action="refresh-tests">تحديث</button></div></div>${group('مطلوب اليوم',work.due)}${group('دعوات وتجهيز الاختبار',work.invites)}${group('بانتظار موعد التقرير التالي',work.cooldown)}${group('تقرير اليوم محفوظ',work.completed)}${group('المشاركات السابقة',work.expired)}${!all.length?'<div class="tab-empty"><h3>ما عندك اختبارات حالياً</h3>تظهر التطبيقات بعد إضافتك من المطور.</div>':''}`;
 }
-let rewardsState='idle',leagueKind='week',league=null,leagueState='idle';
+let rewardsState='idle',leagueKind='day',league=null,leagueState='idle';
 async function openRewards(){
  rewardsState='loading';render();
  const uid=user?.uid;
@@ -1358,22 +1361,30 @@ function leagueRow(r,mine){
  const level=xpLevel(r.total||0),name=mine?'أنت':r.name||'مساهم';
  return `<div class="league-row ${mine?'mine':''}"><span class="league-rank ${r.rank<=3?'top':''}">${formatNum(r.rank)}</span><div class="league-who"><strong>${clean(name)}</strong><span class="tiny">${clean(level.name)}${r.apps?' · ساعد '+formatNum(r.apps)+' تطبيق':''}</span></div><span class="league-points">${formatNum(r.points||0)} XP</span></div>`;
 }
+const LEAGUE_SAMPLE_UNTIL=5;
+const LEAGUE_SAMPLES=[['مختبر تجريبي (أ)',60,'تقريران مقبولان وبلاغ مؤكد'],['مختبر تجريبي (ب)',40,'بلاغان مؤكدان'],['مختبر تجريبي (ج)',30,'3 تقارير مقبولة'],['مختبر تجريبي (د)',20,'تقريران مقبولان'],['مختبر تجريبي (هـ)',10,'تقرير مقبول']];
+function leagueSamples(real){
+ const need=LEAGUE_SAMPLE_UNTIL-real;if(need<=0)return '';
+ return `<div class="league-sample"><div class="row between"><strong>ترتيب تجريبي للتوضيح</strong><span class="chip">ليست أسماء حقيقية</span></div><div class="tiny">هكذا يبدو التنافس. هذه الأسماء أمثلة فقط ولا تنافسك، وتختفي تلقائياً أول ما يمتلئ الترتيب بمساهمين حقيقيين.</div>${LEAGUE_SAMPLES.slice(0,need).map(([name,points,why])=>`<div class="league-row sample" aria-label="مثال توضيحي"><span class="league-rank">مثال</span><div class="league-who"><strong>${clean(name)}</strong><span class="tiny">${clean(why)}</span></div><span class="league-points">${formatNum(points)} XP</span></div>`).join('')}</div>`;
+}
 function leagueSection(){
- const tabs=[['week','هذا الأسبوع'],['month','هذا الشهر']].map(([k,label])=>`<button type="button" class="${leagueKind===k?'active':''}" data-action="league-kind" data-id="${k}" aria-pressed="${leagueKind===k}">${label}</button>`).join('');
+ const tabs=[['day','اليوم'],['week','هذا الأسبوع'],['month','هذا الشهر']].map(([k,label])=>`<button type="button" class="${leagueKind===k?'active':''}" data-action="league-kind" data-id="${k}" aria-pressed="${leagueKind===k}">${label}</button>`).join('');
  let body='';
  if(leagueState==='loading'&&!league)body='<div class="tiny">جاري تحميل الترتيب…</div>';
  else if(leagueState==='error')body='<div class="notice">تعذّر تحميل الترتيب الآن. حاول مرة ثانية.</div>';
  else if(league){
   const rows=league.rows.map(r=>leagueRow(r,r.uid===user.uid)).join('');
   const meOutside=league.me&&!league.rows.some(r=>r.uid===user.uid);
-  body=(rows||`<div class="empty">ماكو نقاط موثّقة ${leagueKind==='month'?'هذا الشهر':'هذا الأسبوع'} لحد الآن. أول تقرير مقبول يحطك بالترتيب.</div>`)+
+  const period=leagueKind==='month'?'هذا الشهر':leagueKind==='week'?'هذا الأسبوع':'اليوم';
+  body=(rows||`<div class="empty">ماكو نقاط موثّقة ${period} لحد الآن. أول تقرير مقبول يحطك بالترتيب.</div>`)+
    (meOutside?`<div class="league-gap">…</div>${leagueRow({...league.me,rank:league.rank},true)}`:'')+
-   (!league.me&&rows?'<div class="tiny" style="margin-top:8px">تدخل الترتيب أول ما ينقبل لك تقرير.</div>':'');
+   (!league.me&&rows?'<div class="tiny" style="margin-top:8px">تدخل الترتيب أول ما ينقبل لك تقرير.</div>':'')+
+   leagueSamples(league.rows.length);
  }
  const show=!!league?.showName;
  return `<section class="surface league" aria-label="دوري المساهمين"><div class="row between"><div class="lead">🏆 دوري المساهمين</div><span class="tiny">بالنقاط الموثّقة</span></div><div class="segmented" role="group" aria-label="فترة الترتيب">${tabs}</div><div class="league-list">${body}</div>
  <label class="league-name"><input type="checkbox" data-change="league-name" ${show?'checked':''} ${league?'':'disabled'}><span>اظهر اسمي بالترتيب<small>بدون تفعيل يظهر اسمك «مساهم». البريد ما يظهر أبداً.</small></span></label>
- <div class="tiny">الترتيب الأسبوعي يبدأ من جديد كل إثنين، فالكل يگدر ينافس، حتى المتطوعين اللي ما عندهم تطبيق.</div></section>`;
+ <div class="tiny">ترتيب اليوم يبدأ من جديد كل يوم، والأسبوعي كل إثنين، فالكل يگدر ينافس، حتى المتطوعين اللي ما عندهم تطبيق.</div></section>`;
 }
 function rewards(){
  const t=dashboard.xp?.totals||{},points=t.points||0,level=xpLevel(points),legacy=legacyXp(primaryAssignments());
