@@ -1904,7 +1904,7 @@ async function flushLiveSync(){
 }
 
 let leagueNameChecked='';
-async function refresh(){if(!user){stopPresence();return}const uid=user.uid;setTimeout(startPresence,0);if(leagueNameChecked!==uid){leagueNameChecked=uid;api.refreshLeagueName().then(()=>{if(tab==='profile'&&user?.uid===uid)render()}).catch(err=>console.warn('League name:',err))}const [fresh]=await Promise.all([api.getDashboard(),refreshAdminNotices()]);if(user?.uid!==uid)return;dashboard=fresh;startLiveSync();render()}
+async function refresh(){if(!user){stopPresence();return}const uid=user.uid;if(leagueNameChecked!==uid){leagueNameChecked=uid;api.refreshLeagueName().then(()=>{if(tab==='profile'&&user?.uid===uid)render()}).catch(err=>console.warn('League name:',err))}const [fresh]=await Promise.all([api.getDashboard(),refreshAdminNotices()]);if(user?.uid!==uid)return;dashboard=fresh;startLiveSync();render();startPresence()}
 const splashStartedAt=performance.now();
 let splashDismissed=false;
 function finishLaunchSplash(){
@@ -1925,7 +1925,7 @@ async function start(){
   finishLaunchSplash();
   return;
  }
- try{await api.initialize();user=await api.currentUser();if(user)dashboard=await api.getDashboard();if(user){await updateAdminAccess();startLiveSync()}render();maybeDailyReminder()}
+ try{await api.initialize();user=await api.currentUser();if(user)dashboard=await api.getDashboard();if(user){await updateAdminAccess();startLiveSync()}render();if(user)startPresence();maybeDailyReminder()}
  catch(err){app.innerHTML=`<div class="loading" style="padding:25px;line-height:2;text-align:center">تعذر تشغيل الاتصال: ${clean(humanError(err))}<br/>تحقق من الاتصال بالإنترنت.<button class="item-link" data-action="retry-start">إعادة المحاولة</button><button class="item-link" data-action="logout">تسجيل الخروج</button></div>`;console.error(err)}
  finally{finishLaunchSplash()}
 }
