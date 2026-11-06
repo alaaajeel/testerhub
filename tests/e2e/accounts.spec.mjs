@@ -62,15 +62,19 @@ test('profile writes confirm success only after accepted save; logout removes pr
  await page.evaluate(()=>window.fixture.failSave=true);await page.locator('#profile-name').fill('اسم مرفوض');await page.locator('#profile-form button').click();await expect(page.locator('#toast')).toContainText('رفضت قاعدة البيانات');
  await page.locator('[data-action="logout"]').click();await expect(page.locator('#auth-form')).toBeVisible();await expect(page.locator('#profile-form')).toHaveCount(0);
 });
-test('developer selects testers explicitly before copying emails',async({page})=>{
+test('add-app form shows no tester names or emails and copies the whole eligible list',async({page})=>{
  await setup(page,{loggedIn:true,profile:{name:'Developer',role:'developer',available:false}});
  await page.evaluate(()=>window.fixture.verified=true);await page.locator('[data-action="check-verification"]').click();
  await page.evaluate(()=>{dashboard.testers=[{uid:'t1',name:'Tester One',email:'one@example.com',available:true,role:'tester'},{uid:'t2',name:'Tester Two',email:'two@example.com',available:true,role:'tester'}];tab='new';render()});
- await expect(page.locator('[name="testerUid"]:checked')).toHaveCount(0);
- await page.locator('[name="testerUid"][value="t2"]').check();
- expect(await page.evaluate(()=>selectedProjectTesters().map(t=>t.uid))).toEqual(['t2']);
+ await expect(page.locator('#project-form [name="testerUid"]')).toHaveCount(0);
+ await expect(page.locator('#project-form')).not.toContainText('one@example.com');
+ await expect(page.locator('#project-form')).not.toContainText('Tester One');
+ await page.evaluate(()=>{window.copied=[];navigator.clipboard.writeText=async t=>{window.copied.push(t)}});
+ await page.locator('#project-form [data-action="copy-emails"]').click();
+ expect(await page.evaluate(()=>window.copied)).toEqual(['one@example.com, two@example.com']);
+ await expect(page.locator('.prepared')).toContainText('٢');
 });
-test('developer saves draft, edits it, then invites only selected tester',async({page})=>{
+test('developer saves draft, edits it, then invites exactly the prepared list',async({page})=>{
  await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
  await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
  await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();tab='new';render()});
@@ -82,17 +86,21 @@ test('developer saves draft, edits it, then invites only selected tester',async(
  await page.locator('#project-name').fill('Published Test');
  await page.locator('#project-tasks').fill('جرّب تسجيل الدخول بحسابك');
  await page.locator('#project-link').fill('https://play.google.com/apps/testing/test');
- await page.locator('[name="testerUid"][value="t2"]').check();
+ await page.evaluate(()=>{navigator.clipboard.writeText=async()=>{}});
+ await page.locator('#project-form [data-action="copy-emails"]').click();
+ const prepared=await page.evaluate(()=>preparedList().map(t=>t.uid));
+ expect(prepared.length).toBeGreaterThan(0);
  await page.locator('[name="confirmed"]').check();
  await page.locator('#project-form button[value="publish"]').click();
  await expect(page.locator('.lead',{hasText:'Published Test'})).toBeVisible();
- expect(await page.evaluate(()=>dashboard.assignments.filter(a=>a.projectId===selectedProjectId).map(a=>a.testerUid))).toEqual(['t2']);
+ expect(await page.evaluate(()=>dashboard.assignments.filter(a=>a.projectId===selectedProjectId).map(a=>a.testerUid).sort())).toEqual(prepared.sort());
 });
 test('assigned task appears in daily report and saved report keeps its snapshot',async({page})=>{
  await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
  await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
  await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();tab='new';render()});
- await page.locator('[name="testerUid"][value="t1"]').check();
+ await page.evaluate(()=>{navigator.clipboard.writeText=async()=>{}});
+ await page.locator('#project-form [data-action="copy-emails"]').click();
  await page.locator('#project-name').fill('Search Test');
  await page.locator('#project-tasks').fill('ابحث عن منتج وافتح تفاصيله');
  await page.locator('#project-link').fill('https://play.google.com/apps/testing/test');
@@ -103,8 +111,8 @@ test('assigned task appears in daily report and saved report keeps its snapshot'
  await card.locator('[data-action="accept-invite"]').click();
  await card.locator('[data-action="confirm-join"]').click();
  await card.locator('[data-action="write-report"]').click();
- await expect(page.locator('#daily-report-form')).toContainText('ابحث عن منتج وافتح تفاصيله');
- await page.locator('[name="opened"]').check();await page.locator('[name="feature"]').check();
+ await expect(page.locator('.daily-test .daily-task')).toContainText('ابحث عن منتج وافتح تفاصيله');
+ await page.locator('#daily-report-form label.ok').click();
  await page.locator('#test-note').fill('بحثت عن منتج وفتحت صفحة التفاصيل بنجاح');
  await page.locator('#daily-report-form button[type="submit"]').click();
  expect(await page.evaluate(()=>dashboard.reports.find(r=>r.tested==='ابحث عن منتج وافتح تفاصيله')?.notes)).toContain('بحثت عن منتج');
