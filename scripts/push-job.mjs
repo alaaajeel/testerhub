@@ -34,12 +34,16 @@ function reminderFor(due, now) {
   return {title: 'حان وقت اختبار اليوم', body: body.slice(0, 180), url: APP_URL, tag: 'testerhub-daily'};
 }
 function activityFor(events) {
-  const messages = events.filter(e => e.kind === 'message'), invites = events.filter(e => e.kind === 'invite');
-  if (messages.length === 1 && !invites.length) return {title: 'TesterHub — رسالة جديدة', body: String(messages[0].text || 'وصلتك رسالة').slice(0, 110), url: APP_URL, tag: 'testerhub-activity'};
-  if (invites.length === 1 && !messages.length) return {title: 'TesterHub — اختبار جديد', body: 'وصلك رابط اختبار ' + String(invites[0].name || 'تطبيق جديد').slice(0, 80), url: APP_URL, tag: 'testerhub-activity'};
+  if (events.length === 1) {
+    const e = events[0];
+    const titles = {message: 'TesterHub — رسالة جديدة', support: 'TesterHub — رسالة من الإدارة', supportReply: 'TesterHub — رد من مستخدم'};
+    if (e.kind === 'invite') return {title: 'TesterHub — اختبار جديد', body: 'وصلك رابط اختبار ' + String(e.name || 'تطبيق جديد').slice(0, 80), url: APP_URL, tag: 'testerhub-activity'};
+    return {title: titles[e.kind], body: String(e.text || 'وصلتك رسالة').slice(0, 110), url: e.kind === 'supportReply' ? './admin.html' : APP_URL, tag: 'testerhub-activity'};
+  }
+  const invites = events.filter(e => e.kind === 'invite').length, notes = events.length - invites;
   const parts = [];
-  if (invites.length) parts.push(`${invites.length} دعوة`);
-  if (messages.length) parts.push(`${messages.length} رسالة`);
+  if (invites) parts.push(`${invites} دعوة`);
+  if (notes) parts.push(`${notes} رسالة`);
   return {title: 'TesterHub — جديد لك', body: 'لديك ' + parts.join(' و'), url: APP_URL, tag: 'testerhub-activity'};
 }
 
@@ -122,7 +126,7 @@ export async function runActivity({db, messaging, now = new Date()}) {
   // A long outage must not bury people in old news, and the first run must not replay history.
   const since = Math.max(saved ?? now.getTime() - FIRST_RUN_MS, now.getTime() - MAX_CATCH_UP_MS);
   const range = name => db.collection(name).where('createdAt', '>', Timestamp.fromMillis(since)).where('createdAt', '<=', Timestamp.fromDate(now)).orderBy('createdAt').limit(READ_LIMIT).get();
-  const [messageDocs, inviteDocs] = await Promise.all([range('messages'), range('assignments')]);
+  const [messageDocs, inviteDocs, supportDocs] = await Promise.all([range('messages'), range('assignments'), range('supportMessages')]);
   const events = new Map();
   const add = (uid, event) => { if (uid) events.set(uid, [...(events.get(uid) || []), event]); };
   for (const doc of messageDocs.docs) {
@@ -132,6 +136,14 @@ export async function runActivity({db, messaging, now = new Date()}) {
   for (const doc of inviteDocs.docs) {
     const a = doc.data();
     if (a.invitationStatus === 'pending') add(a.testerUid, {kind: 'invite', name: a.name});
+  }
+  // A user writing to the platform team reaches every active owner account.
+  const admins = supportDocs.docs.some(d => d.get('sender') === 'user')
+    ? (await db.collection('adminRoles').where('active', '==', true).get()).docs.map(d => d.id) : [];
+  for (const doc of supportDocs.docs) {
+    const m = doc.data();
+    if (m.sender === 'admin') add(m.uid, {kind: 'support', text: m.text});
+    else for (const uid of admins) add(uid, {kind: 'supportReply', text: m.text});
   }
   const uids = [...events.keys()];
   const {missing, active} = await activeUsers(db, uids);

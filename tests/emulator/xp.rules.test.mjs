@@ -12,6 +12,7 @@ const db=(uid,verified=true)=>env.authenticatedContext(uid,{email:uid+'@example.
 const POINTS={report:10,bug:20,retest:10,cycle:50};
 const week=()=>'W'+Math.floor((Date.now()+259200000)/604800000);
 const month=()=>{const d=new Date();return 'M'+(d.getUTCFullYear()*100+d.getUTCMonth()+1)};
+const today=()=>{const d=new Date();return 'D'+(d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate())};
 const days=n=>Array.from({length:n},(_,i)=>`2026-01-${String(i+1).padStart(2,'0')}`);
 const TASK='فتح التطبيق وتجربة وظيفة أساسية';
 const base={assignmentId:'p1_t1',projectId:'p1',testerUid:'t1',ownerUid:'d1',tested:TASK,createdAt:'2026-01-01T00:00:00.000Z'};
@@ -33,13 +34,14 @@ beforeEach(async()=>{
  });
 });
 // Mirrors awardXp() in index.html: one event plus every total it changes, in one batch.
-function awardBatch(uid,{id,kind,reportId='',points=POINTS[kind],first=true,assignmentId='p1_t1',testerUid='t1',ownerUid='d1',projectId='p1',eventWeek=week(),eventMonth=month(),bump=points,skip=[]}){
+function awardBatch(uid,{id,kind,reportId='',points=POINTS[kind],first=true,assignmentId='p1_t1',testerUid='t1',ownerUid='d1',projectId='p1',eventWeek=week(),eventMonth=month(),bump=points,skip=['day'],dayKey=today()}){
  const d=db(uid),batch=writeBatch(d);
  const counters={points:increment(bump),reports:increment(kind==='report'?1:0),bugs:increment(kind==='bug'?1:0),retests:increment(kind==='retest'?1:0),cycles:increment(kind==='cycle'?1:0),lastEventId:id,updatedAt:serverTimestamp()};
  batch.set(doc(d,'contributions',id),{kind,points,testerUid,ownerUid,projectId,assignmentId,reportId,awardedBy:uid,week:eventWeek,month:eventMonth,createdAt:serverTimestamp()});
  if(!skip.includes('totals'))batch.set(doc(d,'xpTotals',testerUid),{uid:testerUid,...counters,apps:increment(first?1:0)},{merge:true});
  if(!skip.includes('week'))batch.set(doc(d,'xpPeriods',week()+'_'+testerUid),{uid:testerUid,period:week(),...counters},{merge:true});
  if(!skip.includes('month'))batch.set(doc(d,'xpPeriods',month()+'_'+testerUid),{uid:testerUid,period:month(),...counters},{merge:true});
+ if(!skip.includes('day'))batch.set(doc(d,'xpPeriods',dayKey+'_'+testerUid),{uid:testerUid,period:dayKey,...counters},{merge:true});
  if(!skip.includes('ledger'))batch.set(doc(d,'xpAssignments',assignmentId),{testerUid,ownerUid,projectId,...counters},{merge:true});
  return batch;
 }
@@ -166,4 +168,10 @@ test('a report may retest only a fixed problem of the same assignment',async()=>
  await assertFails(retestBatch('p2_t1_2026-01-02').commit());
  await assertFails(retestBatch('p1_t1_2026-01-02').commit());
  await assertSucceeds(retestBatch('p2_t1_2026-01-01').commit());
+});
+
+test('the daily league counts the same event under today, and only today',async()=>{
+ await assertSucceeds(awardBatch('d1',{...reviewEvent('2026-01-01'),skip:[]}).commit());
+ assert.equal((await adminRead('xpPeriods',today()+'_t1')).points,10);
+ await assertFails(awardBatch('d1',{...reviewEvent('2026-01-02','bug'),first:false,skip:[],dayKey:'D19000101'}).commit());
 });
