@@ -748,7 +748,7 @@ const XP_POINTS={report:10,bug:20,retest:10,cycle:50};
 const XP_CYCLE_MIN_ACCEPTED=7;
 // Days before this UTC date were scored by the old formula (10 per reported day, +20 for 14 days). That
 // history is kept and shown on its own, unverified, and never mixed into verified points or rankings.
-const LEGACY_XP_CUTOFF=String(window.TESTERHUB_XP_START||'2026-11-10');
+const LEGACY_XP_CUTOFF=String(window.TESTERHUB_XP_START||'2026-11-06');
 const xpWeekKey=(ms=Date.now())=>'W'+Math.floor((ms+259200000)/604800000);
 const xpMonthKey=(ms=Date.now())=>{const d=new Date(ms);return 'M'+(d.getUTCFullYear()*100+d.getUTCMonth()+1)};
 const xpKindForReport=r=>needsFollowUp(r)?'bug':'report';
