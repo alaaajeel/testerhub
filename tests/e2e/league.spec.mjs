@@ -3,17 +3,19 @@ import {test,expect} from '@playwright/test';
 // tests/emulator/league.rules.test.mjs.
 
 const utcDaysAgo=n=>new Date(Date.now()-n*86400000).toISOString().slice(0,10);
-async function openPreview(page){
+async function openPreview(page,{warmupUntil='2000-01-01T00:00:00Z'}={}){
+ await page.addInitScript(until=>{window.TESTERHUB_LEAGUE_WARMUP_UNTIL=until},warmupUntil);
  await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
  await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
 }
 // Others' weekly and monthly rows; t1 (the tester) is set by `mine`.
 async function seedLeague(page,{others=3,mine=null,names={}}={}){
  await page.evaluate(({others,mine,names})=>{
-  resetDemo();const d=demoState(),week=xpWeekKey(),month=xpMonthKey();
+  resetDemo();const d=demoState(),day=xpDayKey(),week=xpWeekKey(),month=xpMonthKey();
   d.xp={events:{},totals:{},periods:{},ledgers:{}};
   const put=(uid,points,apps=1)=>{
    const row={uid,points,reports:points/10,bugs:0,retests:0,cycles:0};
+   d.xp.periods[day+'_'+uid]={...row,period:day};
    d.xp.periods[week+'_'+uid]={...row,period:week};
    d.xp.periods[month+'_'+uid]={...row,period:month,points:points*2};
    d.xp.totals[uid]={...row,apps,points:points*3};
@@ -27,12 +29,12 @@ async function seedLeague(page,{others=3,mine=null,names={}}={}){
  await expect(page.locator('.league-list')).not.toContainText('جاري تحميل');
 }
 
-test('weekly ranking lists contributors by verified points, with opt-in names only',async({page})=>{
+test('today\'s ranking lists contributors by verified points, with profile names unless hidden',async({page})=>{
  await openPreview(page);await seedLeague(page,{mine:85,names:{o0:{name:'سارة'}}});
  const rows=page.locator('.league-row');
  await expect(rows).toHaveCount(4);
  // 100, 90, mine 85, 80.
- await expect(rows.locator('strong')).toHaveText(['سارة','مساهم','أنت','مساهم']);
+ await expect(rows.locator('strong')).toHaveText(['سارة','مساهم','مختبر 1 (أنت)','مساهم']);
  await expect(rows.nth(2)).toHaveClass(/mine/);
  await expect(rows.nth(2)).toContainText('٨٥ XP');
  await expect(rows.nth(2).locator('.league-rank')).toHaveText('٣');
@@ -58,21 +60,33 @@ test('a contributor below the top 20 still sees their own rank',async({page})=>{
  await expect(page.locator('.league-row.mine .league-rank')).toHaveText('٢٦');
 });
 
-test('showing my name is a choice I can turn on and off',async({page})=>{
+test('my name shows by default and hiding it is my choice',async({page})=>{
  await openPreview(page);await seedLeague(page,{mine:30});
  const box=page.locator('[data-change="league-name"]');
- await expect(box).not.toBeChecked();
- await box.check();
- await expect(page.locator('#toast')).toContainText('صار اسمك يظهر');
- expect(await page.evaluate(()=>demoState().publicProfiles.t1)).toEqual({name:'مختبر 1'});
- await expect(page.locator('[data-change="league-name"]')).toBeChecked();
- await page.locator('[data-change="league-name"]').uncheck();
+ await expect(box).toBeChecked();
+ expect(await page.evaluate(()=>demoState().publicProfiles.t1)).toEqual({name:'مختبر 1',hidden:false});
+ await box.uncheck();
  await expect(page.locator('#toast')).toContainText('مخفي');
- expect(await page.evaluate(()=>demoState().publicProfiles.t1)).toBeUndefined();
+ expect(await page.evaluate(()=>demoState().publicProfiles.t1)).toEqual({name:'مختبر 1',hidden:true});
+ await expect(page.locator('.league-row.mine strong')).toHaveText('أنت');
+ await page.locator('[data-change="league-name"]').check();
+ await expect(page.locator('#toast')).toContainText('صار اسمك يظهر');
+ expect(await page.evaluate(()=>demoState().publicProfiles.t1.hidden)).toBe(false);
 });
 
-test('an empty week invites the first accepted report',async({page})=>{
+test('in the first week, warm-up members compete in the same list and are marked',async({page})=>{
+ await openPreview(page,{warmupUntil:new Date(Date.now()+6*86400000).toISOString()});await seedLeague(page,{others:1,mine:35});
+ const samples=page.locator('.league-row .sample-tag');
+ await expect(samples).toHaveCount(3);
+ await expect(samples.first()).toHaveText('تجريبي');
+ await expect(page.locator('.league-row.mine strong')).toContainText('مختبر 1');
+ expect(await page.evaluate(()=>Object.keys(demoState().publicProfiles||{}).some(k=>k.startsWith('sample'))||JSON.stringify(demoState().xp).includes('sample'))).toBe(false);
+});
+
+test('an empty day invites the first accepted report',async({page})=>{
  await openPreview(page);await seedLeague(page,{others:0});
+ await expect(page.locator('.league .empty')).toContainText('ماكو نقاط موثّقة اليوم');
+ await page.locator('[data-action="league-kind"][data-id="week"]').click();
  await expect(page.locator('.league .empty')).toContainText('ماكو نقاط موثّقة هذا الأسبوع');
 });
 
