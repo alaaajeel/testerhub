@@ -203,9 +203,8 @@ button:focus-visible,input:focus-visible,select:focus-visible {outline:3px solid
 .daily-test .field{margin-top:8px}
 .daily-test textarea{min-height:60px}
 .daily-test button[type="submit"]{min-height:48px;font-size:14px;margin-top:2px}
-/* Android: the keyboard can push the fixed bottom bar over the form. Keep it hidden while focus is anywhere in the
-   form, so it cannot reappear under the finger between the textarea losing focus and the submit tap. */
-#app:has(#daily-report-form:focus-within) .nav{display:none}
+/* The bottom bar steps aside only while the on-screen keyboard is open (see watchKeyboard). */
+html.keyboard-open .nav{display:none}
 html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 .daily-summary{margin-top:10px;border:1px solid #e1eaf7;background:#f9fbff;border-radius:13px;padding:10px 11px;font-size:13px;line-height:1.8}
 .daily-summary p{margin:4px 0 0;overflow-wrap:anywhere}
@@ -1229,16 +1228,27 @@ function unreadNoticeMessages(){
  const minTime=Math.max(lastSeen,Date.now()-7*86400000);
  return (dashboard.messages||[]).filter(m=>messageIsIncoming(m)&&Number.isFinite(messageTime(m))&&messageTime(m)>minTime);
 }
+// One key per thing the bell tells you about. A new testing day or a new invitation is a new key.
+function noticeKeys(){
+ if(!user)return [];
+ const keys=[...unreadNoticeMessages().map(m=>'msg:'+(m.id||messageTime(m))),...unreadAdminNotices().map(n=>'admin:'+n.id),...unreadSupport().map(m=>'support:'+(m.id||supportTime(m)))];
+ if(user.role==='tester'){
+  const st=classifyTesterWork(primaryAssignments()),day=api.dayKey();
+  keys.push(...st.due.map(a=>'due:'+a.id+':'+day),...st.invites.map(a=>'invite:'+a.id+':'+(a.invitationStatus||'new')));
+ }else{
+  keys.push(...(dashboard.reports||[]).filter(r=>needsFollowUp(r)&&r.status!=='fixed').map(r=>'issue:'+r.id));
+  keys.push(...mineProjects().filter(p=>!dashboard.assignments.some(a=>a.projectId===p.id)).map(p=>'setup:'+p.id));
+ }
+ return keys;
+}
+function noticeKeysSeenKey(){return 'testerhub_notice_keys_'+(user?.uid||'guest')}
+function seenNoticeKeys(){try{return new Set(JSON.parse(previewStorage.getItem(noticeKeysSeenKey())||'[]'))}catch{return new Set()}}
+// Remembers what is listed now; older keys are dropped, so the stored list stays small.
+function markNoticesSeen(){try{previewStorage.setItem(noticeKeysSeenKey(),JSON.stringify(noticeKeys().slice(0,300)))}catch{}}
 function noticeBadgeCount(){
  if(!user)return 0;
- const unread=unreadNoticeMessages().length+unreadAdminNotices().length+unreadSupport().length;
- if(user.role==='tester'){
-  const st=classifyTesterWork(primaryAssignments());
-  return st.due.length+st.invites.length+unread;
- }
- const issueCount=(dashboard.reports||[]).filter(r=>needsFollowUp(r)&&r.status!=='fixed').length;
- const missingProjects=mineProjects().filter(p=>!dashboard.assignments.some(a=>a.projectId===p.id)).length;
- return issueCount+missingProjects+unread;
+ const seen=seenNoticeKeys();
+ return noticeKeys().filter(k=>!seen.has(k)).length;
 }
 function noticeCard(text,description,buttonAction,target){
  return '<div class="notice-card"><div><strong>'+clean(text)+'</strong><p>'+clean(description)+'</p></div>'+
@@ -1298,6 +1308,7 @@ async function syncNotificationPanel(){
   noticeUnreadAtOpen=unreadAdminNotices().map(n=>n.id);
   if(noticeUnreadAtOpen.length){await api.markAdminNoticesRead().catch(err=>console.warn('Notice read state:',err));adminNotices.readAt=Date.now()}
   noticeLastVerified=Date.now();noticeState='verified';
+  markNoticesSeen();
   previewStorage.setItem(noticeSeenKey(),String(noticeLastVerified));
  }catch(err){
   console.warn('Notification verification failed',err);
@@ -1375,10 +1386,12 @@ function supportPage(){
 }
 function crossBanner(){const n=dashboard.crossCount||0;if(!n)return '';const dev=user.role==='developer';return `<div class="reminder-banner">${dev?`عندك ${n} اختبار مطلوب اليوم في واجهة المختبر.`:`عندك ${n} بلاغ مشكلة جديد في واجهة المطور.`} <button class="top-link" data-action="switch-role">الانتقال إليها</button></div>`}
 function testerHome(){const assignments=primaryAssignments(),work=classifyTesterWork(assignments),today=work.due[0]||work.completed.find(reportForToday);return `${crossBanner()}${reminderUi()}${today?todayTestCard(today):''}${work.due.length>1?`<button class="item-link" data-tab="tests">${ico('tests',17)} عندك ${work.due.length-1} اختبار ثاني مطلوب اليوم <span>‹</span></button>`:''}${trackerCard()}<div class="section-title">التطبيقات المتاحة للاختبار ${ico('apps',20)}</div>${assignments.length?assignments.map(assignmentCard).join(''):`<div class="tab-empty">${ico('apps',38)}<h3>لا توجد تطبيقات مسندة لك</h3>راح يظهر الاختبار هنا بعد ما يضيف المطور بريدك إلى الاختبار وينشر الرابط.<button class="cta outline wide" style="margin-top:12px" data-action="switch-role">عندي تطبيق — الانتقال إلى واجهة المطور</button></div>`}`}
+// A test is the tester's once they accepted the invitation or started it (older tests have no invitation status).
+const approvedTest=a=>!!a.joinedDay||a.invitationStatus==='accepted';
 function testerTests(){
- const all=primaryAssignments(),work=classifyTesterWork(all);
+ const all=primaryAssignments().filter(approvedTest),work=classifyTesterWork(all);
  const group=(title,items)=>items.length?`<section aria-label="${clean(title)}"><div class="section-title">${title} · ${items.length}</div>${items.map(assignmentCard).join('')}</section>`:'';
- return `<div class="surface"><div class="row between"><div><div class="lead">اختباراتي</div><div class="small">ابدأ بالمطلوب اليوم، ثم راجع الدعوات. التواريخ محفوظة بتوقيت UTC.</div></div><button class="cta outline" data-action="refresh-tests">${ico('retest',15)} تحديث</button></div></div>${group('مطلوب اليوم',work.due)}${group('دعوات وتجهيز الاختبار',work.invites)}${group('بانتظار موعد التقرير التالي',work.cooldown)}${group('تقرير اليوم محفوظ',work.completed)}${group('المشاركات السابقة',work.expired)}${!all.length?'<div class="tab-empty"><h3>ما عندك اختبارات حالياً</h3>تظهر التطبيقات بعد إضافتك من المطور.</div>':''}`;
+ return `<div class="surface"><div class="row between"><div><div class="lead">اختباراتي</div><div class="small">التطبيقات اللي وافقت على اختبارها فقط. الدعوات الجديدة تظهر بالرئيسية.</div></div><button class="cta outline" data-action="refresh-tests">${ico('retest',15)} تحديث</button></div></div>${group('مطلوب اليوم',work.due)}${group('قبلت الدعوة · أكمل الانضمام',work.invites)}${group('بانتظار موعد التقرير التالي',work.cooldown)}${group('تقرير اليوم محفوظ',work.completed)}${group('المشاركات السابقة',work.expired)}${!all.length?`<div class="tab-empty"><h3>ما وافقت على أي اختبار بعد</h3>اقبل دعوة من الرئيسية حتى يظهر الاختبار هنا.<button class="cta outline wide" style="margin-top:12px" data-tab="home">${ico('home',16)} الرئيسية</button></div>`:''}`;
 }
 let rewardsState='idle',leagueKind='day',league=null,leagueState='idle';
 async function openRewards(){
@@ -1523,7 +1536,7 @@ function profileEditor(){if(api.isDemo)return '';return `<div class="surface"><f
 function accountGate(){return `<div class="login-shell"><div class="auth-card"><h2>${user.profileMissing?'إكمال بيانات حسابك':'تأكيد البريد الإلكتروني'}</h2><p>${clean(user.email)}</p>${user.profileMissing?`<p>حساب الدخول موجود. أكمل ملفك بنفس الحساب دون إنشاء حساب جديد.</p><form id="complete-profile-form"><div class="field"><label for="recover-name">الاسم</label><input id="recover-name" name="name" minlength="2" maxlength="80" required /></div><label class="checks"><input type="checkbox" name="available"/><span>أوافق على مشاركة بريدي مع المطورين للاختبارات.</span></label><button class="cta blue" type="submit">إكمال الحساب</button></form>`:`<p>أكد ملكية بريدك حتى تفتح لوحة الحساب. المشاركات والتقارير القديمة تبقى محفوظة.</p><button class="cta blue wide" data-action="send-verification">إرسال رسالة تأكيد البريد</button><button class="item-link" data-action="check-verification">تحققت من بريدي — تحديث الحالة</button>`}<button class="item-link" data-action="logout">تسجيل الخروج</button></div></div>`}
 function suspendedScreen(){return `<div class="login-shell"><div class="auth-card"><h2>هذا الحساب موقوف</h2><p>${clean(user.email)}</p><p>أوقفت إدارة TesterHub هذا الحساب، ولا يمكن استخدامه حالياً. بياناتك محفوظة ولم تُحذف.</p><button class="cta blue wide" data-action="logout">تسجيل الخروج</button></div></div>`}
 function authScreen(){return `<div class="login-shell"><div class="auth-logo"><img src="./assets/brand-icon.svg" alt="" /> TesterHub</div><div class="auth-card"><div class="auth-switch"><button data-auth="login" class="${authMode==='login'?'selected':''}">تسجيل الدخول</button><button data-auth="signup" class="${authMode==='signup'?'selected':''}">إنشاء حساب</button></div><h2>${authMode==='login'?'أهلاً بعودتك 👋':'إنشاء حساب جديد'}</h2><p>${authMode==='login'?'ادخل ببريدك حتى تتابع اختباراتك':'خطوات قليلة فقط وتبدأ رحلتك مع المختبرين'}</p><form id="auth-form">${authMode==='signup'?`<div class="card-note" style="margin:0 0 13px">حساب واحد للجميع: تختبر تطبيقات غيرك وتضيف تطبيقك، وتتنقل بينهما متى شئت.</div><div class="field"><label for="auth-name">الاسم</label><input id="auth-name" name="name" minlength="2" required placeholder="اسمك" value="${clean(authDraft.name)}" /></div>`:''}<div class="field"><label for="auth-email">البريد الإلكتروني</label><input id="auth-email" type="email" name="email" autocomplete="email" placeholder="example@gmail.com" required value="${clean(authDraft.email)}" /><div class="help">${authMode==='signup'&&signupRole==='tester'?'استعمل نفس البريد الذي تشترك به في اختبارات Google Play':'بريد واحد لحسابك'}</div></div><div class="field"><label for="auth-password">كلمة المرور</label><input id="auth-password" name="password" type="password" minlength="6" autocomplete="${authMode==='login'?'current-password':'new-password'}" required placeholder="••••••••" /></div>${authMode==='signup'&&signupRole==='tester'?`<label class="checks"><input name="available" type="checkbox" /><span>أوافق على ظهور بريدي الإلكتروني للمطورين لإضافتي إلى اختبارات Google Play.</span></label>`:''}<button class="cta blue wide" type="submit">${authMode==='login'?'دخول':'إنشاء الحساب'}</button>${authMode==='signup'?'<div class="card-note">بإنشاء حسابك توافق على <a href="./terms.html">الشروط</a> و<a href="./privacy.html">سياسة الخصوصية</a>.</div>':''}</form><button class="text-button" type="button" data-action="reset-password">نسيت كلمة المرور؟</button><div class="auth-footer">${authMode==='login'?'ليس لديك حساب؟':'عندك حساب؟'} <button class="text-button" data-auth="${authMode==='login'?'signup':'login'}">${authMode==='login'?'سجّل الآن':'سجّل الدخول'}</button></div></div></div>`}
-function render(){
+function renderView(){
  const desktopTester=document.getElementById('previewTester'),desktopDeveloper=document.getElementById('previewDeveloper');
  desktopTester?.classList.toggle('on',user?.role==='tester');desktopDeveloper?.classList.toggle('on',user?.role==='developer');
  if(!user){app.innerHTML=authScreen();return}
@@ -1534,6 +1547,76 @@ function render(){
  app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar()+appMenu()+notificationPanel();
 }
 let selectedProjectId=null,selectedAssignmentId=null,draftEditingId=null,selectedTesterUid=null,testerBack='testers';
+function render(){renderView();trackScreen()}
+// ---- Phone back button ----
+// The app is one page, so it keeps its own list of visited screens. One extra browser history entry (the guard)
+// catches the back press: back closes an open panel, then returns to the previous screen, then to the home
+// screen; on the home screen the first press shows a hint and a second press within 2 seconds leaves the app.
+// var, not const: render() can run before this line during start-up.
+var backNav={stack:[],last:null,restoring:false,guarded:false,exitUntil:0};
+function screenState(){return {uid:user?.uid||'',tab,selectedProjectId,selectedAssignmentId,selectedTesterUid,testerBack,draftEditingId}}
+function sameScreen(a,b){return !!a&&!!b&&a.uid===b.uid&&a.tab===b.tab&&a.selectedProjectId===b.selectedProjectId&&a.selectedAssignmentId===b.selectedAssignmentId&&a.selectedTesterUid===b.selectedTesterUid}
+function trackScreen(){
+ if(!backNav)return;
+ const now=screenState(),prev=backNav.last;
+ if(prev&&prev.uid!==now.uid)backNav.stack=[];
+ else if(prev&&!sameScreen(prev,now)&&!backNav.restoring){
+  if(now.tab==='home')backNav.stack=[];
+  else{backNav.stack.push(prev);if(backNav.stack.length>30)backNav.stack.shift()}
+ }
+ backNav.restoring=false;backNav.last=now;
+ armBackGuard();
+}
+// Browsers may skip history entries added before the person touched the page, so wait for a first touch.
+function armBackGuard(){
+ if(backNav.guarded||Date.now()<backNav.exitUntil)return;
+ if(navigator.userActivation&&!navigator.userActivation.hasBeenActive)return;
+ try{history.pushState({testerhub:'back-guard'},'');backNav.guarded=true}catch{}
+}
+function closeTopLayer(){
+ const dialog=document.querySelector('dialog[open]');
+ if(dialog){dialog.close?.('cancel');return true}
+ if(noticeOpen){noticeOpen=false;return true}
+ if(drawerOpen){drawerOpen=false;return true}
+ return false;
+}
+function handleBack(){
+ backNav.guarded=false;
+ if(closeTopLayer()){render();return}
+ const prev=backNav.stack.pop();
+ if(prev&&user&&prev.uid===user.uid){
+  backNav.restoring=true;
+  ({tab,selectedProjectId,selectedAssignmentId,selectedTesterUid,testerBack,draftEditingId}=prev);
+  render();return;
+ }
+ if(user&&tab!=='home'){backNav.restoring=true;tab='home';render();return}
+ backNav.exitUntil=Date.now()+2000;
+ toast('اضغط رجوع مرة ثانية للخروج');
+ setTimeout(()=>{backNav.exitUntil=0;armBackGuard()},2100);
+}
+window.addEventListener('popstate',handleBack);
+document.addEventListener('pointerdown',()=>armBackGuard(),{capture:true,passive:true});
+document.addEventListener('keydown',()=>armBackGuard(),{capture:true});
+// ---- On-screen keyboard ----
+// Hides the bottom bar only while the keyboard really takes screen space, measured from the visible height, so
+// it never vanishes because a choice was tapped and it never reappears under the finger mid-tap.
+(function watchKeyboard(){
+ const vv=window.visualViewport,root=document.documentElement;
+ const height=()=>vv?vv.height:window.innerHeight;
+ const typing=el=>!!el&&(el.tagName==='TEXTAREA'||el.isContentEditable||(el.tagName==='INPUT'&&!['checkbox','radio','button','submit','reset','file','range','color','hidden'].includes(el.type)));
+ let full=height(),settle=null;
+ const update=()=>{
+  const h=height(),focused=typing(document.activeElement);
+  if(!focused&&h>=full-150){full=h;root.classList.remove('keyboard-open');return}
+  if(focused&&h<full-150){root.classList.add('keyboard-open');return}
+  if(focused){full=Math.max(full,h);root.classList.remove('keyboard-open');return}
+  // Focus left but the keyboard is still closing: keep the bar hidden until the screen is back, at most a moment.
+  clearTimeout(settle);settle=setTimeout(()=>{full=height();root.classList.remove('keyboard-open')},700);
+ };
+ vv?.addEventListener('resize',update);window.addEventListener('resize',update);
+ document.addEventListener('focusin',()=>setTimeout(update,300));
+ document.addEventListener('focusout',()=>setTimeout(update,60));
+})();
 
 let liveSubscriptions=[],liveSyncUid=null,liveSyncTimer=null,liveSyncDeferred=false,liveFetchInProgress=false;
 function stopLiveSync(){

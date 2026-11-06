@@ -30,7 +30,8 @@ test('the app reads broadcasts and its own notices with separate, rule-provable 
  assert.match(from('async function markAdminNoticesRead(','const messageRetryIds'),/readAt:storeFns\.serverTimestamp\(\)/);
 });
 test('unread admin notices count on the bell and reads are throttled for Spark',()=>{
- assert.match(html,/unreadNoticeMessages\(\)\.length\+unreadAdminNotices\(\)\.length/);
+ assert.match(html,/\.\.\.unreadAdminNotices\(\)\.map\(n=>'admin:'\+n\.id\)/);
+ assert.match(html,/return noticeKeys\(\)\.filter\(k=>!seen\.has\(k\)\)\.length/);
  assert.match(html,/Date\.now\(\)-adminNotices\.loadedAt<600000/);
 });
 test('admin panel: new tab, permission, composer and audit on every send or withdrawal',()=>{

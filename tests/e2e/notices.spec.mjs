@@ -25,7 +25,9 @@ test('a tester sees unread admin notices on the bell, and opening it marks them 
  expect(await page.evaluate(()=>demoState().noticeReadAt.t1)).toBeGreaterThan(0);
  await page.locator('.notices-header [data-action="close-notices"]').click();
  expect(await page.evaluate(()=>unreadAdminNotices().length)).toBe(0);
- expect(await page.evaluate(()=>noticeBadgeCount())).toBe(before-2);
+ expect(before).toBeGreaterThanOrEqual(2);
+ // Everything listed when the bell opened is now seen.
+ expect(await page.evaluate(()=>noticeBadgeCount())).toBe(0);
 });
 
 test('the history page lists all notices and withdrawn ones never show',async({page})=>{
