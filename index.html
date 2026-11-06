@@ -183,21 +183,30 @@ button:focus-visible,input:focus-visible,select:focus-visible {outline:3px solid
 .report-state{display:inline-block;font-size:10px;padding:4px 9px;border-radius:99px;background:#e8f1ff;color:#18549d;font-weight:700}
 .report-state.issue{background:#fff0dc;color:#91550e}
 .report-state.fixed{background:#ddf8eb;color:#08744f}
-.daily-test{border:1px solid #d9e7fa}
+.daily-test{border:1px solid #d9e7fa;padding:14px}
 .daily-test .lead{margin:0}
-.day-pill{font-size:11px;font-weight:700;color:#fff;background:linear-gradient(135deg,#1559b7,#2f7de0);padding:5px 11px;border-radius:99px;white-space:nowrap}
-.daily-app{display:flex;align-items:center;gap:9px;margin:10px 0 8px;min-width:0}
+.day-pill{font-size:11px;font-weight:700;color:#fff;background:linear-gradient(135deg,#1559b7,#2f7de0);padding:4px 10px;border-radius:99px;white-space:nowrap}
+.daily-app{display:flex;align-items:center;gap:8px;margin:8px 0 6px;min-width:0}
 .daily-app strong{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.app-mark.small{width:36px;height:36px;border-radius:11px;flex:none}
-.daily-task{background:#f4f8ff;border:1px solid #deebfa;border-radius:13px;padding:10px 12px;margin-bottom:10px}
-.daily-task p{margin:3px 0 0;font-size:13px;font-weight:700;line-height:1.7;overflow-wrap:anywhere}
-.outcome-choices{border:0;padding:0;margin:14px 0 4px;display:grid;gap:7px;min-width:0}
-.outcome-choices legend{font-weight:800;font-size:14px;margin-bottom:7px;padding:0}
-.outcome-choices label{display:flex;align-items:center;gap:9px;min-height:46px;padding:9px 12px;border:1px solid #d7e5f6;border-radius:13px;background:#f8fbff;font-size:13px;font-weight:700;cursor:pointer}
+.app-mark.small{width:32px;height:32px;border-radius:10px;flex:none}
+.daily-progress{margin:2px 0 10px!important}
+.daily-task{background:#f4f8ff;border:1px solid #deebfa;border-radius:12px;padding:8px 11px;margin-bottom:8px}
+.daily-task p{margin:2px 0 0;font-size:13px;font-weight:700;line-height:1.6;overflow-wrap:anywhere}
+.daily-test .open-app{min-height:44px;border:1px solid #b9d2f3;color:#1559b7;background:#f3f8ff}
+.open-app-hint{text-align:center;margin-top:4px}
+.outcome-choices{border:0;padding:0;margin:10px 0 2px;display:grid;gap:6px;min-width:0}
+.outcome-choices legend{font-weight:800;font-size:14px;margin-bottom:6px;padding:0}
+.outcome-choices label{display:flex;align-items:center;gap:9px;min-height:44px;padding:7px 12px;border:1px solid #d7e5f6;border-radius:12px;background:#f8fbff;font-size:13px;font-weight:700;cursor:pointer}
 .outcome-choices input{width:18px;height:18px;flex:none;accent-color:#0caa79}
 .outcome-choices label:has(input:checked){border-color:#0caa79;background:#ebfaf3}
 .outcome-choices label.issue:has(input:checked),.outcome-choices label.blocked:has(input:checked){border-color:#e3a33e;background:#fff7ea}
-.daily-test textarea{min-height:66px}
+.daily-test .field{margin-top:8px}
+.daily-test textarea{min-height:60px}
+.daily-test button[type="submit"]{min-height:48px;font-size:14px;margin-top:2px}
+/* Android: the keyboard can push the fixed bottom bar over the form. Keep it hidden while focus is anywhere in the
+   form, so it cannot reappear under the finger between the textarea losing focus and the submit tap. */
+#app:has(#daily-report-form:focus-within) .nav{display:none}
+html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 .daily-summary{margin-top:10px;border:1px solid #e1eaf7;background:#f9fbff;border-radius:13px;padding:10px 11px;font-size:13px;line-height:1.8}
 .daily-summary p{margin:4px 0 0;overflow-wrap:anywhere}
 .review-chip{display:inline-block;font-size:10px;padding:4px 9px;border-radius:99px;font-weight:700;background:#eef2f8;color:#5b6b8c;white-space:nowrap}
@@ -966,7 +975,7 @@ function reviewChip(r){const review=REPORT_REVIEWS[r?.reviewStatus];return `<spa
 function outcomeChip(r){return `<span class="report-state ${r?.status==='fixed'?'fixed':needsFollowUp(r)?'issue':''}">${r?.status==='fixed'?'✓ تم الإصلاح':(r?.outcome==='ok'?'✓ ':'⚠ ')+clean(REPORT_OUTCOMES[r?.outcome]||'تقرير')}</span>`}
 function dailyHeader(a){
  const [symbol,color]=appMark(a.name),d=currentDay(a);
- return `<div class="row between"><div class="lead">اختبار اليوم</div><span class="day-pill">اليوم ${d} من 14</span></div><div class="daily-app"><div class="app-mark ${color} small">${ico(symbol,20)}</div><strong>${clean(a.name)}</strong></div><div class="progress" style="margin:4px 0 12px"><i style="width:${Math.min(100,d/14*100)}%"></i></div>`;
+ return `<div class="row between"><div class="lead">اختبار اليوم</div><span class="day-pill">اليوم ${d} من 14</span></div><div class="daily-app"><div class="app-mark ${color} small">${ico(symbol,20)}</div><strong>${clean(a.name)}</strong></div><div class="progress daily-progress"><i style="width:${Math.min(100,d/14*100)}%"></i></div>`;
 }
 // One compact card: app, day, task, open button, outcome, one text field, one submit button.
 function todayTestCard(a){
@@ -975,7 +984,7 @@ function todayTestCard(a){
   const r=saved;
   return `<section class="surface daily-test saved" aria-label="اختبار اليوم">${dailyHeader(a)}<div class="flag">✓ تم حفظ تقرير اليوم</div>${r?`<div class="daily-summary"><div class="row between">${outcomeChip(r)}${reviewChip(r)}</div><div class="tiny">المهمة: ${clean(r.tested||taskForDay(a))}</div><p>${clean(r.notes)}</p>${r.reviewStatus==='clarify'?'<div class="notice">المطور طلب توضيحاً. اكتب له التفاصيل في المحادثة.</div>':''}</div>`:''}<button class="cta outline wide" data-action="open-chat" data-id="${clean(a.id)}" style="margin-top:10px">${ico('message',15)} المحادثة ويا المطور</button></section>`;
  }
- return `<section class="surface daily-test" aria-label="اختبار اليوم">${dailyHeader(a)}<div class="daily-task"><span class="tiny">مهمة اليوم</span><p>${clean(taskForDay(a))}</p></div><button type="button" class="cta blue wide" data-action="open-app" data-id="${clean(a.id)}">${ico('play',15)} فتح التطبيق</button><div class="tiny" style="margin-top:6px">يفتح صفحة التطبيق في Google Play، ومنها اضغط «فتح».</div>
+ return `<section class="surface daily-test" aria-label="اختبار اليوم">${dailyHeader(a)}<div class="daily-task"><span class="tiny">مهمة اليوم</span><p>${clean(taskForDay(a))}</p></div><button type="button" class="cta outline wide open-app" data-action="open-app" data-id="${clean(a.id)}">${ico('play',15)} فتح التطبيق</button><div class="tiny open-app-hint">يفتح Google Play، ومنه اضغط «فتح»</div>
  <form id="daily-report-form" data-id="${clean(a.id)}" novalidate><fieldset class="outcome-choices"><legend>شلون كانت التجربة؟</legend>${Object.entries(REPORT_OUTCOMES).map(([value,label])=>`<label class="${value}"><input type="radio" name="outcome" value="${value}"><span>${label}</span></label>`).join('')}</fieldset><div class="field"><label for="test-note" id="test-note-label">شنو جرّبت؟</label><textarea id="test-note" name="notes" rows="2" maxlength="800" placeholder="مثلاً: جرّبت تسجيل الدخول واشتغل بصورة طبيعية."></textarea></div><button class="cta wide" type="submit">${ico('clipboard',16)} إرسال التقرير</button></form></section>`;
 }
 function dailyReport(){

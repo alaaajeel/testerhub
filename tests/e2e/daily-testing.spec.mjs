@@ -166,6 +166,20 @@ test('mobile: no horizontal overflow and the submit button is not hidden by the 
  if(navBox)expect(actionsBox.y+actionsBox.height).toBeLessThanOrEqual(navBox.y+1);
 });
 
+test('typing the report hides the bottom bar so the keyboard cannot push it over the form',async({page})=>{
+ await openPreview(page);await seedActiveTest(page);
+ await expect(page.locator('.nav')).toBeVisible();
+ await page.locator('#daily-report-form textarea').focus();
+ await expect(page.locator('.nav')).toBeHidden();
+ await page.locator('#daily-report-form label.ok').click();
+ await expect(page.locator('.nav')).toBeHidden();
+ await page.locator('.daily-test .lead').click();
+ await expect(page.locator('.nav')).toBeVisible();
+ // «فتح التطبيق» is secondary; «إرسال التقرير» stays the one primary action.
+ await expect(page.locator('[data-action="open-app"]')).toHaveClass(/outline/);
+ await expect(page.locator('#daily-report-form button[type="submit"]')).not.toHaveClass(/outline/);
+});
+
 // Firestore path with in-browser doubles: the written documents and the retry-safe duplicate handling.
 async function openWithFirestoreDoubles(page){
  const today=new Date().toISOString().slice(0,10),joined=utcDaysAgo(4);
