@@ -30,7 +30,7 @@ service cloud.firestore {
     // Supervisors hold only what the owner ticked. Nothing here lets one change staffRoles.
     function validStaffPermissions(p) {
       return p is map && p.size() >= 1
-        && p.keys().hasOnly(['viewUsers','suspendUsers','archiveProjects','deleteProjects','viewReports','processDeletions','viewAudit'])
+        && p.keys().hasOnly(['viewUsers','suspendUsers','archiveProjects','deleteProjects','viewReports','processDeletions','viewAudit','sendAnnouncements'])
         && p.values().hasOnly([true, false]);
     }
     function activeStaff() {
@@ -405,6 +405,41 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
       allow delete: if request.auth != null && request.auth.uid == uid;
     }
+    // ---- Admin notification center (مركز إشعارات الإدارة) ----
+    // Broadcasts are readable by every verified member and filtered by role in the app; a message to one
+    // user is readable only by that user. Only the owner, or staff granted sendAnnouncements, can write.
+    function announcer() { return adminAllowed() || staff('sendAnnouncements'); }
+    match /announcements/{noticeId} {
+      allow get, list: if announcer() || (verified()
+        && (resource.data.broadcast == true || resource.data.targetUid == request.auth.uid));
+      allow create: if announcer()
+        && request.resource.data.keys().hasOnly(['kind','audience','broadcast','targetUid','title','body','active','createdBy','createdAt'])
+        && request.resource.data.kind in ['announcement','update','instruction']
+        && request.resource.data.audience in ['all','developers','testers','user']
+        && request.resource.data.broadcast == (request.resource.data.audience != 'user')
+        && request.resource.data.targetUid is string
+        && (request.resource.data.broadcast
+          ? request.resource.data.targetUid == ''
+          : (request.resource.data.targetUid.size() > 0 && exists(/databases/$(database)/documents/users/$(request.resource.data.targetUid))))
+        && request.resource.data.title is string && request.resource.data.title.size() >= 2 && request.resource.data.title.size() <= 80
+        && request.resource.data.body is string && request.resource.data.body.size() >= 2 && request.resource.data.body.size() <= 1000
+        && request.resource.data.active == true
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      // Withdrawing hides a notice; nothing is deleted and the text cannot be rewritten afterwards.
+      allow update: if announcer()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active'])
+        && request.resource.data.active is bool;
+      allow delete: if false;
+    }
+    // Server time of the last look at the bell, so unread counts match on every device.
+    match /noticeReads/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['readAt'])
+        && request.resource.data.readAt == request.time;
+      allow list, delete: if false;
+    }
     // Spark has no trusted server: deletion is requested here and carried out by the admin.
     match /deletionRequests/{uid} {
       allow get: if adminAllowed() || staff('processDeletions') || (request.auth != null && request.auth.uid == uid);
@@ -448,10 +483,11 @@ service cloud.firestore {
           || (staff('suspendUsers') && request.resource.data.action in ['suspend_user','unsuspend_user'])
           || (staff('archiveProjects') && request.resource.data.action in ['archive_project','restore_project'])
           || (staff('deleteProjects') && request.resource.data.action == 'delete_project')
-          || (staff('processDeletions') && request.resource.data.action == 'process_deletion'))
+          || (staff('processDeletions') && request.resource.data.action == 'process_deletion')
+          || (staff('sendAnnouncements') && request.resource.data.action in ['send_announcement','withdraw_announcement']))
         && request.resource.data.keys().hasOnly(['actorUid','action','targetId','targetName','createdAt'])
         && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion','grant_staff','update_staff','revoke_staff']
+        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion','grant_staff','update_staff','revoke_staff','send_announcement','withdraw_announcement']
         && request.resource.data.targetId is string
         && request.resource.data.targetId.size() <= 128
         && request.resource.data.targetName is string

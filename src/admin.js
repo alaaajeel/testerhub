@@ -12,7 +12,8 @@ const PERMISSIONS=[
  ['deleteProjects','حذف التطبيقات نهائياً','يتيح قراءة تقارير ورسائل كل التطبيقات، فامنحه لمن تثق به فقط'],
  ['viewReports','عرض بلاغات المشاكل',''],
  ['processDeletions','معالجة طلبات حذف الحسابات','يرى إيميلات أصحاب الطلبات'],
- ['viewAudit','عرض سجل الإدارة','']
+ ['viewAudit','عرض سجل الإدارة',''],
+ ['sendAnnouncements','إرسال إعلانات الإدارة','لكل المستخدمين أو المطورين أو المختبرين، أو لمستخدم محدد']
 ];
 const TABS={
  projects:{title:'التطبيقات',order:()=>documentId(),search:'اسم التطبيق'},
@@ -20,7 +21,8 @@ const TABS={
  issues:{title:'بلاغات المشاكل',perm:'viewReports',collection:'reports',order:()=>'date',desc:true,filter:()=>where('outcome','in',['issue','blocked'])},
  deletionRequests:{title:'طلبات حذف الحسابات',perm:'processDeletions',order:()=>'createdAt',desc:true},
  staffRoles:{title:'المشرفون',ownerOnly:true,order:()=>'grantedAt',desc:true},
- adminAuditLogs:{title:'سجل إجراءات الإدارة',perm:'viewAudit',order:()=>'createdAt',desc:true}
+ adminAuditLogs:{title:'سجل إجراءات الإدارة',perm:'viewAudit',order:()=>'createdAt',desc:true},
+ announcements:{title:'مركز إشعارات الإدارة',perm:'sendAnnouncements',order:()=>'createdAt',desc:true}
 };
 const STATUS={draft:['مسودة',''],recruiting:['يستقبل المختبرين','good'],paused:['متوقف','warn'],completed:['مكتمل',''],archived:['مؤرشف','warn'],deleting:['حذف غير مكتمل','bad']};
 const state={tab:'projects',rows:[],cursor:null,hasMore:false,filter:'',details:{},busy:false,account:null,db:null,owner:false,perms:{},staffIds:new Set()};
@@ -137,7 +139,7 @@ function issueRow(item){
  return '<article class="item"><div class="info"><strong>'+esc(item.notes||'بلاغ')+'</strong><small>'+esc(item.tested||'')+'</small><small>'+esc(item.date||'')+'</small></div><span class="tag '+(fixed?'good':'warn')+'">'+(fixed?'تم الإصلاح':'مفتوح')+'</span></article>';
 }
 function auditRow(item){
- const names={suspend_user:'إيقاف حساب',unsuspend_user:'إعادة تنشيط حساب',archive_project:'أرشفة تطبيق',restore_project:'إلغاء أرشفة تطبيق',delete_project:'حذف تطبيق نهائياً',process_deletion:'معالجة طلب حذف حساب',grant_staff:'ترقية مشرف',update_staff:'تعديل صلاحيات مشرف',revoke_staff:'سحب صلاحيات مشرف'};
+ const names={send_announcement:'إرسال إعلان',withdraw_announcement:'سحب إعلان',suspend_user:'إيقاف حساب',unsuspend_user:'إعادة تنشيط حساب',archive_project:'أرشفة تطبيق',restore_project:'إلغاء أرشفة تطبيق',delete_project:'حذف تطبيق نهائياً',process_deletion:'معالجة طلب حذف حساب',grant_staff:'ترقية مشرف',update_staff:'تعديل صلاحيات مشرف',revoke_staff:'سحب صلاحيات مشرف'};
  return '<article class="item"><div class="info"><strong>'+esc(names[item.action]||item.action||'إجراء')+'</strong><small>'+esc(item.targetName||item.targetId||'')+'</small></div><small>'+esc(stamped(item.createdAt))+'</small></article>';
 }
 function staffRow(item){
@@ -147,7 +149,51 @@ function staffRow(item){
 function deletionRow(item){
  return '<article class="item"><div class="info"><strong dir="ltr" style="text-align:right">'+esc(item.email||item.id)+'</strong><small>'+esc(stamped(item.createdAt))+'</small></div>'+(item.status==='open'?button('process-deletion',item.id,'تمت المعالجة'):'<span class="tag good">تمت المعالجة</span>')+'</article>';
 }
-const ROWS={projects:projectRow,users:userRow,issues:issueRow,staffRoles:staffRow,deletionRequests:deletionRow,adminAuditLogs:auditRow};
+const NOTICE_KINDS={announcement:'إعلان',update:'تحديث للمنصة',instruction:'تعليمات مهمة'};
+const NOTICE_AUDIENCE={all:'كل المستخدمين',developers:'المطورون',testers:'المختبرون',user:'مستخدم محدد'};
+function announcementRow(item){
+ const on=item.active!==false,when=item.createdAt?.toDate?.();
+ return '<article class="item"><div class="info"><strong>'+esc(item.title)+'</strong><small class="notice-body">'+esc(item.body)+'</small><small>'+esc(NOTICE_KINDS[item.kind]||item.kind)+' · '+esc(NOTICE_AUDIENCE[item.audience]||item.audience)+(item.targetEmail?' · '+esc(item.targetEmail):'')+(when?' · '+esc(when.toLocaleString('ar-IQ')):'')+'</small></div><div class="actions"><span class="tag '+(on?'good':'')+'">'+(on?'ظاهر':'مسحوب')+'</span>'+button('toggle-notice',item.id,on?'سحب':'إظهار',on?'warn':'soft')+'</div></article>';
+}
+// Sends one notice and records it in the audit log in the same batch.
+async function sendAnnouncement(form){
+ const f=new FormData(form),kind=String(f.get('kind')),audience=String(f.get('audience'));
+ const title=String(f.get('title')||'').trim(),body=String(f.get('body')||'').trim();
+ if(title.length<2||title.length>80)throw Error('العنوان من 2 إلى 80 حرف');
+ if(body.length<2||body.length>1000)throw Error('النص من 2 إلى 1000 حرف');
+ let targetUid='',targetName='';
+ if(audience==='user'){
+  const email=String(f.get('email')||'').trim().toLowerCase();
+  if(!email)throw Error('اكتب بريد المستخدم');
+  if(!allowed('viewUsers'))throw Error('الإرسال لمستخدم محدد يحتاج صلاحية عرض المستخدمين');
+  const found=await getDocs(query(collection(state.db,'users'),where('email','==',email),limit(1)));
+  if(found.empty)throw Error('ما لگينا مستخدم بهذا البريد');
+  targetUid=found.docs[0].id;targetName=email;
+ }
+ busy(false);
+ const ok=await confirmDialog({title:'إرسال «'+title+'»؟',body:'إلى: '+(audience==='user'?targetName:NOTICE_AUDIENCE[audience])+'\nيظهر فوراً بجرس الإشعارات ولا يمكن تعديل نصه بعد الإرسال (يمكن سحبه).',action:'إرسال'});
+ busy(true);
+ if(!ok)return false;
+ const batch=writeBatch(state.db),ref=doc(collection(state.db,'announcements'));
+ batch.set(ref,{kind,audience,broadcast:audience!=='user',targetUid,title,body,active:true,createdBy:state.account.uid,createdAt:serverTimestamp()});
+ batchAudit(batch,'send_announcement',ref.id,title);
+ await batch.commit();
+ form.reset();syncComposer();
+ toast('تم إرسال الإعلان.');
+ return true;
+}
+async function toggleNotice(item){
+ const next=item.active===false;
+ const batch=writeBatch(state.db);
+ batch.update(doc(state.db,'announcements',item.id),{active:next});
+ if(!next)batchAudit(batch,'withdraw_announcement',item.id,item.title);
+ else batchAudit(batch,'send_announcement',item.id,item.title);
+ await batch.commit();
+ item.active=next;
+ toast(next?'رجع الإعلان يظهر.':'تم سحب الإعلان، وما انحذف.');
+}
+function syncComposer(){const form=$('composer');if(!form)return;form.querySelector('[data-for="user"]').hidden=form.audience.value!=='user'}
+const ROWS={projects:projectRow,users:userRow,issues:issueRow,staffRoles:staffRow,deletionRequests:deletionRow,adminAuditLogs:auditRow,announcements:announcementRow};
 function renderList(){
  const type=state.tab,source=TABS[type];
  const needle=state.filter.trim().toLowerCase();
@@ -157,7 +203,8 @@ function renderList(){
  $('searchInput').placeholder=source.search||'';
  // App names filter as you type; only the email lookup needs a button.
  $('searchButton').hidden=type!=='users';
- $('items').innerHTML=rows.length?rows.map(ROWS[type]).join(''):'<p class="none">لا توجد سجلات هنا.</p>';
+ $('composer').hidden=type!=='announcements';
+ $('items').innerHTML=rows.length?rows.map(ROWS[type]).join(''):'<p class="none">'+(type==='announcements'?'ما انرسل أي إعلان بعد.':'لا توجد سجلات هنا.')+'</p>';
  $('more').hidden=!state.hasMore;
  for(const b of document.querySelectorAll('[data-tab]'))b.classList.toggle('active',b.dataset.tab===type);
 }
@@ -230,11 +277,12 @@ async function processDeletion(item){
 }
 const PROMPTS={
  'revoke-staff':item=>({title:'سحب صلاحيات '+(item.email||item.name)+'؟',body:'يفقد الوصول إلى لوحة الإدارة فوراً، ويبقى حسابه العادي كما هو.',danger:true}),
+ 'toggle-notice':item=>(item.active===false?null:{title:'سحب «'+(item.title||'')+'»؟',body:'يختفي من جرس المستخدمين، ويبقى محفوظاً بالسجل.',action:'سحب'}),
  'process-deletion':item=>({title:'هل نفّذت الحذف فعلاً؟',body:'نفّذ الحذف أولاً من Firebase Console: احذف حساب '+(item.email||item.id)+' من Authentication، ومستند users الخاص به من Firestore (ومستند publicProfiles إن وُجد)، ثم أكد هنا.',action:'نعم، نُفّذ'}),
  suspend:item=>({title:(item.suspended?'إعادة تنشيط ':'إيقاف ')+(item.email||item.name||item.id)+'؟',body:item.suspended?'':'الإيقاف يمنع استخدام البيانات فوراً وتبقى بياناته محفوظة. حساب الدخول نفسه يُعطَّل من Firebase Console.',danger:!item.suspended}),
  archive:item=>({title:(item.status==='archived'?'إلغاء أرشفة ':'أرشفة ')+item.name+'؟',body:item.status==='archived'?'':'تتوقف التقارير والرسائل الجديدة، ولا تُحذف البيانات القديمة.'})
 };
-const ACTIONS={promote:promoteUser,'edit-staff':editStaff,'revoke-staff':revokeStaff,'process-deletion':processDeletion,suspend:setSuspension,archive:archiveProject,details:loadDetails,delete:removeProject};
+const ACTIONS={'toggle-notice':toggleNotice,promote:promoteUser,'edit-staff':editStaff,'revoke-staff':revokeStaff,'process-deletion':processDeletion,suspend:setSuspension,archive:archiveProject,details:loadDetails,delete:removeProject};
 document.addEventListener('click',event=>{
  const tab=event.target.closest('[data-tab]');
  if(tab){state.tab=tab.dataset.tab;state.filter='';$('searchInput').value='';guarded(()=>page(true));return}
@@ -243,12 +291,15 @@ document.addEventListener('click',event=>{
  const item=state.rows.find(x=>x.id===trigger.dataset.id),name=trigger.dataset.action;
  if(!item)return;
  guarded(async()=>{
-  if(PROMPTS[name]){busy(false);const ok=await confirmDialog(PROMPTS[name](item));busy(true);if(!ok)return}
+  const prompt=PROMPTS[name]?.(item);
+  if(prompt){busy(false);const ok=await confirmDialog(prompt);busy(true);if(!ok)return}
   const done=await ACTIONS[name](item);
   renderList();
   if(!['details','promote','edit-staff','revoke-staff'].includes(name)&&done!==false)await overview();
  });
 });
+$('composer').addEventListener('change',syncComposer);
+$('composer').addEventListener('submit',event=>{event.preventDefault();const form=event.currentTarget;guarded(async()=>{if(await sendAnnouncement(form)!==false)await page(true)})});
 $('refresh').addEventListener('click',()=>guarded(()=>Promise.all([overview(),page(true)])));
 $('more').addEventListener('click',()=>guarded(()=>page()));
 $('searchInput').addEventListener('input',event=>{if(state.tab==='projects'){state.filter=event.target.value;renderList()}});

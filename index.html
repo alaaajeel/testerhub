@@ -265,6 +265,13 @@ html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 .confirm-console{margin-bottom:8px}
 .tester-picks .checks{align-items:center}
 .tester-picks .avatar{width:28px;height:28px;font-size:12px}
+.admin-notice{background:#fff;border:1px solid #e1eaf7;border-radius:14px;padding:11px 12px;margin:0 0 8px;font-size:13px;line-height:1.7}
+.admin-notice.unread{border-color:#9fc2f1;background:#f3f8ff;box-shadow:inset -3px 0 0 #1559b7}
+.admin-notice strong{display:block;margin-top:5px;font-size:14px}
+.admin-notice p{margin:3px 0 0;white-space:pre-line;overflow-wrap:anywhere;color:#3d4d70}
+.notice-kind{font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:#e8f0fd;color:#1559b7}
+.notice-kind.update{background:#e3f7ef;color:#08744f}
+.notice-kind.instruction{background:#fff0dc;color:#91550e}
 .message-counter{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:50%;background:#fff0d3;color:#835317;font-size:11px;font-weight:700}
 .field textarea{min-height:92px;font-size:13px;line-height:1.8}
 
@@ -903,6 +910,33 @@ async function refreshLeagueName(){
  const shown=await storeFns.getDoc(ref).catch(()=>null);
  if(shown?.exists()&&shown.data().name!==active.name)await storeFns.setDoc(ref,{name:active.name,updatedAt:storeFns.serverTimestamp()});
 }
+// ---- Admin notices (مركز إشعارات الإدارة) ----
+const NOTICE_KINDS={announcement:'إعلان',update:'تحديث للمنصة',instruction:'تعليمات مهمة'};
+const NOTICE_LIMIT=15;
+const noticeMillis=n=>n?.createdAt?.toMillis?.()??(typeof n?.createdAt?.seconds==='number'?n.createdAt.seconds*1000:Date.parse(n?.createdAt||''));
+// Broadcasts are filtered by the account's current side here; the rules keep direct messages private.
+function noticesFor(items,role){
+ const side=role==='developer'?'developers':'testers';
+ return items.filter(n=>n&&n.active!==false&&(n.audience==='all'||n.audience===side||n.audience==='user'))
+  .sort((a,b)=>(noticeMillis(b)||0)-(noticeMillis(a)||0));
+}
+async function loadAdminNotices(){
+ const active=await currentUser();if(!active)return {items:[],readAt:0};
+ if(isDemo){const d=demoState();return {items:noticesFor((d.announcements||[]).filter(n=>n.broadcast||n.targetUid===active.uid),active.role),readAt:d.noticeReadAt?.[active.uid]||0}}
+ const {collection,query,where,orderBy,limit,getDocs,getDoc,doc}=storeFns;
+ const [b,u,r]=await Promise.all([
+  getDocs(query(collection(db,'announcements'),where('broadcast','==',true),orderBy('createdAt','desc'),limit(NOTICE_LIMIT))),
+  getDocs(query(collection(db,'announcements'),where('targetUid','==',active.uid),orderBy('createdAt','desc'),limit(NOTICE_LIMIT))),
+  getDoc(doc(db,'noticeReads',active.uid)).catch(()=>null)
+ ]);
+ const items=[...b.docs,...u.docs].map(tidy);
+ return {items:noticesFor(items,active.role),readAt:r?.exists?.()?noticeMillis({createdAt:r.data().readAt})||0:0};
+}
+async function markAdminNoticesRead(){
+ const active=await currentUser();if(!active)return;
+ if(isDemo){const d=demoState();d.noticeReadAt??={};d.noticeReadAt[active.uid]=Date.now();save(d);return}
+ await storeFns.setDoc(storeFns.doc(db,'noticeReads',active.uid),{readAt:storeFns.serverTimestamp()});
+}
 const messageRetryIds=new Map();
 async function messageRetryKey(uid,assignmentId,body){
  const bytes=new TextEncoder().encode(uid+'|'+assignmentId+'|'+body);
@@ -1022,7 +1056,7 @@ async function switchRole(){
  const active=await currentUser();
  return accountService.updateProfile({role:active.role==='tester'?'developer':'tester'});
 }
-const api={isDemo,switchRole,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,getLeague,setLeagueName,refreshLeagueName,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
+const api={isDemo,switchRole,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,loadAdminNotices,markAdminNoticesRead,getLeague,setLeagueName,refreshLeagueName,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
 
 
 const app=document.getElementById('app');
@@ -1112,6 +1146,29 @@ function classifyTesterWork(assignments, dateKey=api.dayKey(), nowMs=Date.now())
 }
 function messageIsIncoming(message){return user&&message.senderUid!==user.uid&&message.sender!==user.role}
 function messageTime(message){return message.createdAt?.toMillis?.()??Date.parse(message.at||'')}
+// Admin notices load at sign-in, on opening the bell, and at most every 10 minutes otherwise (Spark reads).
+let adminNotices={items:[],readAt:0,loadedAt:0,uid:null},noticeUnreadAtOpen=[];
+async function refreshAdminNotices(force=false){
+ if(!user)return;
+ if(!force&&adminNotices.uid===user.uid&&Date.now()-adminNotices.loadedAt<600000)return;
+ const uid=user.uid;
+ try{const fresh=await api.loadAdminNotices();if(user?.uid!==uid)return;adminNotices={...fresh,loadedAt:Date.now(),uid}}
+ catch(err){console.warn('Admin notices:',err)}
+}
+function unreadAdminNotices(){
+ if(!user||adminNotices.uid!==user.uid)return [];
+ const since=Math.max(adminNotices.readAt||0,Date.now()-30*86400000);
+ return adminNotices.items.filter(n=>(noticeMillis(n)||0)>since);
+}
+function adminNoticeItem(n,unread){
+ const when=noticeMillis(n);
+ return `<article class="admin-notice ${unread?'unread':''}"><div class="row between"><span class="notice-kind ${clean(n.kind)}">${clean(NOTICE_KINDS[n.kind]||'إعلان')}${n.audience==='user'?' · لك':''}</span><span class="tiny">${Number.isFinite(when)?new Date(when).toLocaleDateString('ar-IQ',{day:'numeric',month:'short'}):''}</span></div><strong>${clean(n.title)}</strong><p>${clean(n.body)}</p></article>`;
+}
+function announcementsPage(){
+ const unread=new Set(unreadAdminNotices());
+ const back=`<button class="top-link" data-tab="home">${ico('chevron',16)} الرئيسية</button>`;
+ return `<div class="surface">${back}<div class="lead" style="margin-top:12px">إعلانات الإدارة</div><div class="small">آخر الإعلانات والتعليمات من إدارة TesterHub.</div></div>${adminNotices.items.length?adminNotices.items.map(n=>adminNoticeItem(n,unread.has(n))).join(''):'<div class="tab-empty">ماكو إعلانات لحد الآن</div>'}`;
+}
 function noticeSeenKey(){return 'testerhub_notice_seen_'+(user?.uid||'guest')}
 function unreadNoticeMessages(){
  if(!user)return [];
@@ -1121,7 +1178,7 @@ function unreadNoticeMessages(){
 }
 function noticeBadgeCount(){
  if(!user)return 0;
- const unread=unreadNoticeMessages().length;
+ const unread=unreadNoticeMessages().length+unreadAdminNotices().length;
  if(user.role==='tester'){
   const st=classifyTesterWork(primaryAssignments());
   return st.due.length+st.invites.length+unread;
@@ -1141,6 +1198,11 @@ function notificationPanel(){
  else if(noticeState==='stale')body='<div class="notice-status">وصل تحديث جديد؛ اضغط تحديث الإشعارات للتأكد من آخر حالة.</div>';
  else if(noticeState==='error')body='<div class="notice-status error">'+clean(noticeError||'تعذّر التحقق من البيانات الآن، حاول مرة ثانية.')+'</div>';
  else if(noticeState==='verified'){
+  const fromAdmin=adminNotices.uid===user.uid?adminNotices.items.slice(0,3):[];
+  if(fromAdmin.length){
+   const unread=new Set(noticeUnreadAtOpen);
+   body+='<div class="notice-section-title">إعلانات الإدارة</div>'+fromAdmin.map(n=>adminNoticeItem(n,unread.has(n.id))).join('')+'<button type="button" class="item-link" data-action="notice-go-announcements">كل الإعلانات <span>‹</span></button>';
+  }
   if(user.role==='tester'){
    const work=classifyTesterWork(primaryAssignments());
    if(!dashboard.assignments.length)body+=noticeCard('لا توجد تطبيقات مسندة لحسابك','ما عندك تكليفات اختبار حالياً.');
@@ -1175,9 +1237,12 @@ async function syncNotificationPanel(){
  noticeOpen=true;noticeState='loading';noticeError='';render();
  const uid=user.uid;
  try{
-  const fresh=await api.getDashboard({fromServer:!api.isDemo});
+  const [fresh]=await Promise.all([api.getDashboard({fromServer:!api.isDemo}),refreshAdminNotices(true)]);
   if(!user||user.uid!==uid)return;
   dashboard=fresh;
+  // Highlight what was new when the bell opened, then record it as read on the server.
+  noticeUnreadAtOpen=unreadAdminNotices().map(n=>n.id);
+  if(noticeUnreadAtOpen.length){await api.markAdminNoticesRead().catch(err=>console.warn('Notice read state:',err));adminNotices.readAt=Date.now()}
   noticeLastVerified=Date.now();noticeState='verified';
   previewStorage.setItem(noticeSeenKey(),String(noticeLastVerified));
  }catch(err){
@@ -1377,7 +1442,7 @@ function render(){
  if(!user){app.innerHTML=authScreen();return}
  if(!api.isDemo&&user.suspended){app.innerHTML=suspendedScreen();return}
  if(!api.isDemo&&(user.profileMissing||!user.emailVerified)){app.innerHTML=accountGate();return}
- const screens=user.role==='developer'?{home:devHome,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),tester:testerDetails,chat:chatPage,rewards,profile}:{home:testerHome,tests:testerTests,report:dailyReport,chat:chatPage,rewards,profile};
+ const screens=user.role==='developer'?{home:devHome,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),tester:testerDetails,chat:chatPage,rewards,announcements:announcementsPage,profile}:{home:testerHome,tests:testerTests,report:dailyReport,chat:chatPage,rewards,announcements:announcementsPage,profile};
  const content=(screens[tab]||screens.home)();
  app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar()+appMenu()+notificationPanel();
 }
@@ -1458,7 +1523,7 @@ async function flushLiveSync(){
  finally{liveFetchInProgress=false}
 }
 
-async function refresh(){if(!user)return;const uid=user.uid;const fresh=await api.getDashboard();if(user?.uid!==uid)return;dashboard=fresh;startLiveSync();render()}
+async function refresh(){if(!user)return;const uid=user.uid;const [fresh]=await Promise.all([api.getDashboard(),refreshAdminNotices()]);if(user?.uid!==uid)return;dashboard=fresh;startLiveSync();render()}
 const splashStartedAt=performance.now();
 let splashDismissed=false;
 function finishLaunchSplash(){
@@ -1549,6 +1614,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  // A notification panel must stay dismissible even during a slow Firebase request.
  if(action==='close-notices'){noticeOpen=false;render();return}
  if(action==='notice-go-tests'){noticeOpen=false;tab='tests';render();return}
+ if(action==='notice-go-announcements'){noticeOpen=false;tab='announcements';render();return}
  if(action==='notice-go-project'){noticeOpen=false;selectedProjectId=button.dataset.target;tab='details';render();return}
  if(action==='notice-go-chat'){
   noticeOpen=false;selectedAssignmentId=button.dataset.target;
