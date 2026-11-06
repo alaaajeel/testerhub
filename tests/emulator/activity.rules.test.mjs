@@ -2,7 +2,7 @@ import {before, after, beforeEach, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {initializeTestEnvironment, assertSucceeds, assertFails} from '@firebase/rules-unit-testing';
-import {doc, setDoc, getDoc, getDocs, updateDoc, collection, query, where, getCountFromServer, serverTimestamp, Timestamp} from 'firebase/firestore';
+import {doc, setDoc, getDoc, getDocs, updateDoc, writeBatch, collection, query, where, getCountFromServer, serverTimestamp, Timestamp} from 'firebase/firestore';
 
 // Activity monitoring: each user writes only their own estimated last-seen; only the platform team reads it.
 let env;
@@ -75,4 +75,32 @@ test('a tester stamps "seen" on their running participation, at most hourly; onl
  await assertFails(updateDoc(doc(db('t2'), 'assignments', 'p1_t2'), {testerSeenAt: serverTimestamp()}));            // not started
  await assertSucceeds(getDoc(doc(db('d1'), 'assignments', 'p1_t1')));
  await assertFails(getDoc(doc(db('t2'), 'assignments', 'p1_t1')));
+});
+
+test('activity never changes reports, the 14-day counter or XP', async () => {
+ const day = new Date().toISOString().slice(0, 10), t1 = db('t1'), ref = doc(t1, 'assignments', 'p3_t1');
+ await admin(async d => {
+  await setDoc(doc(d, 'projects', 'p3'), {ownerUid: 'd1', name: 'App', link: 'https://play.google.com/apps/testing/x'});
+  await setDoc(doc(d, 'assignments', 'p3_t1'), {ownerUid: 'd1', testerUid: 't1', projectId: 'p3', joinedDay: null, checkins: []});
+ });
+ await assertSucceeds(updateDoc(ref, {joinedDay: day, joinedAt: serverTimestamp()}));
+ // Stamping "seen" and presence before the report.
+ await assertSucceeds(updateDoc(ref, {testerSeenAt: serverTimestamp()}));
+ await assertSucceeds(setDoc(doc(t1, 'presence', 't1'), beat('tester', {lastActionAt: serverTimestamp()})));
+ const before = await read('assignments', 'p3_t1');
+ assert.equal(before.joinedDay, day); assert.deepEqual(before.checkins, []); assert.equal('lastCheckinAt' in before, false);
+ // The seen stamp cannot carry a check-in, a start day or a report time.
+ await admin(d => updateDoc(doc(d, 'assignments', 'p3_t1'), {testerSeenAt: minutesAgo(61)}));
+ for (const extra of [{checkins: [day]}, {joinedDay: '2000-01-01'}, {lastCheckinAt: serverTimestamp()}])
+  await assertFails(updateDoc(ref, {testerSeenAt: serverTimestamp(), ...extra}));
+ // The daily report still works exactly as before, once per day.
+ const report = {assignmentId: 'p3_t1', projectId: 'p3', testerUid: 't1', ownerUid: 'd1', tested: 'فتح التطبيق وتجربة وظيفة أساسية', outcome: 'ok', notes: 'Worked as expected', status: 'ok', createdAt: new Date().toISOString(), submittedAt: serverTimestamp(), date: day};
+ const send = () => { const b = writeBatch(t1); b.set(doc(t1, 'reports', 'p3_t1_' + day), report); b.update(ref, {checkins: [day], lastCheckinAt: serverTimestamp()}); return b.commit(); };
+ await assertSucceeds(send());
+ await assertFails(send());
+ const after = await read('assignments', 'p3_t1');
+ assert.deepEqual(after.checkins, [day]); assert.equal(after.joinedDay, day);
+ // Activity writes never create XP records.
+ let xp = 0; await admin(async d => { xp = (await getDocs(collection(d, 'xpTotals'))).size + (await getDocs(collection(d, 'xpAssignments'))).size; });
+ assert.equal(xp, 0);
 });

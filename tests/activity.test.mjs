@@ -66,3 +66,10 @@ test('the developer follow-up flags testers quiet for two days or more and says 
  assert.deepEqual(list.map(r=>[r.a.id,r.flagged]),[['quiet',true],['quietButSeen',false],['fresh',false]]);
  assert.match(from('function followUpSection(','function testModeSection('),/عدم فتح TesterHub ما يعني إن المختبر ما يستخدم تطبيقك/);
 });
+test('activity code never writes check-ins, start days, report times or XP',()=>{
+ const code=from('const ONLINE_MS=','async function getDashboard(');
+ assert.doesNotMatch(code,/checkins\s*:|joinedDay\s*:|lastCheckinAt|xpTotals|xpAssignments|collection\(db,'reports'\)/);
+ // The developer follow-up only reads; its buttons send a message or invite a backup.
+ const follow=from('const FOLLOW_UP_DAYS=','function testModeSection(');
+ assert.doesNotMatch(follow,/updateDoc|setDoc|writeBatch/);
+});
