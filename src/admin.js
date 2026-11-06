@@ -17,7 +17,7 @@ const PERMISSIONS=[
 const TABS={
  projects:{title:'التطبيقات',order:()=>documentId(),search:'اسم التطبيق'},
  users:{title:'المستخدمون',perm:'viewUsers',order:()=>documentId(),search:'البريد الكامل'},
- issues:{title:'بلاغات المشاكل',perm:'viewReports',collection:'reports',order:()=>'date',desc:true,filter:()=>where('outcome','==','issue')},
+ issues:{title:'بلاغات المشاكل',perm:'viewReports',collection:'reports',order:()=>'date',desc:true,filter:()=>where('outcome','in',['issue','blocked'])},
  deletionRequests:{title:'طلبات حذف الحسابات',perm:'processDeletions',order:()=>'createdAt',desc:true},
  staffRoles:{title:'المشرفون',ownerOnly:true,order:()=>'grantedAt',desc:true},
  adminAuditLogs:{title:'سجل إجراءات الإدارة',perm:'viewAudit',order:()=>'createdAt',desc:true}

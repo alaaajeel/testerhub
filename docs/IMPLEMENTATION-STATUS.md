@@ -1,5 +1,7 @@
 # TesterHub continuation checkpoint
 
+Daily testing (new product phase 1): branch `feature/improve-daily-testing`. Compact daily report, third outcome `blocked`, developer review fields. See `PHASE-1-DAILY-TESTING-AR.md`. Rules must be deployed before the UI.
+
 Current candidate: `integration/mvp-candidate`, combining PR #3–#8 into one Firestore rules file and UI. See `MVP-CANDIDATE-AR.md` for tests, production gate and remaining work. Local verification: Node 55, emulator 22, Chromium 16, build/preflight. Keep PR open until production rules are checked and published before merging the UI.
 
 Baseline: dd84d5179496afec2b7a428b1a940d3064076c60. Existing repository only. Phase 1 and phase 2 tester selection merged into main through PR #1 and PR #2. Their matching rules were reported published by the user, but the Console editor content was not independently verified.

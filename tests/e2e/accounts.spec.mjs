@@ -103,8 +103,8 @@ test('assigned task appears in daily report and saved report keeps its snapshot'
  await card.locator('[data-action="accept-invite"]').click();
  await card.locator('[data-action="confirm-join"]').click();
  await card.locator('[data-action="write-report"]').click();
- await expect(page.locator('#daily-report-form')).toContainText('ابحث عن منتج وافتح تفاصيله');
- await page.locator('[name="opened"]').check();await page.locator('[name="feature"]').check();
+ await expect(page.locator('.daily-test .daily-task')).toContainText('ابحث عن منتج وافتح تفاصيله');
+ await page.locator('#daily-report-form label.ok').click();
  await page.locator('#test-note').fill('بحثت عن منتج وفتحت صفحة التفاصيل بنجاح');
  await page.locator('#daily-report-form button[type="submit"]').click();
  expect(await page.evaluate(()=>dashboard.reports.find(r=>r.tested==='ابحث عن منتج وافتح تفاصيله')?.notes)).toContain('بحثت عن منتج');

@@ -263,8 +263,8 @@ service cloud.firestore {
         && request.resource.data.projectId == assignment(request.resource.data.assignmentId).data.projectId
         && request.resource.data.date is string
         && currentUtcDay(request.resource.data.date)
-        && request.resource.data.outcome in ['ok','issue']
-        && request.resource.data.status == (request.resource.data.outcome == 'issue' ? 'new' : 'ok')
+        && request.resource.data.outcome in ['ok','issue','blocked']
+        && request.resource.data.status == (request.resource.data.outcome in ['issue','blocked'] ? 'new' : 'ok')
         && request.resource.data.notes is string
         && request.resource.data.notes.size() >= 10
         && request.resource.data.notes.size() <= 800
@@ -277,11 +277,21 @@ service cloud.firestore {
         && request.resource.data.submittedAt == request.time
         && !(request.resource.data.date in assignment(request.resource.data.assignmentId).data.checkins)
         && request.resource.data.date in assignmentAfter(request.resource.data.assignmentId).data.checkins;
+      // The owner may mark a problem fixed, or record a review decision. Neither path can touch
+      // what the tester wrote (tested, outcome, notes, date, timestamps), so a review is never a silent edit.
       allow update: if verified() && resource.data.ownerUid == request.auth.uid
         && !(project(resource.data.projectId).data.get('status','recruiting') in ['deleting','archived'])
-        && resource.data.outcome == 'issue' && resource.data.status == 'new'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-        && request.resource.data.status == 'fixed';
+        && (
+          (resource.data.outcome in ['issue','blocked'] && resource.data.status == 'new'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+            && request.resource.data.status == 'fixed')
+          ||
+          (project(resource.data.projectId).data.ownerUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewStatus','reviewedAt','reviewerUid'])
+            && request.resource.data.reviewStatus in ['accepted','clarify','rejected']
+            && request.resource.data.reviewedAt == request.time
+            && request.resource.data.reviewerUid == request.auth.uid)
+        );
       allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
     }
     // Spark has no trusted server: deletion is requested here and carried out by the admin.
