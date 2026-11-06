@@ -41,15 +41,16 @@ test('messages to the developer name the outcome',()=>{
  assert.match(h.messagePrefix('blocked'),/ما گدرت أكمل/);
  assert.match(h.messagePrefix('ok'),/ملاحظة/);
 });
-test('submission keeps the single transaction, the same document id and duplicate protection',()=>{
+test('submission is one atomic batch with the same document id and duplicate protection',()=>{
  const submit=section('async function submitDailyReport(','async function reviewReport(');
- assert.match(submit,/runTransaction\(db/);
+ assert.match(submit,/writeBatch\(db\)/);
+ assert.doesNotMatch(submit,/runTransaction/);
+ assert.match(submit,/err\?\.code!=='unavailable'\|\|attempt>=3/);
  assert.match(submit,/reports',`\$\{assignmentId\}_\$\{date\}`/);
  assert.match(submit,/checkins:storeFns\.arrayUnion\(date\)/);
  assert.match(submit,/submittedAt:storeFns\.serverTimestamp\(\)/);
- assert.match(submit,/testerhub\/already-reported/);
+ assert.match(submit,/const prior=await alreadySaved\(\);if\(prior\)return prior;\r?\n   throw err;/);
  assert.match(submit,/alreadySaved:true/);
- assert.doesNotMatch(submit,/txn\.get\(reportRef\)/);
  assert.doesNotMatch(submit,/opened|feature/);
 });
 test('compact form has one choice group, one text field and one submit button',()=>{

@@ -12,7 +12,7 @@ test('PWA manifest and icons',()=>{const m=JSON.parse(load('manifest.webmanifest
 test('service worker registered',()=>{assert.match(html,/serviceWorker\.register/);assert.match(load('sw.js'),/install/)});
 test('Firebase config linked to TestHubiq',()=>{assert.match(html,/window\.TESTERHUB_FIREBASE_CONFIG/);assert.match(load('firebase-config.js'),/testhubiq-c7711/);});
 test('real Firebase Auth and role-based dashboards',()=>{assert.match(html,/createUserWithEmailAndPassword/);assert.match(html,/where\('ownerUid','==',user.uid\)/);assert.match(html,/where\('testerUid','==',user.uid\)/);});
-test('daily reports and chat use Firebase reads and writes',()=>{assert.match(html,/runTransaction\(db/);assert.match(html,/collection\(db,'reports'\)/);assert.match(html,/collection\(db,'messages'\)/);});
+test('daily reports and chat use Firebase reads and writes',()=>{assert.match(html,/writeBatch\(db\)/);assert.match(html,/collection\(db,'reports'\)/);assert.match(html,/collection\(db,'messages'\)/);});
 test('daily report is bound to checkins atomically by rules',()=>{assert.match(rules,/getAfter\(/);assert.match(rules,/match \/reports\//);assert.match(rules,/match \/messages\//);});
 test('no service credentials packaged',()=>{assert.doesNotMatch(html,/BEGIN PRIVATE KEY/);assert.doesNotMatch(load('firebase-config.js'),/BEGIN PRIVATE KEY/);});
 
@@ -66,11 +66,9 @@ test('daily check-in does not perform forbidden nonexistent report reads',()=>{
  const start=html.indexOf('async function submitDailyReport(');
  const end=html.indexOf('async function sendMessage(',start);
  const section=html.slice(start,end);
- assert.match(section,/runTransaction\(db/);
- assert.match(section,/txn\.get\(ref\)/);
- assert.doesNotMatch(section,/txn\.get\(reportRef\)/);
- assert.match(section,/txn\.set\(reportRef/);
- assert.match(section,/txn\.update\(ref/);
+ assert.match(section,/storeFns\.getDoc\(ref\)/);
+ assert.match(section,/batch\.set\(reportRef/);
+ assert.match(section,/batch\.update\(ref/);
  assert.match(rules,/match \/reports\//);
  assert.match(rules,/allow create: if verified\(\)/);
 });
