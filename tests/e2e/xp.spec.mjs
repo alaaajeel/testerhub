@@ -157,13 +157,14 @@ test('Firestore: the developer award is one batch of an event and the four total
  const [review,award]=await page.evaluate(()=>window.fs.batches);
  expect(review.map(o=>o.path)).toEqual([`reports/p1_t1_${day}`]);
  expect(review[0].value).toEqual({reviewStatus:'accepted',reviewedAt:{server:true},reviewerUid:'d1'});
- const now=Date.now(),week='W'+Math.floor((now+259200000)/604800000),d=new Date(now),month='M'+(d.getUTCFullYear()*100+d.getUTCMonth()+1);
- expect(award.map(o=>o.path)).toEqual([`contributions/p1_t1_${day}_review`,'xpTotals/t1',`xpPeriods/${week}_t1`,`xpPeriods/${month}_t1`,'xpAssignments/p1_t1']);
+ const now=Date.now(),week='W'+Math.floor((now+259200000)/604800000),d=new Date(now),month='M'+(d.getUTCFullYear()*100+d.getUTCMonth()+1),today='D'+(d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate());
+ expect(award.map(o=>o.path)).toEqual([`contributions/p1_t1_${day}_review`,'xpTotals/t1',`xpPeriods/${week}_t1`,`xpPeriods/${month}_t1`,`xpPeriods/${today}_t1`,'xpAssignments/p1_t1']);
  expect(award[0].value).toEqual({kind:'bug',points:20,testerUid:'t1',ownerUid:'d1',projectId:'p1',assignmentId:'p1_t1',reportId:`p1_t1_${day}`,awardedBy:'d1',week,month,createdAt:{server:true}});
  const counters={points:{inc:20},reports:{inc:0},bugs:{inc:1},retests:{inc:0},cycles:{inc:0},lastEventId:`p1_t1_${day}_review`,updatedAt:{server:true}};
  expect(award[1]).toMatchObject({merge:true,value:{uid:'t1',...counters,apps:{inc:1}}});
  expect(award[2]).toMatchObject({merge:true,value:{uid:'t1',period:week,...counters}});
- expect(award[4]).toMatchObject({merge:true,value:{testerUid:'t1',ownerUid:'d1',projectId:'p1',...counters}});
+ expect(award[4]).toMatchObject({merge:true,value:{uid:'t1',period:today,...counters}});
+ expect(award[5]).toMatchObject({merge:true,value:{testerUid:'t1',ownerUid:'d1',projectId:'p1',...counters}});
  // The tester's text is untouched by the review.
  expect(await page.evaluate(day=>window.fs.docs['reports/p1_t1_'+day].notes,day)).toBe('خطأ عند الدفع بالبطاقة');
 });

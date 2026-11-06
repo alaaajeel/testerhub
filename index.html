@@ -231,12 +231,12 @@ html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 .retest-notice{margin:0 0 8px}
 .badge-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .xp-badge{font-size:11px;font-weight:700;background:#fff7e3;color:#8a5a00;border:1px solid #f3dca5;border-radius:99px;padding:4px 9px}
-.segmented{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#eef3fb;border-radius:12px;padding:4px;margin:10px 0}
+.segmented{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));grid-auto-flow:column;gap:4px;background:#eef3fb;border-radius:12px;padding:4px;margin:10px 0}
 .segmented button{min-height:38px;border:0;border-radius:9px;background:transparent;font:inherit;font-size:13px;font-weight:700;color:#5b6b8c;cursor:pointer}
 .segmented button.active{background:#fff;color:#1559b7;box-shadow:0 2px 6px rgba(21,70,141,.12)}
 .league-list{display:grid;gap:6px}
 .league-row{display:flex;align-items:center;gap:10px;min-height:48px;padding:7px 10px;border:1px solid #e1eaf7;border-radius:12px;background:#fbfcff;min-width:0}
-.league-row.mine{border-color:#0caa79;background:#ebfaf3}
+.league-photo,.profile-photo{border-radius:50%;object-fit:cover;flex:none;background:#e8eef8}.league-photo{width:34px;height:34px}.profile-photo{width:54px;height:54px}.sample-tag{font-size:10px;font-weight:700;color:#7a8aa6;background:#eef3fb;border-radius:999px;padding:1px 7px;vertical-align:middle}.photo-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}.photo-pick{cursor:pointer;flex:none}.league-row.mine{border-color:#0caa79;background:#ebfaf3}
 .league-rank{width:28px;height:28px;flex:none;display:grid;place-items:center;border-radius:50%;background:#eef2f8;font-size:12px;font-weight:800;color:#5b6b8c}
 .league-rank.top{background:linear-gradient(135deg,#f5c242,#e3a33e);color:#fff}
 .league-who{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -763,6 +763,8 @@ const XP_CYCLE_MIN_ACCEPTED=7;
 const LEGACY_XP_CUTOFF=String(window.TESTERHUB_XP_START||'2026-11-06');
 const xpWeekKey=(ms=Date.now())=>'W'+Math.floor((ms+259200000)/604800000);
 const xpMonthKey=(ms=Date.now())=>{const d=new Date(ms);return 'M'+(d.getUTCFullYear()*100+d.getUTCMonth()+1)};
+// The same UTC day the rules compute from the event's server time.
+const xpDayKey=(ms=Date.now())=>{const d=new Date(ms);return 'D'+(d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate())};
 const xpKindForReport=r=>needsFollowUp(r)?'bug':'report';
 function pendingXpEvents({reports=[],assignments=[],eventIds=new Set(),ledgers=new Map()}){
  const out=[],seen=new Set(eventIds),newlyAccepted=new Map(),byId=new Map(assignments.map(a=>[a.id,a]));
@@ -798,13 +800,13 @@ async function awardXp(ev,firstForAssignment){
   const now=Date.now(),bump=(o,extra={})=>{o.points=(o.points||0)+ev.points;for(const k of ['report','bug','retest','cycle'])o[k+'s']=(o[k+'s']||0)+(ev.kind===k?1:0);Object.assign(o,extra);return o};
   d.xp.events[ev.id]={...ev,week:xpWeekKey(now),month:xpMonthKey(now),createdAt:new Date(now).toISOString()};
   const total=d.xp.totals[ev.testerUid]??={uid:ev.testerUid};bump(total,{apps:(total.apps||0)+(d.xp.ledgers[ev.assignmentId]?0:1)});
-  for(const period of [xpWeekKey(now),xpMonthKey(now)])bump(d.xp.periods[period+'_'+ev.testerUid]??={uid:ev.testerUid,period});
+  for(const period of [xpDayKey(now),xpWeekKey(now),xpMonthKey(now)])bump(d.xp.periods[period+'_'+ev.testerUid]??={uid:ev.testerUid,period});
   bump(d.xp.ledgers[ev.assignmentId]??={testerUid:ev.testerUid,ownerUid:ev.ownerUid,projectId:ev.projectId});
   save(d);return true;
  }
  const active=await currentUser();
  if(!active)throw Error('سجّل الدخول أولاً');
- const {doc,writeBatch,serverTimestamp,increment}=storeFns,now=Date.now(),week=xpWeekKey(now),month=xpMonthKey(now);
+ const {doc,writeBatch,serverTimestamp,increment}=storeFns,now=Date.now(),week=xpWeekKey(now),month=xpMonthKey(now),day=xpDayKey(now);
  const counters={points:increment(ev.points),reports:increment(ev.kind==='report'?1:0),bugs:increment(ev.kind==='bug'?1:0),
   retests:increment(ev.kind==='retest'?1:0),cycles:increment(ev.kind==='cycle'?1:0),lastEventId:ev.id,updatedAt:serverTimestamp()};
  const batch=writeBatch(db);
@@ -813,6 +815,7 @@ async function awardXp(ev,firstForAssignment){
  batch.set(doc(db,'xpTotals',ev.testerUid),{uid:ev.testerUid,...counters,apps:increment(firstForAssignment?1:0)},{merge:true});
  batch.set(doc(db,'xpPeriods',week+'_'+ev.testerUid),{uid:ev.testerUid,period:week,...counters},{merge:true});
  batch.set(doc(db,'xpPeriods',month+'_'+ev.testerUid),{uid:ev.testerUid,period:month,...counters},{merge:true});
+ batch.set(doc(db,'xpPeriods',day+'_'+ev.testerUid),{uid:ev.testerUid,period:day,...counters},{merge:true});
  batch.set(doc(db,'xpAssignments',ev.assignmentId),{testerUid:ev.testerUid,ownerUid:ev.ownerUid,projectId:ev.projectId,...counters},{merge:true});
  await batch.commit();
  return true;
@@ -835,7 +838,7 @@ async function syncMyXp(){
   const ledgers=new Map(Object.entries(d.xp.ledgers).filter(([,l])=>l.testerUid===active.uid));
   const pending=pendingXpEvents({reports:d.reports.filter(r=>r.testerUid===active.uid),assignments:mine,eventIds:new Set(Object.keys(d.xp.events)),ledgers});
   const added=await awardPending(pending,ledgers);
-  const fresh=demoState().xp;
+  const fresh=demoState().xp||{totals:{},ledgers:{}};
   return {added,totals:fresh.totals[active.uid]||null,ledgers:Object.fromEntries(Object.entries(fresh.ledgers).filter(([,l])=>l.testerUid===active.uid))};
  }
  const {collection,query,where,getDocs,getDocFromServer,doc}=storeFns;
@@ -882,15 +885,17 @@ const xpBadges=t=>XP_BADGES.filter(([,ok])=>ok(t||{})).map(([name])=>name);
 const LEAGUE_SIZE=20;
 // Ranks by points; ties are ordered by account id so the list does not jump between loads.
 function rankLeague(rows){return rows.slice().sort((a,b)=>(b.points||0)-(a.points||0)||String(a.uid).localeCompare(String(b.uid))).map((r,i)=>({...r,rank:i+1}))}
-async function getLeague(kind='week'){
+// What the league may show of a member: their profile name and photo, unless they chose to hide them.
+const publicOf=p=>p&&!p.hidden?{name:p.name||null,photo:typeof p.photo==='string'&&/^data:image\/(webp|jpeg);base64,/.test(p.photo)?p.photo:null}:{name:null,photo:null};
+async function getLeague(kind='day'){
  const active=await currentUser();if(!active)return null;
- const period=kind==='month'?xpMonthKey():xpWeekKey();
+ const period=kind==='month'?xpMonthKey():kind==='week'?xpWeekKey():xpDayKey();
  if(isDemo){
   const d=demoState(),x=d.xp||{periods:{},totals:{}},names=d.publicProfiles||{};
   const all=rankLeague(Object.values(x.periods||{}).filter(p=>p.period===period));
-  const decorate=r=>({...r,name:names[r.uid]?.name||null,total:x.totals?.[r.uid]?.points||0,apps:x.totals?.[r.uid]?.apps||0});
+  const decorate=r=>({...r,...publicOf(names[r.uid]),total:x.totals?.[r.uid]?.points||0,apps:x.totals?.[r.uid]?.apps||0});
   const mine=all.find(r=>r.uid===active.uid);
-  return {period,kind,rows:all.slice(0,LEAGUE_SIZE).map(decorate),me:mine?decorate(mine):null,rank:mine?.rank||null,showName:!!names[active.uid]};
+  return {period,kind,rows:all.slice(0,LEAGUE_SIZE).map(decorate),me:mine?decorate(mine):null,rank:mine?.rank||null,showName:!!names[active.uid]&&!names[active.uid].hidden};
  }
  const {collection,query,where,orderBy,limit,getDocs,getDoc,doc,documentId,getCountFromServer}=storeFns;
  const [top,mine,shown]=await Promise.all([
@@ -902,25 +907,49 @@ async function getLeague(kind='week'){
  const uids=[...new Set(rows.map(r=>r.uid).concat(active.uid))];
  const lookup=async name=>{const out=new Map();for(let i=0;i<uids.length;i+=30){const q=await getDocs(query(collection(db,name),where(documentId(),'in',uids.slice(i,i+30))));for(const x of q.docs)out.set(x.id,x.data())}return out};
  const [names,totals]=await Promise.all([lookup('publicProfiles'),lookup('xpTotals')]);
- const decorate=r=>({...r,name:names.get(r.uid)?.name||null,total:totals.get(r.uid)?.points||0,apps:totals.get(r.uid)?.apps||0});
+ const decorate=r=>({...r,...publicOf(names.get(r.uid)),total:totals.get(r.uid)?.points||0,apps:totals.get(r.uid)?.apps||0});
  const me=mine.exists()?mine.data():null;
  let rank=null;
  if(me){const ahead=await getCountFromServer(query(collection(db,'xpPeriods'),where('period','==',period),where('points','>',me.points||0)));rank=ahead.data().count+1}
- return {period,kind,rows:rankLeague(rows).map(decorate),me:me?decorate(me):null,rank,showName:shown.exists()};
+ return {period,kind,rows:rankLeague(rows).map(decorate),me:me?decorate(me):null,rank,showName:shown.exists()&&!shown.data().hidden};
 }
 // Opt-in only: the league shows a name just for members who switch this on, and only their profile name.
-async function setLeagueName(show){
+// Members appear in the league by their profile name unless they hide it; the email never appears.
+let myPublicProfile=null;
+async function writePublicProfile(changes){
  const active=await currentUser();if(!active)throw Error('سجّل الدخول أولاً');
- if(isDemo){const d=demoState();d.publicProfiles??={};if(show)d.publicProfiles[active.uid]={name:active.name};else delete d.publicProfiles[active.uid];save(d);return}
- const ref=storeFns.doc(db,'publicProfiles',active.uid);
- if(show)await storeFns.setDoc(ref,{name:active.name,updatedAt:storeFns.serverTimestamp()});
- else await storeFns.deleteDoc(ref);
+ if(isDemo){const d=demoState();d.publicProfiles??={};const next={...(d.publicProfiles[active.uid]||{}),name:active.name,...changes};for(const k of Object.keys(next))if(next[k]===null)delete next[k];d.publicProfiles[active.uid]=next;save(d);myPublicProfile=next;return next}
+ const ref=storeFns.doc(db,'publicProfiles',active.uid),body={name:active.name,updatedAt:storeFns.serverTimestamp()};
+ for(const [k,v] of Object.entries(changes))body[k]=v===null?storeFns.deleteField():v;
+ await storeFns.setDoc(ref,body,{merge:true});
+ const next={...(myPublicProfile||{}),name:active.name,...changes};for(const k of Object.keys(next))if(next[k]===null)delete next[k];
+ myPublicProfile=next;return next;
 }
+async function setLeagueName(show){return writePublicProfile({hidden:!show})}
+async function setProfilePhoto(photo){return writePublicProfile({photo:photo||null})}
+// Creates the league entry for members who never chose, and keeps the shown name equal to the profile name.
 async function refreshLeagueName(){
- if(isDemo)return;
- const active=await currentUser(),ref=storeFns.doc(db,'publicProfiles',active.uid);
- const shown=await storeFns.getDoc(ref).catch(()=>null);
- if(shown?.exists()&&shown.data().name!==active.name)await storeFns.setDoc(ref,{name:active.name,updatedAt:storeFns.serverTimestamp()});
+ const active=await currentUser();if(!active)return null;
+ if(isDemo){myPublicProfile=demoState().publicProfiles?.[active.uid]||await writePublicProfile({hidden:false});return myPublicProfile}
+ const shown=await storeFns.getDoc(storeFns.doc(db,'publicProfiles',active.uid)).catch(()=>null);
+ if(!shown)return myPublicProfile;
+ myPublicProfile=shown.exists()?shown.data():null;
+ if(!myPublicProfile)return writePublicProfile({hidden:false}).catch(err=>{console.warn('League name:',err);return null});
+ if(myPublicProfile.name!==active.name)return writePublicProfile({}).catch(err=>{console.warn('League name:',err);return myPublicProfile});
+ return myPublicProfile;
+}
+// A square picture small enough to live in Firestore: centre-cropped, 128 px, WebP or JPEG.
+async function photoDataUrl(file){
+ if(!file||!/^image\//.test(file.type))throw Error('اختر صورة من جهازك');
+ if(file.size>15*1024*1024)throw Error('الصورة كبيرة جداً');
+ const url=URL.createObjectURL(file);
+ try{
+  const img=await new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>bad(Error('تعذّر فتح الصورة'));i.src=url});
+  const side=Math.min(img.naturalWidth,img.naturalHeight),c=document.createElement('canvas');c.width=c.height=128;
+  c.getContext('2d').drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,128,128);
+  for(const [type,q] of [['image/webp',.82],['image/jpeg',.8],['image/jpeg',.6]]){const out=c.toDataURL(type,q);if(out.startsWith('data:'+type)&&out.length<=40000)return out}
+  throw Error('تعذّر تصغير الصورة');
+ }finally{URL.revokeObjectURL(url)}
 }
 // ---- Admin notices (مركز إشعارات الإدارة) ----
 const NOTICE_KINDS={announcement:'إعلان',update:'تحديث للمنصة',instruction:'تعليمات مهمة'};
@@ -1068,7 +1097,7 @@ async function switchRole(){
  const active=await currentUser();
  return accountService.updateProfile({role:active.role==='tester'?'developer':'tester'});
 }
-const api={isDemo,switchRole,sendSupport,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,loadAdminNotices,markAdminNoticesRead,getLeague,setLeagueName,refreshLeagueName,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
+const api={isDemo,switchRole,sendSupport,setProfilePhoto,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,loadAdminNotices,markAdminNoticesRead,getLeague,setLeagueName,refreshLeagueName,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
 
 
 const app=document.getElementById('app');
@@ -1339,12 +1368,13 @@ function testerTests(){
  const group=(title,items)=>items.length?`<section aria-label="${clean(title)}"><div class="section-title">${title} · ${items.length}</div>${items.map(assignmentCard).join('')}</section>`:'';
  return `<div class="surface"><div class="row between"><div><div class="lead">اختباراتي</div><div class="small">ابدأ بالمطلوب اليوم، ثم راجع الدعوات. التواريخ محفوظة بتوقيت UTC.</div></div><button class="cta outline" data-action="refresh-tests">تحديث</button></div></div>${group('مطلوب اليوم',work.due)}${group('دعوات وتجهيز الاختبار',work.invites)}${group('بانتظار موعد التقرير التالي',work.cooldown)}${group('تقرير اليوم محفوظ',work.completed)}${group('المشاركات السابقة',work.expired)}${!all.length?'<div class="tab-empty"><h3>ما عندك اختبارات حالياً</h3>تظهر التطبيقات بعد إضافتك من المطور.</div>':''}`;
 }
-let rewardsState='idle',leagueKind='week',league=null,leagueState='idle';
+let rewardsState='idle',leagueKind='day',league=null,leagueState='idle';
 async function openRewards(){
  rewardsState='loading';render();
  const uid=user?.uid;
  try{const xp=await api.syncMyXp();if(user?.uid!==uid)return;if(xp)dashboard.xp={totals:xp.totals,ledgers:xp.ledgers};rewardsState='ready';if(xp?.added)toast('انضافت '+formatNum(xp.added)+' XP من مساهمات مقبولة')}
  catch(err){console.warn('XP:',err);rewardsState='error'}
+ await api.refreshLeagueName().catch(err=>console.warn('League name:',err));
  await loadLeague();
 }
 async function loadLeague(kind=leagueKind){
@@ -1354,26 +1384,44 @@ async function loadLeague(kind=leagueKind){
  catch(err){console.warn('League:',err);leagueState='error'}
  render();
 }
+function leaguePhoto(r){return r.photo?`<img class="league-photo" src="${clean(r.photo)}" alt="" width="34" height="34" loading="lazy">`:avatar(r.name||'م')}
 function leagueRow(r,mine){
- const level=xpLevel(r.total||0),name=mine?'أنت':r.name||'مساهم';
- return `<div class="league-row ${mine?'mine':''}"><span class="league-rank ${r.rank<=3?'top':''}">${formatNum(r.rank)}</span><div class="league-who"><strong>${clean(name)}</strong><span class="tiny">${clean(level.name)}${r.apps?' · ساعد '+formatNum(r.apps)+' تطبيق':''}</span></div><span class="league-points">${formatNum(r.points||0)} XP</span></div>`;
+ const level=xpLevel(r.total||0),name=mine?(r.name?r.name+' (أنت)':'أنت'):r.name||'مساهم';
+ return `<div class="league-row ${mine?'mine':''}"><span class="league-rank ${r.rank<=3?'top':''}">${formatNum(r.rank)}</span>${leaguePhoto(r)}<div class="league-who"><strong>${clean(name)}${r.sample?' <span class="sample-tag">تجريبي</span>':''}</strong><span class="tiny">${clean(level.name)}${r.apps?' · ساعد '+formatNum(r.apps)+' تطبيق':''}</span></div><span class="league-points">${formatNum(r.points||0)} XP</span></div>`;
+}
+// First-week warm-up: until this date, up to five sample members compete in the same list so the board
+// is not empty. Each is marked «تجريبي», none is ever stored, and they leave one by one as days pass
+// and as real members join.
+const LEAGUE_WARMUP_UNTIL=Date.parse(String(window.TESTERHUB_LEAGUE_WARMUP_UNTIL||'2026-11-13T00:00:00Z'));
+const LEAGUE_WARMUP=[['زينب',{day:40,week:130,month:130}],['حسين',{day:30,week:100,month:100}],['مريم',{day:20,week:70,month:70}],['علي',{day:20,week:50,month:50}],['نور',{day:10,week:30,month:30}]];
+function warmupRows(real,kind,now=Date.now()){
+ if(!(now<LEAGUE_WARMUP_UNTIL))return [];
+ const byDay=Math.ceil(LEAGUE_WARMUP.length*(LEAGUE_WARMUP_UNTIL-now)/(7*86400000));
+ const count=Math.max(0,Math.min(LEAGUE_WARMUP.length,byDay,LEAGUE_WARMUP.length-real));
+ return LEAGUE_WARMUP.slice(0,count).map(([name,p],i)=>({uid:'sample-'+i,sample:true,name,points:p[kind]||p.week,total:p.week,apps:1}));
+}
+// Real members stay ahead of a sample on equal points.
+function withWarmup(rows,kind,now){
+ return rows.concat(warmupRows(rows.length,kind,now)).sort((a,b)=>(b.points||0)-(a.points||0)||(a.sample?1:0)-(b.sample?1:0)).map((r,i)=>({...r,rank:i+1}));
 }
 function leagueSection(){
- const tabs=[['week','هذا الأسبوع'],['month','هذا الشهر']].map(([k,label])=>`<button type="button" class="${leagueKind===k?'active':''}" data-action="league-kind" data-id="${k}" aria-pressed="${leagueKind===k}">${label}</button>`).join('');
+ const tabs=[['day','اليوم'],['week','هذا الأسبوع'],['month','هذا الشهر']].map(([k,label])=>`<button type="button" class="${leagueKind===k?'active':''}" data-action="league-kind" data-id="${k}" aria-pressed="${leagueKind===k}">${label}</button>`).join('');
  let body='';
  if(leagueState==='loading'&&!league)body='<div class="tiny">جاري تحميل الترتيب…</div>';
  else if(leagueState==='error')body='<div class="notice">تعذّر تحميل الترتيب الآن. حاول مرة ثانية.</div>';
  else if(league){
-  const rows=league.rows.map(r=>leagueRow(r,r.uid===user.uid)).join('');
+  const list=withWarmup(league.rows,leagueKind),rows=list.map(r=>leagueRow(r,r.uid===user.uid)).join('');
   const meOutside=league.me&&!league.rows.some(r=>r.uid===user.uid);
-  body=(rows||`<div class="empty">ماكو نقاط موثّقة ${leagueKind==='month'?'هذا الشهر':'هذا الأسبوع'} لحد الآن. أول تقرير مقبول يحطك بالترتيب.</div>`)+
-   (meOutside?`<div class="league-gap">…</div>${leagueRow({...league.me,rank:league.rank},true)}`:'')+
+  const samplesAhead=league.me?list.filter(r=>r.sample&&(r.points||0)>(league.me.points||0)).length:0;
+  const period=leagueKind==='month'?'هذا الشهر':leagueKind==='week'?'هذا الأسبوع':'اليوم';
+  body=(rows||`<div class="empty">ماكو نقاط موثّقة ${period} لحد الآن. أول تقرير مقبول يحطك بالترتيب.</div>`)+
+   (meOutside?`<div class="league-gap">…</div>${leagueRow({...league.me,rank:(league.rank||0)+samplesAhead},true)}`:'')+
    (!league.me&&rows?'<div class="tiny" style="margin-top:8px">تدخل الترتيب أول ما ينقبل لك تقرير.</div>':'');
  }
  const show=!!league?.showName;
  return `<section class="surface league" aria-label="دوري المساهمين"><div class="row between"><div class="lead">🏆 دوري المساهمين</div><span class="tiny">بالنقاط الموثّقة</span></div><div class="segmented" role="group" aria-label="فترة الترتيب">${tabs}</div><div class="league-list">${body}</div>
- <label class="league-name"><input type="checkbox" data-change="league-name" ${show?'checked':''} ${league?'':'disabled'}><span>اظهر اسمي بالترتيب<small>بدون تفعيل يظهر اسمك «مساهم». البريد ما يظهر أبداً.</small></span></label>
- <div class="tiny">الترتيب الأسبوعي يبدأ من جديد كل إثنين، فالكل يگدر ينافس، حتى المتطوعين اللي ما عندهم تطبيق.</div></section>`;
+ <label class="league-name"><input type="checkbox" data-change="league-name" ${show?'checked':''} ${league?'':'disabled'}><span>اظهر اسمي وصورتي بالترتيب<small>يظهر اسمك من ملفك الشخصي وصورتك إن أضفتها. إذا ألغيت التفعيل يظهر «مساهم». البريد ما يظهر أبداً.</small></span></label>
+ <div class="tiny">ترتيب اليوم يبدأ من جديد كل يوم، والأسبوعي كل إثنين، فالكل يگدر ينافس، حتى المتطوعين اللي ما عندهم تطبيق.</div></section>`;
 }
 function rewards(){
  const t=dashboard.xp?.totals||{},points=t.points||0,level=xpLevel(points),legacy=legacyXp(primaryAssignments());
@@ -1458,7 +1506,7 @@ function projectDetails(id){
 
  ${p.status==='draft'?'':groupLinkSection(p)}${addTestersSection(p,assignments)}<div class="section-title">المختبرون المشاركون</div>${assignments.length?`<div class="surface tester-list">${assignments.map(a=>testerRow({uid:a.testerUid,name:testerLabel(a.testerUid,assignments),status:testerStatus(a)+' · '+formatNum(a.checkins?.length||0)+' يوم بتقرير',progress:(a.checkins?.length||0)/14*100,active:lastActive(a),count:threadMessages(a.id).length})).join('')}</div>`:'<div class="tab-empty">لم ينضم مختبرون بعد</div>'}`;
 }
-function profile(){return `${adminAuthorized?'<div class="surface"><a class="cta blue wide" style="display:block;text-align:center;text-decoration:none;padding:12px" href="./admin.html">🛡 لوحة إدارة المنصة</a></div>':''}${profileEditor()}<div class="surface"><div class="user-bar"><div><div class="bold">${clean(user.name)}</div><small class="email-ltr">${clean(user.email)}</small></div><div class="app-mark" style="width:54px;height:54px;border-radius:50%;background:linear-gradient(125deg,#2a78dc,#0eae8b);color:#fff;display:grid;place-items:center">${ico('user',28)}</div></div><div class="divider"></div><span class="chip">${user.role==='developer'?'واجهة المطور':'واجهة المختبر'}</span></div>${user.role==='tester'?`<div class="surface"><div class="lead">المشاركة بالاختبارات</div><label class="checks"><input type="checkbox" data-change="availability" ${user.available?'checked':''}/><span>إظهار بريدي للمطورين كأحد المختبرين المتاحين</span></label><div class="small">لن يظهر بريدك إلا للمطورين المسجلين، لغرض إضافتك إلى قائمة الاختبار.</div></div><div class="surface"><div class="lead">تذكيري اليومي</div><div class="setting-row"><span class="small">وقت التذكير</span><select id="reminder-hour">${Array.from({length:24},(_,i)=>`<option value="${i}" ${i===api.getReminderHour()?'selected':''}>${(i%12)||12}:00 ${i<12?'ص':'م'}</option>`).join('')}</select></div><button class="cta outline wide" data-action="enable-reminder">${ico('bell',16)} السماح بإشعار التذكير</button><button class="cta outline wide" style="margin-top:8px" data-action="calendar-reminder">${ico('calendar',16)} إضافة تذكير 14 يوم إلى تقويم الهاتف</button><div class="card-note">${window.TESTERHUB_VAPID_KEY?'بعد السماح تصلك الإشعارات حتى والتطبيق مغلق، وقد تتأخر قليلاً.':'تذكير المتصفح يظهر أثناء فتح التطبيق. التذكير بالتقويم يحتاج استيراد ملف المواعيد داخل تطبيق التقويم حتى يصلك والهاتف مقفل.'}</div></div>`:''}<div class="surface"><div class="lead">التطبيق</div>${api.isDemo?'':`<button class="item-link" data-tab="support">${ico('message',20)} رسائل إدارة TesterHub ${unreadSupport().length?`<span class="message-counter">${unreadSupport().length}</span>`:'<span>‹</span>'}</button>`}${api.isDemo?'':`<button class="item-link" data-action="switch-role">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button>`}${user.role==='developer'?`<button class="item-link" data-action="enable-reminder">${ico('bell',20)} السماح بالإشعارات <span>‹</span></button>`:''}<button class="item-link" data-action="install">${ico('add',20)} تثبيت على الشاشة الرئيسية <span>‹</span></button>${api.isDemo?`<button class="item-link" data-action="switch-demo">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button><button class="item-link" data-action="reset-demo">إعادة بيانات المعاينة <span>‹</span></button>`:`<button class="item-link" data-action="logout">${ico('power',20)} تسجيل الخروج <span>‹</span></button>`}<a class="item-link" style="text-decoration:none" href="./privacy.html">${ico('shield',20)} سياسة الخصوصية <span>‹</span></a><a class="item-link" style="text-decoration:none" href="./terms.html">${ico('clipboard',20)} الشروط <span>‹</span></a>${api.isDemo?'':`<button class="item-link" data-action="request-deletion">${ico('power',20)} طلب حذف حسابي <span>‹</span></button>`}</div>`}
+function profile(){return `${adminAuthorized?'<div class="surface"><a class="cta blue wide" style="display:block;text-align:center;text-decoration:none;padding:12px" href="./admin.html">🛡 لوحة إدارة المنصة</a></div>':''}${profileEditor()}<div class="surface"><div class="user-bar"><div><div class="bold">${clean(user.name)}</div><small class="email-ltr">${clean(user.email)}</small></div>${myPublicProfile?.photo?`<img class="profile-photo" src="${clean(myPublicProfile.photo)}" alt="صورتك" width="54" height="54">`:`<div class="app-mark" style="width:54px;height:54px;border-radius:50%;background:linear-gradient(125deg,#2a78dc,#0eae8b);color:#fff;display:grid;place-items:center">${ico('user',28)}</div>`}</div><div class="photo-actions"><label class="cta outline photo-pick">${myPublicProfile?.photo?'تغيير صورتك':'إضافة صورة شخصية'}<input type="file" accept="image/*" data-change="profile-photo" hidden></label>${myPublicProfile?.photo?'<button type="button" class="cta outline" data-action="remove-photo">إزالة الصورة</button>':''}</div><div class="tiny">تظهر صورتك واسمك بترتيب الدوري ليعرفك الكل. البريد ما يظهر أبداً.</div><div class="divider"></div><span class="chip">${user.role==='developer'?'واجهة المطور':'واجهة المختبر'}</span></div>${user.role==='tester'?`<div class="surface"><div class="lead">المشاركة بالاختبارات</div><label class="checks"><input type="checkbox" data-change="availability" ${user.available?'checked':''}/><span>إظهار بريدي للمطورين كأحد المختبرين المتاحين</span></label><div class="small">لن يظهر بريدك إلا للمطورين المسجلين، لغرض إضافتك إلى قائمة الاختبار.</div></div><div class="surface"><div class="lead">تذكيري اليومي</div><div class="setting-row"><span class="small">وقت التذكير</span><select id="reminder-hour">${Array.from({length:24},(_,i)=>`<option value="${i}" ${i===api.getReminderHour()?'selected':''}>${(i%12)||12}:00 ${i<12?'ص':'م'}</option>`).join('')}</select></div><button class="cta outline wide" data-action="enable-reminder">${ico('bell',16)} السماح بإشعار التذكير</button><button class="cta outline wide" style="margin-top:8px" data-action="calendar-reminder">${ico('calendar',16)} إضافة تذكير 14 يوم إلى تقويم الهاتف</button><div class="card-note">${window.TESTERHUB_VAPID_KEY?'بعد السماح تصلك الإشعارات حتى والتطبيق مغلق، وقد تتأخر قليلاً.':'تذكير المتصفح يظهر أثناء فتح التطبيق. التذكير بالتقويم يحتاج استيراد ملف المواعيد داخل تطبيق التقويم حتى يصلك والهاتف مقفل.'}</div></div>`:''}<div class="surface"><div class="lead">التطبيق</div>${api.isDemo?'':`<button class="item-link" data-tab="support">${ico('message',20)} رسائل إدارة TesterHub ${unreadSupport().length?`<span class="message-counter">${unreadSupport().length}</span>`:'<span>‹</span>'}</button>`}${api.isDemo?'':`<button class="item-link" data-action="switch-role">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button>`}${user.role==='developer'?`<button class="item-link" data-action="enable-reminder">${ico('bell',20)} السماح بالإشعارات <span>‹</span></button>`:''}<button class="item-link" data-action="install">${ico('add',20)} تثبيت على الشاشة الرئيسية <span>‹</span></button>${api.isDemo?`<button class="item-link" data-action="switch-demo">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button><button class="item-link" data-action="reset-demo">إعادة بيانات المعاينة <span>‹</span></button>`:`<button class="item-link" data-action="logout">${ico('power',20)} تسجيل الخروج <span>‹</span></button>`}<a class="item-link" style="text-decoration:none" href="./privacy.html">${ico('shield',20)} سياسة الخصوصية <span>‹</span></a><a class="item-link" style="text-decoration:none" href="./terms.html">${ico('clipboard',20)} الشروط <span>‹</span></a>${api.isDemo?'':`<button class="item-link" data-action="request-deletion">${ico('power',20)} طلب حذف حسابي <span>‹</span></button>`}</div>`}
 function profileEditor(){if(api.isDemo)return '';return `<div class="surface"><form id="profile-form"><div class="field"><label for="profile-name">الاسم</label><input id="profile-name" name="name" minlength="2" maxlength="80" required value="${clean(user.name)}" /></div>${user.role==='tester'?`<label class="checks"><input type="checkbox" name="paused" ${user.participationPaused?'checked':''}/><span>إيقاف المشاركة الجديدة مؤقتاً وإخفاء بريدي</span></label><p class="small">المشاركات الحالية وتواريخها تبقى محفوظة؛ هذا الخيار لا يوقف عداد الاختبار الجاري.</p>`:''}<button class="cta blue" type="submit">حفظ الحساب</button></form></div>`}
 function accountGate(){return `<div class="login-shell"><div class="auth-card"><h2>${user.profileMissing?'إكمال بيانات حسابك':'تأكيد البريد الإلكتروني'}</h2><p>${clean(user.email)}</p>${user.profileMissing?`<p>حساب الدخول موجود. أكمل ملفك بنفس الحساب دون إنشاء حساب جديد.</p><form id="complete-profile-form"><div class="field"><label for="recover-name">الاسم</label><input id="recover-name" name="name" minlength="2" maxlength="80" required /></div><label class="checks"><input type="checkbox" name="available"/><span>أوافق على مشاركة بريدي مع المطورين للاختبارات.</span></label><button class="cta blue" type="submit">إكمال الحساب</button></form>`:`<p>أكد ملكية بريدك حتى تفتح لوحة الحساب. المشاركات والتقارير القديمة تبقى محفوظة.</p><button class="cta blue wide" data-action="send-verification">إرسال رسالة تأكيد البريد</button><button class="item-link" data-action="check-verification">تحققت من بريدي — تحديث الحالة</button>`}<button class="item-link" data-action="logout">تسجيل الخروج</button></div></div>`}
 function suspendedScreen(){return `<div class="login-shell"><div class="auth-card"><h2>هذا الحساب موقوف</h2><p>${clean(user.email)}</p><p>أوقفت إدارة TesterHub هذا الحساب، ولا يمكن استخدامه حالياً. بياناتك محفوظة ولم تُحذف.</p><button class="cta blue wide" data-action="logout">تسجيل الخروج</button></div></div>`}
@@ -1557,7 +1605,8 @@ async function flushLiveSync(){
  finally{liveFetchInProgress=false}
 }
 
-async function refresh(){if(!user)return;const uid=user.uid;const [fresh]=await Promise.all([api.getDashboard(),refreshAdminNotices()]);if(user?.uid!==uid)return;dashboard=fresh;startLiveSync();render()}
+let leagueNameChecked='';
+async function refresh(){if(!user)return;const uid=user.uid;if(leagueNameChecked!==uid){leagueNameChecked=uid;api.refreshLeagueName().then(()=>{if(tab==='profile'&&user?.uid===uid)render()}).catch(err=>console.warn('League name:',err))}const [fresh]=await Promise.all([api.getDashboard(),refreshAdminNotices()]);if(user?.uid!==uid)return;dashboard=fresh;startLiveSync();render()}
 const splashStartedAt=performance.now();
 let splashDismissed=false;
 function finishLaunchSplash(){
@@ -1705,6 +1754,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='install'){await install();return}
  if(action==='switch-demo'){user=await api.switchDemo(user.role==='tester'?'developer':'tester');tab='home';await refresh();return}
  if(action==='reset-demo'){if(!confirm('إعادة بيانات المعاينة؟'))return;api.resetDemo();user=await api.currentUser();tab='home';await refresh();toast('تمت إعادة بيانات المعاينة');return}
+ if(action==='remove-photo'){pending(async()=>{await api.setProfilePhoto(null);render();toast('انحذفت صورتك')});return}
  if(action==='logout'){await Promise.race([pushService?.remove(),new Promise(done=>setTimeout(done,3000))]).catch(err=>console.warn('Push removal:',err));stopLiveSync();await api.logout();user=null;adminAuthorized=false;noticeOpen=false;drawerOpen=false;dashboard={projects:[],assignments:[],testers:[]};tab='home';render();return}
  if(action==='calendar-reminder'){exportCalendarReminder();return}
  if(action==='enable-reminder'){
@@ -1723,6 +1773,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
 window.addEventListener('keydown',event=>{if(event.key==='Escape'&&(drawerOpen||noticeOpen)){drawerOpen=false;noticeOpen=false;render();}});
 app.addEventListener('change',event=>{const node=event.target;
  if(node.name==='outcome'){const note=document.getElementById('test-note'),label=document.getElementById('test-note-label');if(note&&label){const hints={ok:['شنو جرّبت؟','مثلاً: جرّبت تسجيل الدخول واشتغل بصورة طبيعية.'],issue:['شنو جرّبت؟ وشنو المشكلة؟','مثلاً: ضغطت تسجيل الدخول وعلّق التطبيق بشاشة بيضاء.'],blocked:['شنو جرّبت؟ وليش ما گدرت تكمل؟','مثلاً: التطبيق ما ينفتح ويطلع خطأ بالتحميل.']},[text,hint]=hints[node.value]||hints.ok;label.textContent=text;note.placeholder=hint;}return;}if(node.id==='reminder-hour'){try{api.setReminderHour(Number(node.value));pushService?.sync(user.uid).catch(err=>console.warn('Push registration:',err));toast('تم تحديث وقت التذكير')}catch(err){toast(err.message)}return}
+ if(node.dataset.change==='profile-photo'){const file=node.files?.[0];node.value='';if(!file)return;pending(async()=>{await api.setProfilePhoto(await photoDataUrl(file));render();toast('انضافت صورتك، وتظهر بالدوري')});return}
  if(node.dataset.change==='league-name'){pending(async()=>{try{await api.setLeagueName(node.checked);league&&(league.showName=node.checked);await loadLeague();toast(node.checked?'صار اسمك يظهر بالترتيب':'اسمك صار مخفي بالترتيب')}catch(err){node.checked=!node.checked;throw err}});return}
  if(node.dataset.change==='availability'){pending(async()=>{try{await api.setAvailability(node.checked);user=await api.currentUser();toast(user.available?'تم إظهار بريدك للمطورين':'تم إخفاء بريدك من القائمة')}finally{render()}})}
 });
