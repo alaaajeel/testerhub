@@ -23,3 +23,12 @@ test('Prevent stale PWA files after switching to Firebase',()=>{
   assert.match(entry.headers[0].value,/no-cache/);
  }
 });
+
+test('every page ships browser hardening headers that the app does not need to bypass',()=>{
+  const all=Object.fromEntries(firebase.hosting.headers.find(x=>x.source==='**').headers.map(h=>[h.key,h.value]));
+  assert.equal(all['X-Frame-Options'],'DENY');
+  assert.match(all['Content-Security-Policy'],/object-src 'none'/);
+  assert.match(all['Content-Security-Policy'],/frame-ancestors 'none'/);
+  assert.match(all['Permissions-Policy'],/camera=\(\)/);
+  assert.match(all['Cross-Origin-Opener-Policy'],/allow-popups/);
+});

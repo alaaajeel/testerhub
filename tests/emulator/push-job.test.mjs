@@ -207,3 +207,28 @@ test('nothing new means no sends', async () => {
  assert.equal((await runActivity({db, messaging: m, now})).events, 0);
  assert.equal(m.calls.length, 0);
 });
+
+/* Messages with the platform team */
+test('a message from the team reaches the user with its own title', async () => {
+ await cursor(15 * MIN);
+ await device('tester', 't1');
+ await db.doc('supportMessages/s1').set({uid: 't1', sender: 'admin', senderUid: 'owner', text: 'مرحباً من الإدارة', createdAt: at(5 * MIN)});
+ const m = messaging();
+ await runActivity({db, messaging: m, now});
+ assert.equal(m.calls.length, 1);
+ assert.equal(m.calls[0].data.title, 'TesterHub — رسالة من الإدارة');
+ assert.equal(m.calls[0].data.body, 'مرحباً من الإدارة');
+});
+test('a user reply reaches every active owner and nobody else', async () => {
+ await cursor(15 * MIN);
+ await db.doc('adminRoles/owner').set({active: true});
+ await db.doc('adminRoles/old').set({active: false});
+ for (const uid of ['owner', 'old']) await db.doc('users/' + uid).set({name: 'Admin', role: 'tester'});
+ await device('ownerPhone', 'owner'); await device('oldPhone', 'old'); await device('tester', 't1');
+ await db.doc('supportMessages/r1').set({uid: 't1', sender: 'user', senderUid: 't1', text: 'شكراً، فهمت', createdAt: at(5 * MIN)});
+ const m = messaging();
+ await runActivity({db, messaging: m, now});
+ assert.deepEqual(sentTo(m), ['token-ownerPhone']);
+ assert.equal(m.calls[0].data.title, 'TesterHub — رد من مستخدم');
+ assert.equal(m.calls[0].data.url, './admin.html');
+});

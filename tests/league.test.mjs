@@ -37,7 +37,7 @@ test('public names are opt-in, limited to the profile name, and removable by the
 });
 test('both roles reach the league; no money or prize wording',()=>{
  assert.match(html,/\['rewards','دوري المساهمين'\],\['profile','حسابي'\]\]:\[\['home'/);
- assert.match(html,/chat:chatPage,rewards,announcements:announcementsPage,profile\}/);
+ assert.match(html,/chat:chatPage,support:supportPage,rewards,announcements:announcementsPage,profile\}/);
  const page=from('function leagueSection(','function rewards(');
  assert.doesNotMatch(page,/دينار|دولار|USD|جائزة مالية|سحب/);
 });

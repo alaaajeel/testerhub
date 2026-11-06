@@ -1,7 +1,7 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,getIdTokenResult} from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js';
 import * as firestore from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
-const {getFirestore,doc,getDoc,collection,query,where,orderBy,documentId,limit,startAfter,getDocs,getCountFromServer,writeBatch,serverTimestamp,deleteField}=firestore;
+const {getFirestore,doc,getDoc,collection,query,where,orderBy,documentId,limit,startAfter,getDocs,getCountFromServer,writeBatch,serverTimestamp,deleteField,addDoc}=firestore;
 
 const $=id=>document.getElementById(id);
 const PAGE_SIZE=25;
@@ -17,6 +17,10 @@ const PERMISSIONS=[
 ];
 const TABS={
  projects:{title:'التطبيقات',order:()=>documentId(),search:'اسم التطبيق'},
+ assignments:{title:'المشاركات',ownerOnly:true,order:()=>documentId(),note:'كل مشاركة هي دعوة مختبر واحد إلى تطبيق واحد، وفيها حالة الدعوة وأيام الاختبار وعدد التقارير. فإذا دعا مطور 12 مختبراً فهذه 12 مشاركة.'},
+ reportsAll:{title:'كل التقارير',ownerOnly:true,collection:'reports',order:()=>'date',desc:true,note:'التقارير اليومية التي يرسلها المختبرون، الأحدث أولاً.'},
+ messages:{title:'رسائل المستخدمين فيما بينهم',ownerOnly:true,order:()=>'createdAt',desc:true,note:'المحادثات بين المطورين والمختبرين داخل كل اختبار، الأحدث أولاً.'},
+ support:{title:'رسائل الإدارة',ownerOnly:true,note:'محادثات خاصة بينك وبين كل مستخدم. يصله الإشعار ويرد من داخل التطبيق.'},
  users:{title:'المستخدمون',perm:'viewUsers',order:()=>documentId(),search:'البريد الكامل'},
  issues:{title:'بلاغات المشاكل',perm:'viewReports',collection:'reports',order:()=>'date',desc:true,filter:()=>where('outcome','in',['issue','blocked'])},
  deletionRequests:{title:'طلبات حذف الحسابات',perm:'processDeletions',order:()=>'createdAt',desc:true},
@@ -25,7 +29,7 @@ const TABS={
  announcements:{title:'مركز إشعارات الإدارة',perm:'sendAnnouncements',order:()=>'createdAt',desc:true}
 };
 const STATUS={draft:['مسودة',''],recruiting:['يستقبل المختبرين','good'],paused:['متوقف','warn'],completed:['مكتمل',''],archived:['مؤرشف','warn'],deleting:['حذف غير مكتمل','bad']};
-const state={tab:'projects',rows:[],cursor:null,hasMore:false,filter:'',details:{},busy:false,account:null,db:null,owner:false,perms:{},staffIds:new Set()};
+const state={thread:null,threadMessages:[],tab:'projects',rows:[],cursor:null,hasMore:false,filter:'',details:{},busy:false,account:null,db:null,owner:false,perms:{},staffIds:new Set()};
 // Hides what this account cannot use; the security rules are what actually enforce it.
 const allowed=permission=>state.owner||state.perms[permission]===true;
 const tabAllowed=name=>TABS[name].ownerOnly?state.owner:!TABS[name].perm||allowed(TABS[name].perm);
@@ -117,8 +121,83 @@ async function authorized(account){
  state.owner=false;state.perms=staff.data().permissions||{};
  return true;
 }
+// Owner views name the people and apps behind every record. Names are read once and kept.
+const PEOPLE=new Map(),APPS=new Map();
+async function nameUsers(uids){
+ const missing=[...new Set(uids.filter(u=>u&&!PEOPLE.has(u)))];
+ await Promise.all(missing.map(async uid=>{try{const s=await getDoc(doc(state.db,'users',uid));PEOPLE.set(uid,s.exists()?s.data():null)}catch{}}));
+}
+async function nameApps(ids){
+ const missing=[...new Set(ids.filter(i=>i&&!APPS.has(i)))];
+ await Promise.all(missing.map(async id=>{try{const s=await getDoc(doc(state.db,'projects',id));APPS.set(id,s.exists()?s.data():null)}catch{}}));
+}
+const person=uid=>{if(!PEOPLE.has(uid))return 'مستخدم';const p=PEOPLE.get(uid);return p?(p.name||p.email||'مستخدم'):'حساب محذوف'};
+const personEmail=uid=>PEOPLE.get(uid)?.email||'';
+const appName=(id,fallback)=>{if(!APPS.has(id))return fallback||'تطبيق';const a=APPS.get(id);return a?(a.name||fallback||'تطبيق'):(fallback?fallback+' (محذوف)':'تطبيق محذوف')};
+const timeOf=m=>m.createdAt?.toMillis?.()??(Date.parse(m.at||'')||0);
+async function enrich(rows){
+ if(!['assignments','reportsAll','messages','issues'].includes(state.tab))return;
+ const people=state.owner||allowed('viewUsers')?rows.flatMap(r=>[r.testerUid,r.ownerUid,r.senderUid]):[];
+ await Promise.all([nameUsers(people),nameApps(rows.map(r=>r.projectId))]);
+}
+function participationState(a){
+ if(a.leftAt)return ['انسحب','bad'];
+ if(a.joinedDay){
+  const day=Math.floor((Date.now()-Date.parse(a.joinedDay+'T00:00:00Z'))/86400000)+1,count=(a.checkins||[]).length;
+  return day>14?['أكمل المدة · '+count+' تقرير','']:['اليوم '+day+' من 14 · '+count+' تقرير','good'];
+ }
+ if(a.invitationStatus==='declined')return ['رفض الدعوة','warn'];
+ if(a.invitationStatus==='pending')return ['لم يرد على الدعوة',''];
+ return ['قبل ولم يبدأ بعد',''];
+}
+function assignmentRow(a){
+ const [label,tone]=participationState(a);
+ return '<article class="item"><div class="info"><strong>'+esc(appName(a.projectId,a.name))+'</strong><small>المختبر: '+esc(person(a.testerUid))+(personEmail(a.testerUid)?' · <span dir="ltr">'+esc(personEmail(a.testerUid))+'</span>':'')+'</small><small>المطور: '+esc(person(a.ownerUid))+'</small></div><div class="actions"><span class="tag '+tone+'">'+esc(label)+'</span>'+button('message-user',a.testerUid,'مراسلة المختبر')+'</div></article>';
+}
+function reportRow(r){
+ const issue=r.outcome==='issue',tag=!issue?['نجح','good']:r.status==='fixed'?['مشكلة أُصلحت','good']:['مشكلة مفتوحة','warn'];
+ return '<article class="item"><div class="info"><strong>'+esc(r.notes||'تقرير بلا ملاحظة')+'</strong><small>'+esc(appName(r.projectId))+' · '+esc(person(r.testerUid))+' · '+esc(r.date||'')+'</small>'+(r.tested?'<small>المهمة: '+esc(r.tested)+'</small>':'')+'</div><span class="tag '+tag[1]+'">'+tag[0]+'</span></article>';
+}
+function messageRow(m){
+ const from=m.sender==='developer'?'المطور':'المختبر',to=m.sender==='developer'?m.testerUid:m.ownerUid;
+ return '<article class="item"><div class="info"><strong>'+esc(m.text||'')+'</strong><small>'+esc(appName(m.projectId))+' · من '+from+' '+esc(person(m.senderUid))+' إلى '+esc(person(to))+'</small><small>'+esc(stamped(m.createdAt))+'</small></div></article>';
+}
+function detailLists(l){
+ if(!l)return '';
+ const sec=(title,items)=>'<div class="sub">'+title+' · '+number(items.length)+'</div>'+(items.length?items.join(''):'<div class="line"><small>لا يوجد</small></div>');
+ return sec('المشاركون',l.assignments.map(a=>'<div class="line"><b>'+esc(person(a.testerUid))+'</b> · '+esc(participationState(a)[0])+'</div>'))
+  +sec('التقارير',l.reports.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(r=>'<div class="line">'+esc(r.date||'')+' · '+esc(person(r.testerUid))+' · '+(r.outcome==='issue'?'مشكلة':'نجح')+(r.notes?'<br>'+esc(r.notes):'')+'</div>'))
+  +sec('الرسائل',l.messages.slice().sort((a,b)=>timeOf(a)-timeOf(b)).map(m=>'<div class="line"><b>'+esc(person(m.senderUid))+'</b>: '+esc(m.text||'')+' <small>'+esc(stamped(m.createdAt))+'</small></div>'));
+}
+/* Support: one private thread per user. */
+async function loadSupport(){
+ const ref=collection(state.db,'supportMessages');
+ if(state.thread){
+  const snap=await getDocs(query(ref,where('uid','==',state.thread)));
+  state.threadMessages=snap.docs.map(x=>({id:x.id,...x.data()})).sort((a,b)=>timeOf(a)-timeOf(b));
+  await nameUsers([state.thread]);
+ }else{
+  const snap=await getDocs(query(ref,orderBy('createdAt','desc'),limit(300)));
+  const threads=new Map();
+  for(const x of snap.docs){const m=x.data();if(!threads.has(m.uid))threads.set(m.uid,{id:m.uid,last:m,count:0});threads.get(m.uid).count++}
+  state.rows=[...threads.values()];
+  await nameUsers(state.rows.map(r=>r.id));
+ }
+ state.hasMore=false;
+ renderList();
+}
+function renderSupport(){
+ if(state.thread){
+  const uid=state.thread;
+  return '<button class="btn soft" type="button" data-action="back-threads">‹ كل المحادثات</button><p class="who" style="margin-top:10px">'+esc(person(uid))+(personEmail(uid)?' · <span dir="ltr">'+esc(personEmail(uid))+'</span>':'')+'</p>'
+   +(state.threadMessages.length?state.threadMessages.map(m=>'<div class="bubble '+(m.sender==='admin'?'admin':'')+'"><b>'+(m.sender==='admin'?'إدارة TesterHub':esc(person(uid)))+'</b>'+esc(m.text)+'<small>'+esc(stamped(m.createdAt))+'</small></div>').join(''):'<p class="none">لا توجد رسائل بعد. اكتب أول رسالة.</p>')
+   +'<form id="support-form"><textarea id="support-text" maxlength="1000" minlength="2" required placeholder="اكتب رسالتك باسم إدارة TesterHub"></textarea><button class="btn" type="submit">إرسال</button></form>';
+ }
+ if(!state.rows.length)return '<p class="none">لا توجد محادثات بعد. من قسم المستخدمين أو المشاركات اضغط «مراسلة» لبدء محادثة.</p>';
+ return state.rows.map(t=>'<article class="item"><div class="info"><strong>'+esc(person(t.id))+'</strong><small>'+(t.last.sender==='admin'?'أنت: ':'')+esc(String(t.last.text||'').slice(0,120))+'</small><small>'+esc(stamped(t.last.createdAt))+'</small></div><div class="actions">'+(t.last.sender==='user'?'<span class="tag warn">بانتظار ردك</span>':'')+button('open-thread',t.id,'فتح')+'</div></article>').join('');
+}
 async function overview(){
- const all=[['users','المستخدمون',allowed('viewUsers')],['projects','التطبيقات',true],['assignments','المشاركات',allowed('deleteProjects')],['reports','التقارير',allowed('deleteProjects')||allowed('viewReports')],['messages','الرسائل',allowed('deleteProjects')]].filter(x=>x[2]);
+ const all=[['users','المستخدمون',allowed('viewUsers')],['projects','التطبيقات',true],['assignments','المشاركات (مختبر × تطبيق)',allowed('deleteProjects')],['reports','التقارير',allowed('deleteProjects')||allowed('viewReports')],['messages','الرسائل',allowed('deleteProjects')]].filter(x=>x[2]);
  const counts=await Promise.all(all.map(x=>getCountFromServer(collection(state.db,x[0]))));
  $('metrics').innerHTML=all.map((x,i)=>'<div class="metric"><small>'+esc(x[1])+'</small><strong>'+number(counts[i].data().count)+'</strong></div>').join('');
 }
@@ -126,17 +205,17 @@ const button=(action,id,label,tone='soft')=>'<button class="btn '+tone+'" type="
 function projectRow(item){
  const status=item.status||'recruiting',[label,tone]=STATUS[status]||[status,''],d=state.details[item.id];
  const archived=status==='archived',deleting=status==='deleting';
- return '<article class="item"><div class="info"><strong>'+esc(item.name||'تطبيق')+'</strong><small>المطور: '+esc(item.ownerName||'—')+'</small></div><div class="actions"><span class="tag '+tone+'">'+esc(label)+'</span>'+(allowed('deleteProjects')?button('details',item.id,d?'إخفاء':'تفاصيل'):'')+(deleting||!allowed('archiveProjects')?'':button('archive',item.id,archived?'إلغاء الأرشفة':'أرشفة','warn'))+(allowed('deleteProjects')?button('delete',item.id,deleting?'إكمال الحذف':'حذف','danger'):'')+'</div>'+(d?'<div class="detail">'+(item.link?'<div dir="ltr">'+esc(item.link)+'</div>':'')+'المعرّف: <span dir="ltr">'+esc(item.id)+'</span><br>المشاركات: '+number(d.assignments)+' · التقارير: '+number(d.reports)+' · الرسائل: '+number(d.messages)+'</div>':'')+'</article>';
+ return '<article class="item"><div class="info"><strong>'+esc(item.name||'تطبيق')+'</strong><small>المطور: '+esc(item.ownerName||'—')+'</small></div><div class="actions"><span class="tag '+tone+'">'+esc(label)+'</span>'+(allowed('deleteProjects')?button('details',item.id,d?'إخفاء':'تفاصيل'):'')+(deleting||!allowed('archiveProjects')?'':button('archive',item.id,archived?'إلغاء الأرشفة':'أرشفة','warn'))+(allowed('deleteProjects')?button('delete',item.id,deleting?'إكمال الحذف':'حذف','danger'):'')+'</div>'+(d?'<div class="detail">'+(item.link?'<div dir="ltr">'+esc(item.link)+'</div>':'')+'المعرّف: <span dir="ltr">'+esc(item.id)+'</span><br>المشاركات: '+number(d.assignments)+' · التقارير: '+number(d.reports)+' · الرسائل: '+number(d.messages)+detailLists(d.lists)+'</div>':'')+'</article>';
 }
 function userRow(item){
  const self=item.id===state.account.uid;
  const isStaff=state.staffIds.has(item.id);
  const tag=(isStaff?'<span class="tag">مشرف</span>':'')+(item.suspended?'<span class="tag bad">موقوف</span>':item.available?'<span class="tag good">متاح للاختبار</span>':'<span class="tag">مسجّل</span>');
- return '<article class="item"><div class="info"><strong>'+esc(item.name||'مستخدم')+'</strong><small dir="ltr" style="text-align:right">'+esc(item.email||'')+'</small><small>'+(item.role==='developer'?'مطور':'مختبر')+'</small></div><div class="actions">'+tag+(self?'<span class="tag">حسابك</span>':(state.owner&&!isStaff?button('promote',item.id,'ترقية إلى مشرف'):'')+(allowed('suspendUsers')&&(state.owner||!isStaff)?button('suspend',item.id,item.suspended?'إعادة التنشيط':'إيقاف الحساب',item.suspended?'soft':'danger'):''))+'</div></article>';
+ return '<article class="item"><div class="info"><strong>'+esc(item.name||'مستخدم')+'</strong><small dir="ltr" style="text-align:right">'+esc(item.email||'')+'</small><small>'+(item.role==='developer'?'مطور':'مختبر')+'</small></div><div class="actions">'+tag+(self?'<span class="tag">حسابك</span>':(state.owner?button('message-user',item.id,'مراسلة'):'')+(state.owner&&!isStaff?button('promote',item.id,'ترقية إلى مشرف'):'')+(allowed('suspendUsers')&&(state.owner||!isStaff)?button('suspend',item.id,item.suspended?'إعادة التنشيط':'إيقاف الحساب',item.suspended?'soft':'danger'):''))+'</div></article>';
 }
 function issueRow(item){
  const fixed=item.status==='fixed';
- return '<article class="item"><div class="info"><strong>'+esc(item.notes||'بلاغ')+'</strong><small>'+esc(item.tested||'')+'</small><small>'+esc(item.date||'')+'</small></div><span class="tag '+(fixed?'good':'warn')+'">'+(fixed?'تم الإصلاح':'مفتوح')+'</span></article>';
+ return '<article class="item"><div class="info"><strong>'+esc(item.notes||'بلاغ')+'</strong><small>'+esc(appName(item.projectId))+'</small><small>'+esc(item.tested||'')+'</small><small>'+esc(item.date||'')+'</small></div><span class="tag '+(fixed?'good':'warn')+'">'+(fixed?'تم الإصلاح':'مفتوح')+'</span></article>';
 }
 function auditRow(item){
  const names={send_announcement:'إرسال إعلان',withdraw_announcement:'سحب إعلان',suspend_user:'إيقاف حساب',unsuspend_user:'إعادة تنشيط حساب',archive_project:'أرشفة تطبيق',restore_project:'إلغاء أرشفة تطبيق',delete_project:'حذف تطبيق نهائياً',process_deletion:'معالجة طلب حذف حساب',grant_staff:'ترقية مشرف',update_staff:'تعديل صلاحيات مشرف',revoke_staff:'سحب صلاحيات مشرف'};
@@ -193,22 +272,24 @@ async function toggleNotice(item){
  toast(next?'رجع الإعلان يظهر.':'تم سحب الإعلان، وما انحذف.');
 }
 function syncComposer(){const form=$('composer');if(!form)return;form.querySelector('[data-for="user"]').hidden=form.audience.value!=='user'}
-const ROWS={projects:projectRow,users:userRow,issues:issueRow,staffRoles:staffRow,deletionRequests:deletionRow,adminAuditLogs:auditRow,announcements:announcementRow};
+const ROWS={projects:projectRow,users:userRow,issues:issueRow,staffRoles:staffRow,deletionRequests:deletionRow,adminAuditLogs:auditRow,announcements:announcementRow,assignments:assignmentRow,reportsAll:reportRow,messages:messageRow};
 function renderList(){
  const type=state.tab,source=TABS[type];
  const needle=state.filter.trim().toLowerCase();
  const rows=type==='projects'&&needle?state.rows.filter(x=>String(x.name||'').toLowerCase().includes(needle)):state.rows;
  $('listTitle').textContent=source.title;
+ $('listNote').hidden=!source.note;$('listNote').textContent=source.note||'';
  $('search').hidden=!source.search;
  $('searchInput').placeholder=source.search||'';
  // App names filter as you type; only the email lookup needs a button.
  $('searchButton').hidden=type!=='users';
  $('composer').hidden=type!=='announcements';
- $('items').innerHTML=rows.length?rows.map(ROWS[type]).join(''):'<p class="none">'+(type==='announcements'?'ما انرسل أي إعلان بعد.':'لا توجد سجلات هنا.')+'</p>';
+ $('items').innerHTML=type==='support'?renderSupport():rows.length?rows.map(ROWS[type]).join(''):'<p class="none">'+(type==='announcements'?'ما انرسل أي إعلان بعد.':'لا توجد سجلات هنا.')+'</p>';
  $('more').hidden=!state.hasMore;
  for(const b of document.querySelectorAll('[data-tab]'))b.classList.toggle('active',b.dataset.tab===type);
 }
 async function page(reset=false){
+ if(state.tab==='support')return loadSupport();
  const source=TABS[state.tab];
  if(reset){state.rows=[];state.cursor=null;state.hasMore=false;state.details={}}
  const parts=[collection(state.db,source.collection||state.tab)];
@@ -221,6 +302,7 @@ async function page(reset=false){
  state.rows.push(...snap.docs.map(x=>({id:x.id,...x.data()})));
  state.cursor=snap.docs.at(-1)||null;
  state.hasMore=snap.size===PAGE_SIZE;
+ await enrich(state.rows);
  renderList();
 }
 async function guarded(work){
@@ -255,7 +337,11 @@ async function archiveProject(project){
 }
 async function loadDetails(project){
  if(state.details[project.id]){delete state.details[project.id];return}
- state.details[project.id]=await TesterHubDeletion.countRelated({db:state.db,f:firestore,projectId:project.id});
+ const counts=await TesterHubDeletion.countRelated({db:state.db,f:firestore,projectId:project.id});
+ const names=['assignments','reports','messages'],snaps=await Promise.all(names.map(n=>getDocs(query(collection(state.db,n),where('projectId','==',project.id),limit(100)))));
+ const lists=Object.fromEntries(names.map((n,i)=>[n,snaps[i].docs.map(x=>({id:x.id,...x.data()}))]));
+ await nameUsers(Object.values(lists).flat().flatMap(r=>[r.testerUid,r.ownerUid,r.senderUid]));
+ state.details[project.id]={...counts,lists};
 }
 async function removeProject(project){
  const counts=await TesterHubDeletion.countRelated({db:state.db,f:firestore,projectId:project.id});
@@ -285,9 +371,12 @@ const PROMPTS={
 const ACTIONS={'toggle-notice':toggleNotice,promote:promoteUser,'edit-staff':editStaff,'revoke-staff':revokeStaff,'process-deletion':processDeletion,suspend:setSuspension,archive:archiveProject,details:loadDetails,delete:removeProject};
 document.addEventListener('click',event=>{
  const tab=event.target.closest('[data-tab]');
- if(tab){state.tab=tab.dataset.tab;state.filter='';$('searchInput').value='';guarded(()=>page(true));return}
+ if(tab){state.tab=tab.dataset.tab;state.thread=null;state.filter='';$('searchInput').value='';guarded(()=>page(true));return}
  const trigger=event.target.closest('[data-action]');
  if(!trigger||state.busy)return;
+ if(trigger.dataset.action==='message-user'){state.tab='support';state.thread=trigger.dataset.id;state.filter='';guarded(()=>page(true));return}
+ if(trigger.dataset.action==='open-thread'){state.thread=trigger.dataset.id;guarded(()=>page(true));return}
+ if(trigger.dataset.action==='back-threads'){state.thread=null;guarded(()=>page(true));return}
  const item=state.rows.find(x=>x.id===trigger.dataset.id),name=trigger.dataset.action;
  if(!item)return;
  guarded(async()=>{
@@ -296,6 +385,17 @@ document.addEventListener('click',event=>{
   const done=await ACTIONS[name](item);
   renderList();
   if(!['details','promote','edit-staff','revoke-staff'].includes(name)&&done!==false)await overview();
+ });
+});
+document.addEventListener('submit',event=>{
+ if(event.target.id!=='support-form')return;
+ event.preventDefault();
+ const text=$('support-text').value.trim();
+ if(text.length<2)return toast('اكتب رسالة من حرفين على الأقل.',true);
+ guarded(async()=>{
+  await addDoc(collection(state.db,'supportMessages'),{uid:state.thread,sender:'admin',senderUid:state.account.uid,text,createdAt:serverTimestamp()});
+  toast('أُرسلت الرسالة باسم إدارة TesterHub.');
+  await loadSupport();
  });
 });
 $('composer').addEventListener('change',syncComposer);
