@@ -106,7 +106,8 @@ test('assigned task appears in daily report and saved report keeps its snapshot'
  await page.locator('#project-link').fill('https://play.google.com/apps/testing/test');
  await page.locator('[name="confirmed"]').check();
  await page.locator('#project-form button[value="publish"]').click();
- await page.evaluate(async()=>{user=await api.switchDemo('tester');await refresh();tab='tests';render()});
+ // Pending invitations live on Home; «اختباراتي» lists only accepted tests.
+ await page.evaluate(async()=>{user=await api.switchDemo('tester');await refresh();tab='home';render()});
  const card=page.locator('.app-card',{hasText:'Search Test'});
  await card.locator('[data-action="accept-invite"]').click();
  await card.locator('[data-action="confirm-join"]').click();
@@ -133,7 +134,7 @@ test('tester setup separates opt-in and store; confirmed setup stays collapsed a
  await page.evaluate(async()=>{
   user=await api.switchDemo('developer');await refresh();
   await api.createProject({name:'Journey App',link:'https://play.google.com/apps/testing/com.example.journey',tasks:'جرّب تسجيل الدخول بحسابك'},[{uid:'t1',role:'tester',available:true,email:'tester01@example.com'}]);
-  user=await api.switchDemo('tester');await refresh();tab='tests';render();
+  user=await api.switchDemo('tester');await refresh();tab='home';render();
   window.openedLinks=[];window.open=url=>window.openedLinks.push(url);
  });
  const card=page.locator('.app-card',{hasText:'Journey App'});
