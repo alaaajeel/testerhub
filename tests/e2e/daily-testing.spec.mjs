@@ -201,7 +201,8 @@ async function openWithFirestoreDoubles(page){
  export const doc=(a,c,id)=>a&&a.__col?{c:a.name,id:'auto'+(++F.n)}:{c,id};
  const key=r=>r.c+'/'+r.id;
  const snap=r=>{const data=F.docs[key(r)];return {id:r.id,exists:()=>!!data,data:()=>data&&structuredClone(data)}};
- export const getDoc=async r=>snap(r);export const getDocFromServer=getDoc;
+ // A weak network: the first reads fail with 'unavailable' the way the SDK reports it.
+ export const getDoc=async r=>{if(F.failReads>0&&r.c==='assignments'){F.failReads--;throw Object.assign(Error('offline'),{code:'unavailable'})}return snap(r)};export const getDocFromServer=getDoc;
  export const where=(f,op,v)=>({f,v});export const query=(col,...w)=>({col:col.name,w});
  export const getDocs=async q=>{const docs=Object.entries(F.docs).filter(([k,v])=>k.startsWith(q.col+'/')&&q.w.every(x=>v[x.f]===x.v)).map(([k])=>snap({c:q.col,id:k.slice(q.col.length+1)}));return {docs,size:docs.length}};
  export const getDocsFromServer=getDocs;export const onSnapshot=()=>()=>{};
@@ -213,7 +214,9 @@ async function openWithFirestoreDoubles(page){
   // The SDK may run the function again after its commit was applied but not acknowledged.
   if(F.rerunAfterCommit){F.rerunAfterCommit=false;await run()}
  };
- export const writeBatch=()=>{const ops=[];return {set:(r,v)=>ops.push(['set',r,v]),update:(r,v)=>ops.push(['update',r,v]),commit:async()=>ops.forEach(apply)}};
+ export const writeBatch=()=>{const ops=[];return {set:(r,v)=>ops.push(['set',r,v]),update:(r,v)=>ops.push(['update',r,v]),commit:async()=>{ops.forEach(apply);
+  // The commit landed but its answer was lost on the way back.
+  if(F.lostAck){F.lostAck=false;throw Object.assign(Error('lost'),{code:'unavailable'})}}}};
  export const updateDoc=async(r,v)=>apply(['update',r,v]);export const setDoc=async(r,v)=>apply(['set',r,v]);`;
  await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {apiKey:"test",projectId:"demo-testerhub"};'}));
  await page.route('https://www.gstatic.com/firebasejs/**',route=>route.fulfill({contentType:'application/javascript',body:route.request().url().endsWith('firebase-app.js')?app:route.request().url().endsWith('firebase-auth.js')?auth:store}));
@@ -242,9 +245,22 @@ test('Firestore: report, checkin and message are written together with the trust
  expect(errors).toEqual([]);
 });
 
-test('Firestore: a re-run after an unacknowledged commit shows the saved report, not an error or a duplicate',async({page})=>{
+test('Firestore: a weak network retries the read and still sends the report once',async({page})=>{
  const today=await openWithFirestoreDoubles(page);
- await page.evaluate(()=>{window.fs.rerunAfterCommit=true});
+ await page.evaluate(()=>{window.fs.failReads=2});
+ const card=page.locator('.daily-test');
+ await card.locator('label.ok').click();
+ await card.locator('textarea').fill('فتحت السلة وأضفت منتج بدون مشاكل');
+ await card.locator('button[type="submit"]').click();
+ await expect(page.locator('#toast')).toContainText('تم إرسال تقريرك',{timeout:15000});
+ const fs=await page.evaluate(()=>window.fs);
+ expect(fs.failReads).toBe(0);
+ expect(fs.writes.filter(w=>w.path===`reports/p1_t1_${today}`)).toHaveLength(1);
+});
+
+test('Firestore: a commit whose answer was lost shows the saved report, not an error or a duplicate',async({page})=>{
+ const today=await openWithFirestoreDoubles(page);
+ await page.evaluate(()=>{window.fs.lostAck=true});
  const card=page.locator('.daily-test');
  await card.locator('label.ok').click();
  await card.locator('textarea').fill('فتحت السلة وأضفت منتج بدون مشاكل');

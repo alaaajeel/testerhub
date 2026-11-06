@@ -673,37 +673,41 @@ async function submitDailyReport(assignmentId,input){
   if(active?.role!=='tester')throw Error('هذه الوظيفة للمختبر فقط');
   const ref=storeFns.doc(db,'assignments',assignmentId),date=dayKey();
   const reportRef=storeFns.doc(db,'reports',`${assignmentId}_${date}`);
-  let saved;
-  try{
-   await storeFns.runTransaction(db,async txn=>{
-    const current=await txn.get(ref);
-    if(!current.exists()||current.data().testerUid!==active.uid)throw Error('الاختبار غير متاح لك');
-    const a=current.data();
-    if(!a.joinedDay||daysSince(a.joinedDay)>14)throw Error('الاختبار غير فعال');
-    if(a.checkins?.includes(date))throw Object.assign(Error('تقرير اليوم مسجل مسبقاً'),{code:'testerhub/already-reported'});
-    const tested=taskForDay(a);
-    // Do not read a nonexistent report: owner-only Firestore rules deny that read.
-    // The checkin and create-only rules prevent duplicates.
-    const at=new Date().toISOString();
-    saved={id:reportRef.id,assignmentId,projectId:a.projectId,testerUid:active.uid,ownerUid:a.ownerUid,
-      date,tested,outcome,notes,status:needsFollowUp({outcome})?'new':'ok',createdAt:at};
-    if(retestOf)saved.retestOf=retestOf;
-    txn.set(reportRef,{assignmentId,projectId:a.projectId,testerUid:active.uid,ownerUid:a.ownerUid,
-      date,tested,outcome,notes,status:saved.status,...(retestOf?{retestOf}:{}),
-      createdAt:at,submittedAt:storeFns.serverTimestamp()});
-    txn.update(ref,{checkins:storeFns.arrayUnion(date),lastCheckinAt:storeFns.serverTimestamp()});
-    const messageRef=storeFns.doc(storeFns.collection(db,'messages'));
-    txn.set(messageRef,{assignmentId,projectId:a.projectId,testerUid:active.uid,ownerUid:a.ownerUid,
-      sender:'tester',senderUid:active.uid,text:messagePrefix(outcome)+notes,
-      at,createdAt:storeFns.serverTimestamp()});
-   });
-  }catch(err){
-   // A retried transaction can see its own committed checkin. Show the saved report, never a second one.
-   if(err?.code!=='testerhub/already-reported')throw err;
-   const existing=await storeFns.getDoc(reportRef).catch(()=>null);
-   if(!existing?.exists()||existing.data().testerUid!==active.uid)throw err;
-   return {...tidy(existing),alreadySaved:true};
+  // A weak network makes a server read fail fast, so retry it a few times before giving up.
+  let current;
+  for(let attempt=0;;attempt++){
+   try{current=await storeFns.getDoc(ref);break}
+   catch(err){if(err?.code!=='unavailable'||attempt>=3)throw err;await new Promise(r=>setTimeout(r,1500*(attempt+1)))}
   }
+  if(!current.exists()||current.data().testerUid!==active.uid)throw Error('الاختبار غير متاح لك');
+  const a=current.data();
+  if(!a.joinedDay||daysSince(a.joinedDay)>14)throw Error('الاختبار غير فعال');
+  const alreadySaved=async()=>{
+   const existing=await storeFns.getDoc(reportRef).catch(()=>null);
+   return existing?.exists()&&existing.data().testerUid===active.uid?{...tidy(existing),alreadySaved:true}:null;
+  };
+  if(a.checkins?.includes(date)){const prior=await alreadySaved();if(prior)return prior;throw Error('تقرير اليوم مسجل مسبقاً')}
+  const tested=taskForDay(a),at=new Date().toISOString();
+  const saved={id:reportRef.id,assignmentId,projectId:a.projectId,testerUid:active.uid,ownerUid:a.ownerUid,
+    date,tested,outcome,notes,status:needsFollowUp({outcome})?'new':'ok',createdAt:at};
+  if(retestOf)saved.retestOf=retestOf;
+  // The rules keep this safe without a transaction: the report ID is fixed per day and create-only,
+  // and the checkin must arrive with it, so a repeated send can never make a second report.
+  const batch=storeFns.writeBatch(db);
+  batch.set(reportRef,{assignmentId,projectId:a.projectId,testerUid:active.uid,ownerUid:a.ownerUid,
+    date,tested,outcome,notes,status:saved.status,...(retestOf?{retestOf}:{}),
+    createdAt:at,submittedAt:storeFns.serverTimestamp()});
+  batch.update(ref,{checkins:storeFns.arrayUnion(date),lastCheckinAt:storeFns.serverTimestamp()});
+  batch.set(storeFns.doc(storeFns.collection(db,'messages')),{assignmentId,projectId:a.projectId,testerUid:active.uid,ownerUid:a.ownerUid,
+    sender:'tester',senderUid:active.uid,text:messagePrefix(outcome)+notes,at,createdAt:storeFns.serverTimestamp()});
+  const slow=setTimeout(()=>toast('الاتصال ضعيف… تقريرك قيد الإرسال، أبقِ التطبيق مفتوحاً'),6000);
+  try{await batch.commit()}
+  catch(err){
+   // The first send may have landed before its answer was lost; then show that report, not an error.
+   const prior=await alreadySaved();if(prior)return prior;
+   throw err;
+  }
+  finally{clearTimeout(slow)}
   return saved;
  }
  const d=demoState(),a=d.assignments.find(x=>x.id===assignmentId);

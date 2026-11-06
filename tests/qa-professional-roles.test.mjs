@@ -99,10 +99,9 @@ describe('QA-04 | Closed test and daily feedback',()=>{
   assert.match(html,/taskForDay\(a\)/);
   assert.match(html,/notes\.length>800/);
  });
- it('updates the assignment and creates a report in one Firestore transaction',()=>{
-  assert.match(html,/runTransaction\(db/);
-  assert.match(html,/txn\.set\(reportRef/);
-  assert.match(html,/txn\.update\(ref/);
+ it('updates the assignment and creates a report in one atomic Firestore batch',()=>{
+  assert.match(html,/batch\.set\(reportRef/);
+  assert.match(html,/batch\.update\(ref/);
   assert.match(rules,/getAfter\(/);
   assert.doesNotMatch(html,/txn\.get\(reportRef\)/);
  });
