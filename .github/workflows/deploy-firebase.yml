@@ -1,0 +1,77 @@
+name: Deploy to Firebase (production)
+# Started by hand only (Actions → Deploy to Firebase → Run workflow), from main, after typing «نشر».
+# Order matters: the new site needs the new rules and indexes, so they go first and the site goes last.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'اكتب: نشر'
+        required: true
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: firebase-production-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'alaaajeel/testerhub' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PROJECT: testhubiq-c7711
+    steps:
+      - name: Check confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "نشر" ]; then
+            echo "::error::Type «نشر» in the confirm box to deploy."; exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      # Same gate as CI: nothing is deployed unless the app and the security rules pass.
+      - run: npm test
+      - run: npm run preflight
+      - run: npm run test:rules
+      - name: Load the Firebase key
+        env:
+          KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::Add a valid service account key as the FIREBASE_SERVICE_ACCOUNT secret."; exit 1
+          fi
+          printf '%s' "$KEY" > "$RUNNER_TEMP/firebase-key.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-key.json" >> "$GITHUB_ENV"
+      # 1) Rules and indexes. No force flag: indexes that exist in Firebase but not in the file are kept.
+      - name: Deploy Firestore rules and indexes
+        run: npx firebase deploy --only firestore:rules,firestore:indexes --project "$PROJECT" --non-interactive
+      # 2) New indexes build in the background; the league and notices queries need them.
+      - name: Wait for indexes to finish building
+        run: |
+          if ! gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS" --quiet; then
+            echo "::warning::Could not check index state; waiting 5 minutes instead."; sleep 300; exit 0
+          fi
+          for i in $(seq 1 40); do
+            states=$(gcloud firestore indexes composite list --project="$PROJECT" --format='value(state)' 2>/dev/null) || { echo "::warning::Could not list indexes; waiting 5 minutes instead."; sleep 300; exit 0; }
+            building=$(printf '%s\n' "$states" | grep -c CREATING || true)
+            echo "Indexes still building: $building"
+            [ "$building" -eq 0 ] && exit 0
+            sleep 30
+          done
+          echo "::error::Indexes are still building after 20 minutes. Rules are live; run this workflow again later to publish the site."; exit 1
+      # 3) The site, last.
+      - run: npm run build
+      - name: Deploy hosting (testiqx.web.app)
+        run: npx firebase deploy --only hosting:testiqx --project "$PROJECT" --non-interactive
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-key.json"

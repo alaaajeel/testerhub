@@ -30,7 +30,7 @@ service cloud.firestore {
     // Supervisors hold only what the owner ticked. Nothing here lets one change staffRoles.
     function validStaffPermissions(p) {
       return p is map && p.size() >= 1
-        && p.keys().hasOnly(['viewUsers','suspendUsers','archiveProjects','deleteProjects','viewReports','processDeletions','viewAudit'])
+        && p.keys().hasOnly(['viewUsers','suspendUsers','archiveProjects','deleteProjects','viewReports','processDeletions','viewAudit','sendAnnouncements'])
         && p.values().hasOnly([true, false]);
     }
     function activeStaff() {
@@ -255,7 +255,12 @@ service cloud.firestore {
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
       allow create: if verified()
         && !(project(request.resource.data.projectId).data.get('status','recruiting') in ['deleting','archived'])
-        && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','date','tested','outcome','notes','status','createdAt','submittedAt'])
+        && request.resource.data.keys().hasOnly(['assignmentId','projectId','testerUid','ownerUid','date','tested','outcome','notes','status','createdAt','submittedAt','retestOf'])
+        && (!('retestOf' in request.resource.data) || (request.resource.data.retestOf is string
+          && request.resource.data.retestOf.size() <= 200
+          && get(/databases/$(database)/documents/reports/$(request.resource.data.retestOf)).data.assignmentId == request.resource.data.assignmentId
+          && get(/databases/$(database)/documents/reports/$(request.resource.data.retestOf)).data.testerUid == request.auth.uid
+          && get(/databases/$(database)/documents/reports/$(request.resource.data.retestOf)).data.status == 'fixed'))
         && reportId == request.resource.data.assignmentId + '_' + request.resource.data.date
         && request.resource.data.testerUid == request.auth.uid
         && assignment(request.resource.data.assignmentId).data.testerUid == request.auth.uid
@@ -263,8 +268,8 @@ service cloud.firestore {
         && request.resource.data.projectId == assignment(request.resource.data.assignmentId).data.projectId
         && request.resource.data.date is string
         && currentUtcDay(request.resource.data.date)
-        && request.resource.data.outcome in ['ok','issue']
-        && request.resource.data.status == (request.resource.data.outcome == 'issue' ? 'new' : 'ok')
+        && request.resource.data.outcome in ['ok','issue','blocked']
+        && request.resource.data.status == (request.resource.data.outcome in ['issue','blocked'] ? 'new' : 'ok')
         && request.resource.data.notes is string
         && request.resource.data.notes.size() >= 10
         && request.resource.data.notes.size() <= 800
@@ -277,12 +282,163 @@ service cloud.firestore {
         && request.resource.data.submittedAt == request.time
         && !(request.resource.data.date in assignment(request.resource.data.assignmentId).data.checkins)
         && request.resource.data.date in assignmentAfter(request.resource.data.assignmentId).data.checkins;
+      // The owner may mark a problem fixed, or record a review decision. Neither path can touch
+      // what the tester wrote (tested, outcome, notes, date, timestamps), so a review is never a silent edit.
       allow update: if verified() && resource.data.ownerUid == request.auth.uid
         && !(project(resource.data.projectId).data.get('status','recruiting') in ['deleting','archived'])
-        && resource.data.outcome == 'issue' && resource.data.status == 'new'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-        && request.resource.data.status == 'fixed';
+        && (
+          (resource.data.outcome in ['issue','blocked'] && resource.data.status == 'new'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+            && request.resource.data.status == 'fixed')
+          ||
+          (project(resource.data.projectId).data.ownerUid == request.auth.uid
+            && resource.data.get('reviewStatus','') != 'accepted'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewStatus','reviewedAt','reviewerUid'])
+            && request.resource.data.reviewStatus in ['accepted','clarify','rejected']
+            && request.resource.data.reviewedAt == request.time
+            && request.resource.data.reviewerUid == request.auth.uid)
+        );
       allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
+    }
+    // ---- Contribution XP (no Cloud Functions on Spark) ----
+    // Points exist only as create-only events whose ID names what was rewarded, so nothing is paid twice:
+    //   {reportId}_review  accepted daily report (10) or accepted problem report (20)
+    //   {fixedReportId}_retest  accepted report that retested a fixed problem (10)
+    //   {assignmentId}_cycle    14 reported days with at least 7 accepted reports (50)
+    // Totals may only grow by the points of an event created in the same write, and nobody edits them otherwise.
+    // Document lookups are kept few on purpose: a batch may make at most 20.
+    function xpPoints(kind) { return kind == 'report' ? 10 : kind == 'bug' ? 20 : kind == 'retest' ? 10 : kind == 'cycle' ? 50 : -1; }
+    function xpWeek(t) { return 'W' + string(int((t.toMillis() + 259200000) / 604800000)); }
+    function xpMonth(t) { return 'M' + string(t.year() * 100 + t.month()); }
+    function xpLedger(aid) { return /databases/$(database)/documents/xpAssignments/$(aid); }
+    function validXpEvent(id, d) {
+      return (d.kind in ['report','bug'] && id == d.reportId + '_review'
+          && validXpReport(d, getAfter(/databases/$(database)/documents/reports/$(d.reportId)).data)
+          && (d.kind == 'bug') == (getAfter(/databases/$(database)/documents/reports/$(d.reportId)).data.outcome in ['issue','blocked']))
+        || (d.kind == 'retest'
+          && validXpReport(d, getAfter(/databases/$(database)/documents/reports/$(d.reportId)).data)
+          && id == getAfter(/databases/$(database)/documents/reports/$(d.reportId)).data.get('retestOf','') + '_retest'
+          && id != '_retest')
+        || (d.kind == 'cycle' && id == d.assignmentId + '_cycle' && d.reportId == ''
+          && assignment(d.assignmentId).data.checkins.size() >= 14
+          && get(xpLedger(d.assignmentId)).data.reports + get(xpLedger(d.assignmentId)).data.bugs >= 7);
+    }
+    function validXpReport(d, r) { return r.assignmentId == d.assignmentId && r.reviewStatus == 'accepted'; }
+    match /contributions/{eventId} {
+      allow get: if resource == null || adminAllowed() || staff('viewReports') || (signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
+      allow list: if adminAllowed() || staff('viewReports') || (signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
+      // Either side may record an event the rules can prove, so a lost write is recovered by the tester's next visit.
+      allow create: if verified()
+        && request.resource.data.keys().hasOnly(['kind','points','testerUid','ownerUid','projectId','assignmentId','reportId','awardedBy','week','month','createdAt'])
+        && request.resource.data.awardedBy == request.auth.uid
+        && request.auth.uid in [request.resource.data.testerUid, request.resource.data.ownerUid]
+        && request.resource.data.points == xpPoints(request.resource.data.kind)
+        && request.resource.data.reportId is string
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.week == xpWeek(request.time)
+        && request.resource.data.month == xpMonth(request.time)
+        && assignment(request.resource.data.assignmentId).data.testerUid == request.resource.data.testerUid
+        && assignment(request.resource.data.assignmentId).data.ownerUid == request.resource.data.ownerUid
+        && assignment(request.resource.data.assignmentId).data.projectId == request.resource.data.projectId
+        && validXpEvent(eventId, request.resource.data);
+      allow update, delete: if false;
+    }
+    function xpEvent() { return getAfter(/databases/$(database)/documents/contributions/$(request.resource.data.lastEventId)).data; }
+    function xpPrev(f) { return resource == null ? 0 : resource.data.get(f, 0); }
+    // An event is new in this write when its server time is this request's time: events can never be changed.
+    // `self` is this document's path: its state after the whole write must match too, so a second
+    // increment of the same total inside one batch cannot slip through.
+    function xpBumped(self, x) {
+      return request.auth != null
+        && request.resource.data.lastEventId is string
+        && x.createdAt == request.time
+        && x.awardedBy == request.auth.uid
+        && getAfter(self).data.points == xpPrev('points') + x.points
+        && request.resource.data.points == xpPrev('points') + x.points
+        && request.resource.data.reports == xpPrev('reports') + (x.kind == 'report' ? 1 : 0)
+        && request.resource.data.bugs == xpPrev('bugs') + (x.kind == 'bug' ? 1 : 0)
+        && request.resource.data.retests == xpPrev('retests') + (x.kind == 'retest' ? 1 : 0)
+        && request.resource.data.cycles == xpPrev('cycles') + (x.kind == 'cycle' ? 1 : 0)
+        && request.resource.data.updatedAt == request.time;
+    }
+    match /xpTotals/{uid} {
+      allow get, list: if verified();
+      // An app counts once: its ledger holds exactly this event's points only when the event is its first.
+      allow create, update: if request.resource.data.keys().hasOnly(['uid','points','reports','bugs','retests','cycles','apps','lastEventId','updatedAt'])
+        && request.resource.data.uid == uid
+        && xpEvent().testerUid == uid
+        && xpBumped(/databases/$(database)/documents/xpTotals/$(uid), xpEvent())
+        && getAfter(xpLedger(xpEvent().assignmentId)).data.lastEventId == request.resource.data.lastEventId
+        && request.resource.data.apps == xpPrev('apps') + (getAfter(xpLedger(xpEvent().assignmentId)).data.points == xpEvent().points ? 1 : 0);
+      allow delete: if false;
+    }
+    match /xpPeriods/{periodId} {
+      allow get, list: if verified();
+      allow create, update: if request.resource.data.keys().hasOnly(['uid','period','points','reports','bugs','retests','cycles','lastEventId','updatedAt'])
+        && periodId == request.resource.data.period + '_' + request.resource.data.uid
+        && request.resource.data.uid == xpEvent().testerUid
+        && request.resource.data.period in [xpEvent().week, xpEvent().month]
+        && xpBumped(/databases/$(database)/documents/xpPeriods/$(periodId), xpEvent());
+      allow delete: if false;
+    }
+    match /xpAssignments/{assignmentId} {
+      allow get: if resource == null || adminAllowed() || (signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
+      allow list: if adminAllowed() || (signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
+      allow create, update: if request.resource.data.keys().hasOnly(['testerUid','ownerUid','projectId','points','reports','bugs','retests','cycles','lastEventId','updatedAt'])
+        && xpEvent().assignmentId == assignmentId
+        && request.resource.data.testerUid == xpEvent().testerUid
+        && request.resource.data.ownerUid == xpEvent().ownerUid
+        && request.resource.data.projectId == xpEvent().projectId
+        && xpBumped(xpLedger(assignmentId), xpEvent());
+      allow delete: if false;
+    }
+    // League display name: shown only if its owner opts in, and only their current profile name.
+    match /publicProfiles/{uid} {
+      allow get, list: if verified();
+      allow create, update: if verified() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name','updatedAt'])
+        && request.resource.data.name == me().data.name
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+    // ---- Admin notification center (مركز إشعارات الإدارة) ----
+    // Broadcasts are readable by every verified member and filtered by role in the app; a message to one
+    // user is readable only by that user. Only the owner, or staff granted sendAnnouncements, can write.
+    function announcer() { return adminAllowed() || staff('sendAnnouncements'); }
+    match /announcements/{noticeId} {
+      allow get, list: if announcer() || (verified()
+        && (resource.data.broadcast == true || resource.data.targetUid == request.auth.uid));
+      allow create: if announcer()
+        && request.resource.data.keys().hasOnly(['kind','audience','broadcast','targetUid','title','body','active','createdBy','createdAt'])
+        && request.resource.data.kind in ['announcement','update','instruction']
+        && request.resource.data.audience in ['all','developers','testers','user']
+        && request.resource.data.broadcast == (request.resource.data.audience != 'user')
+        && request.resource.data.targetUid is string
+        && (request.resource.data.broadcast
+          ? request.resource.data.targetUid == ''
+          : (request.resource.data.targetUid.size() > 0 && exists(/databases/$(database)/documents/users/$(request.resource.data.targetUid))))
+        && request.resource.data.title is string && request.resource.data.title.size() >= 2 && request.resource.data.title.size() <= 80
+        && request.resource.data.body is string && request.resource.data.body.size() >= 2 && request.resource.data.body.size() <= 1000
+        && request.resource.data.active == true
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      // Withdrawing hides a notice; nothing is deleted and the text cannot be rewritten afterwards.
+      allow update: if announcer()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active'])
+        && request.resource.data.active is bool;
+      allow delete: if false;
+    }
+    // Server time of the last look at the bell, so unread counts match on every device.
+    match /noticeReads/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['readAt'])
+        && request.resource.data.readAt == request.time;
+      allow list, delete: if false;
     }
     // Spark has no trusted server: deletion is requested here and carried out by the admin.
     match /deletionRequests/{uid} {
@@ -344,10 +500,11 @@ service cloud.firestore {
           || (staff('suspendUsers') && request.resource.data.action in ['suspend_user','unsuspend_user'])
           || (staff('archiveProjects') && request.resource.data.action in ['archive_project','restore_project'])
           || (staff('deleteProjects') && request.resource.data.action == 'delete_project')
-          || (staff('processDeletions') && request.resource.data.action == 'process_deletion'))
+          || (staff('processDeletions') && request.resource.data.action == 'process_deletion')
+          || (staff('sendAnnouncements') && request.resource.data.action in ['send_announcement','withdraw_announcement']))
         && request.resource.data.keys().hasOnly(['actorUid','action','targetId','targetName','createdAt'])
         && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion','grant_staff','update_staff','revoke_staff']
+        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion','grant_staff','update_staff','revoke_staff','send_announcement','withdraw_announcement']
         && request.resource.data.targetId is string
         && request.resource.data.targetId.size() <= 128
         && request.resource.data.targetName is string

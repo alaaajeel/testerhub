@@ -72,7 +72,15 @@ dialog .perm small{display:block;color:var(--muted);font-size:12px;font-weight:4
 .bubble b{display:block;font-size:12.5px}.bubble small{display:block;color:var(--muted);font-size:11.5px}
 #support-form{display:flex;gap:8px;align-items:flex-end;margin-top:12px}#support-form textarea{flex:1;min-height:70px;padding:9px 12px;border:1px solid #c6d5e8;border-radius:11px;font:inherit;resize:vertical}
 dialog footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
-@media(max-width:560px){.brand span{display:none}.item .actions{width:100%}.tools{flex-basis:100%}.tools input{max-width:none}}
+.composer{border:1px solid var(--line);background:#f8fbff;border-radius:14px;padding:14px;margin-bottom:14px;display:grid;gap:10px}
+.composer label{display:grid;gap:5px;font-weight:600;font-size:13.5px}
+.composer input,.composer select,.composer textarea{font:inherit;width:100%;min-height:44px;padding:8px 12px;border:1px solid #c6d5e8;border-radius:11px;background:#fff;color:inherit}
+.composer textarea{resize:vertical;line-height:1.7}
+.composer-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.composer-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.composer-foot small{color:var(--muted);font-size:12px}
+.notice-body{white-space:pre-line}
+@media(max-width:560px){.composer-row{grid-template-columns:1fr}.brand span{display:none}.item .actions{width:100%}.tools{flex-basis:100%}.tools input{max-width:none}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 <script defer src="./firebase-config.js"></script>
@@ -92,6 +100,7 @@ dialog footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
   <button type="button" data-tab="issues">بلاغات المشاكل</button>
   <button type="button" data-tab="deletionRequests">طلبات الحذف</button>
   <button type="button" data-tab="staffRoles">المشرفون</button>
+  <button type="button" data-tab="announcements">مركز الإشعارات</button>
   <button type="button" data-tab="adminAuditLogs">سجل الإدارة</button>
  </nav>
 </header>
@@ -104,6 +113,14 @@ dialog footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
    <div class="head"><h1 id="listTitle">التطبيقات</h1>
     <div class="tools"><form id="search" class="tools" hidden><input id="searchInput" type="search" autocomplete="off"><button class="btn soft" id="searchButton" type="submit">بحث</button></form><button class="btn soft" id="refresh" type="button">تحديث</button></div></div>
    <p id="listNote" class="who" hidden></p>
+   <form id="composer" class="composer" hidden novalidate>
+    <div class="composer-row"><label>النوع<select name="kind"><option value="announcement">إعلان</option><option value="update">تحديث للمنصة</option><option value="instruction">تعليمات مهمة</option></select></label>
+    <label>إلى<select name="audience"><option value="all">كل المستخدمين</option><option value="developers">المطورون</option><option value="testers">المختبرون</option><option value="user">مستخدم محدد</option></select></label></div>
+    <label data-for="user" hidden>بريد المستخدم<input name="email" type="email" dir="ltr" autocomplete="off" placeholder="user@example.com"></label>
+    <label>العنوان<input name="title" maxlength="80" required></label>
+    <label>النص<textarea name="body" maxlength="1000" rows="4" required></textarea></label>
+    <div class="composer-foot"><small>يظهر بالجرس داخل التطبيق. ما يوصل كإشعار والتطبيق مسكّر.</small><button class="btn" type="submit">إرسال الإعلان</button></div>
+   </form>
    <div id="items" aria-live="polite"></div>
    <button id="more" class="btn soft" type="button" hidden>عرض المزيد</button>
   </section>

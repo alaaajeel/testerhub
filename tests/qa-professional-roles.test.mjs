@@ -93,7 +93,8 @@ describe('QA-04 | Closed test and daily feedback',()=>{
   assert.match(html,/daysSince\(a\.joinedDay\)>14/);
  });
  it('requires a meaningful test report with problem details when needed',()=>{
-  assert.match(html,/if\(!opened\|\|!feature\)/);
+  assert.match(html,/function validateDailyReport\(/);
+  assert.match(html,/validateDailyReport\(input\|\|\{\}\)/);
   assert.match(html,/notes\.length<10/);
   assert.match(html,/taskForDay\(a\)/);
   assert.match(html,/notes\.length>800/);
