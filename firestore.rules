@@ -255,6 +255,12 @@ service cloud.firestore {
           && getAfter(/databases/$(database)/documents/reports/$(assignmentId + '_' + request.resource.data.checkins[request.resource.data.checkins.size()-1])).data.testerUid == resource.data.testerUid
           && request.time < resource.data.joinedAt + duration.value(15, 'd')
           && (!('lastCheckinAt' in resource.data) || request.time >= resource.data.lastCheckinAt + duration.value(14, 'h')))
+        ||
+        // Last time the tester opened TesterHub, shown to this app's owner only. Not proof of using the app under test.
+        (resource.data.joinedDay is string
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['testerSeenAt'])
+          && request.resource.data.testerSeenAt == request.time
+          && (!('testerSeenAt' in resource.data) || request.time > resource.data.testerSeenAt + duration.value(1, 'h')))
       );
       allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
     }
@@ -576,6 +582,20 @@ service cloud.firestore {
             && !exists(/databases/$(database)/documents/assignments/$(requestId)))
         );
       allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
+    }
+    // ---- Activity monitoring (estimated) ----
+    // One small document per user, written only by that user with server time; read only by the platform team.
+    match /presence/{uid} {
+      allow get, list: if adminAllowed() || staff('viewUsers');
+      allow create, update: if verified() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['role','lastSeenAt','lastActionAt'])
+        && request.resource.data.role == me().data.role
+        && request.resource.data.lastSeenAt == request.time
+        && (!('lastActionAt' in request.resource.data)
+          || request.resource.data.lastActionAt == request.time
+          || (resource != null && request.resource.data.lastActionAt == resource.data.get('lastActionAt', null)))
+        && (resource == null || request.time > resource.data.lastSeenAt + duration.value(20, 's'));
+      allow delete: if false;
     }
     match /adminAuditLogs/{auditId} {
       allow get, list: if adminAllowed() || staff('viewAudit');
