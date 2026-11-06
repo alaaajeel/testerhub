@@ -597,6 +597,50 @@ service cloud.firestore {
         && (resource == null || request.time > resource.data.lastSeenAt + duration.value(20, 's'));
       allow delete: if false;
     }
+    // ---- Help center: built-in articles ship with the app; the platform owner overrides, adds or hides them ----
+    function helpStep(x) {
+      return x is map && x.keys().hasOnly(['title','text']) && x.keys().hasAll(['title','text'])
+        && x.title is string && x.title.size() >= 1 && x.title.size() <= 80
+        && x.text is string && x.text.size() <= 600;
+    }
+    function helpSteps(s) {
+      return s is list && s.size() >= 1 && s.size() <= 12
+          && (s.size() <= 0 || helpStep(s[0]))
+          && (s.size() <= 1 || helpStep(s[1]))
+          && (s.size() <= 2 || helpStep(s[2]))
+          && (s.size() <= 3 || helpStep(s[3]))
+          && (s.size() <= 4 || helpStep(s[4]))
+          && (s.size() <= 5 || helpStep(s[5]))
+          && (s.size() <= 6 || helpStep(s[6]))
+          && (s.size() <= 7 || helpStep(s[7]))
+          && (s.size() <= 8 || helpStep(s[8]))
+          && (s.size() <= 9 || helpStep(s[9]))
+          && (s.size() <= 10 || helpStep(s[10]))
+          && (s.size() <= 11 || helpStep(s[11]));
+    }
+    function validHelp(d) {
+      return d.keys().hasOnly(['cat','title','summary','steps','notice','imageUrl','videoUrl','order','status','updatedAt','updatedBy'])
+        && d.keys().hasAll(['cat','title','summary','steps','notice','imageUrl','videoUrl','order','status','updatedAt','updatedBy'])
+        && d.cat in ['start','tester','developer','faq']
+        && d.title is string && d.title.size() >= 3 && d.title.size() <= 120
+        && d.summary is string && d.summary.size() <= 200
+        && d.notice is string && d.notice.size() <= 300
+        && helpSteps(d.steps)
+        // Images and videos stay external links on the free plan.
+        && d.imageUrl is string && (d.imageUrl == '' || (d.imageUrl.size() <= 500 && d.imageUrl.matches('https://[^\\s<>"]+')))
+        && d.videoUrl is string && (d.videoUrl == '' || (d.videoUrl.size() <= 500
+          && d.videoUrl.matches('https://(www[.]|m[.])?(youtube[.]com|youtu[.]be|youtube-nocookie[.]com|vimeo[.]com|drive[.]google[.]com)/[^\\s<>"]*')))
+        && d.order is int && d.order >= 0 && d.order <= 9999
+        && d.status in ['published','draft','hidden']
+        && d.updatedAt == request.time
+        && d.updatedBy == request.auth.uid;
+    }
+    match /helpArticles/{slug} {
+      // Anyone, even signed out, reads what the app shows; drafts stay with the owner.
+      allow get, list: if resource.data.status in ['published','hidden'] || adminAllowed();
+      allow create, update: if adminAllowed() && slug.matches('[a-z0-9][a-z0-9-]{1,59}') && validHelp(request.resource.data);
+      allow delete: if adminAllowed();
+    }
     match /adminAuditLogs/{auditId} {
       allow get, list: if adminAllowed() || staff('viewAudit');
       allow create: if (adminAllowed()
@@ -607,7 +651,7 @@ service cloud.firestore {
           || (staff('sendAnnouncements') && request.resource.data.action in ['send_announcement','withdraw_announcement']))
         && request.resource.data.keys().hasOnly(['actorUid','action','targetId','targetName','createdAt'])
         && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.action in ['toggle_feature','suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion','grant_staff','update_staff','revoke_staff','send_announcement','withdraw_announcement']
+        && request.resource.data.action in ['save_help_article','delete_help_article','toggle_feature','suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion','grant_staff','update_staff','revoke_staff','send_announcement','withdraw_announcement']
         && request.resource.data.targetId is string
         && request.resource.data.targetId.size() <= 128
         && request.resource.data.targetName is string

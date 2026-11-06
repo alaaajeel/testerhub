@@ -26,6 +26,7 @@ const TABS={
  deletionRequests:{title:'طلبات حذف الحسابات',perm:'processDeletions',order:()=>'createdAt',desc:true},
  staffRoles:{title:'المشرفون',ownerOnly:true,order:()=>'grantedAt',desc:true},
  adminAuditLogs:{title:'سجل إجراءات الإدارة',perm:'viewAudit',order:()=>'createdAt',desc:true},
+ help:{title:'مركز المساعدة',ownerOnly:true,note:'الشروحات الأساسية تأتي مع التطبيق. تگدر تعدّلها أو تخفيها أو تضيف شروحات جديدة بنص وصور وفيديو (روابط https فقط، بدون رفع ملفات على الخطة المجانية). المسودة ما تظهر للمستخدمين، وكل حفظ أو حذف ينسجل بسجل الإدارة.'},
  activity:{title:'مراقبة النشاط',perm:'viewUsers',note:'الحالة تقديرية وليست لحظية: «متصل الآن» = ظهر خلال آخر دقيقتين، «نشط اليوم» = خلال 24 ساعة. التطبيق يسجّل الظهور فقط وهو مفتوح على الشاشة ومتصل بالإنترنت. المستخدم الذي لم يفتح التطبيق بعد هذا التحديث يظهر غير نشط.'},
  features:{title:'الميزات قيد التجربة',ownerOnly:true,note:'كل ميزة هنا معطّلة افتراضياً. تفعيلها يظهرها لكل المستخدمين فوراً، وإيقافها يخفيها بدون حذف أي بيانات. كل تغيير ينحفظ بسجل الإدارة.'},
  announcements:{title:'مركز إشعارات الإدارة',perm:'sendAnnouncements',order:()=>'createdAt',desc:true}
@@ -207,6 +208,86 @@ function renderActivity(){
   return '<article class="item"><div class="info"><strong>'+esc(person(r.id))+'</strong><small>'+(r.role==='developer'?'مطور':'مختبر')+' · آخر ظهور: '+esc(stamped(r.lastSeenAt))+' · آخر تفاعل: '+esc(stamped(r.lastActionAt))+'</small><small>'+(r.role==='developer'?'مشاركات بتطبيقاته':'مشاركات')+': '+n(r.assignments)+' · تقارير: '+n(r.reports)+'</small></div><div class="actions"><span class="pill '+tone+'">'+label+'</span></div></article>';
  }).join('');
 }
+// ---- Help center articles ----
+const HELP_STATUS={published:['منشور','ok'],draft:['مسودة',''],hidden:['مخفي','warn']};
+async function loadHelpAdmin(){
+ const snap=await getDocs(collection(state.db,'helpArticles'));
+ state.helpStored=snap.docs.map(x=>({...x.data(),slug:x.id}));
+ state.rows=[];state.hasMore=false;renderList();
+}
+function helpRows(){
+ const H=globalThis.TesterHubHelp,stored=new Map((state.helpStored||[]).map(a=>[a.slug,a])),rows=[];
+ for(const d of H.DEFAULTS){const s=stored.get(d.slug);rows.push({...(s&&s.status!=='hidden'?s:d),slug:d.slug,builtIn:true,stored:s||null,status:s?s.status:'published'})}
+ for(const s of stored.values())if(!H.DEFAULTS.some(d=>d.slug===s.slug))rows.push({...s,builtIn:false,stored:s});
+ return rows.sort((a,b)=>(a.order??0)-(b.order??0)||a.slug.localeCompare(b.slug));
+}
+function helpEditor(a){
+ const H=globalThis.TesterHubHelp,isNew=!a;a=a||{slug:'',cat:'faq',title:'',summary:'',steps:[{title:'',text:''}],notice:'',imageUrl:'',videoUrl:'',order:500,status:'draft'};
+ const steps=(a.steps||[]).map(s=>s.title+' | '+s.text).join('\n');
+ const opt=(v,l,cur)=>'<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(l)+'</option>';
+ return '<form id="help-form" class="help-form" data-new="'+(isNew?'1':'')+'"><h3 style="margin:0">'+(isNew?'شرح جديد':'تعديل: '+esc(a.title))+'</h3>'
+  +'<div class="row2"><label>المعرّف (بالإنجليزي)<input name="slug" required pattern="[a-z0-9][a-z0-9-]{1,59}" maxlength="60" value="'+esc(a.slug)+'"'+(isNew?'':' readonly')+' dir="ltr"><span class="hint">يظهر بالرابط: #help/article/المعرّف</span></label>'
+  +'<label>القسم<select name="cat">'+Object.entries(H.CATEGORIES).map(([k,c])=>opt(k,c.title,a.cat)).join('')+'</select></label>'
+  +'<label>الحالة<select name="status">'+opt('published','منشور',a.status)+opt('draft','مسودة (ما تظهر)',a.status)+'</select></label>'
+  +'<label>الترتيب<input name="order" type="number" min="0" max="9999" value="'+esc(a.order??500)+'"></label></div>'
+  +'<label>العنوان<input name="title" required minlength="3" maxlength="120" value="'+esc(a.title)+'"></label>'
+  +'<label>وصف مختصر<input name="summary" maxlength="200" value="'+esc(a.summary||'')+'"></label>'
+  +'<label>الخطوات<textarea class="steps" name="steps" required>'+esc(steps)+'</textarea><span class="hint">كل خطوة بسطر: عنوان الخطوة | شرحها. حتى 12 خطوة.</span></label>'
+  +'<label>ملاحظة مهمة (اختياري)<textarea name="notice" maxlength="300">'+esc(a.notice||'')+'</textarea></label>'
+  +'<div class="row2"><label>رابط صورة (https)<input name="imageUrl" type="url" maxlength="500" value="'+esc(a.imageUrl||'')+'" dir="ltr" placeholder="https://..."></label>'
+  +'<label>رابط فيديو (YouTube أو Vimeo أو Google Drive)<input name="videoUrl" type="url" maxlength="500" value="'+esc(a.videoUrl||'')+'" dir="ltr" placeholder="https://youtu.be/..."></label></div>'
+  +'<p class="help-errors" id="help-errors" role="alert"></p>'
+  +'<div class="actions"><button class="btn" type="submit">حفظ</button><button class="btn soft" type="button" data-action="help-cancel">إلغاء</button></div></form>';
+}
+function renderHelpAdmin(){
+ if(state.helpEdit!==undefined&&state.helpEdit!==null)return helpEditor(state.helpEdit===''?null:helpRows().find(r=>r.slug===state.helpEdit));
+ const H=globalThis.TesterHubHelp;
+ return '<div class="actions" style="margin-bottom:12px"><button class="btn" type="button" data-action="help-new">+ شرح جديد</button></div>'+helpRows().map(r=>{
+  const [label,tone]=HELP_STATUS[r.status]||[r.status,''],src=r.builtIn?(r.stored&&r.stored.status!=='hidden'?'أساسي معدّل':'أساسي'):'جديد';
+  const btns=['<button class="btn soft" type="button" data-action="help-edit" data-id="'+esc(r.slug)+'">تعديل</button>'];
+  if(r.builtIn&&r.status!=='hidden')btns.push('<button class="btn soft" type="button" data-action="help-hide" data-id="'+esc(r.slug)+'">إخفاء</button>');
+  if(r.builtIn&&r.stored)btns.push('<button class="btn soft" type="button" data-action="help-reset" data-id="'+esc(r.slug)+'">'+(r.status==='hidden'?'إظهار الأصلي':'استرجاع الأصلي')+'</button>');
+  if(!r.builtIn)btns.push('<button class="btn danger" type="button" data-action="help-delete" data-id="'+esc(r.slug)+'">حذف</button>');
+  return '<article class="item"><div class="info"><strong>'+esc(r.title)+'</strong><small>'+esc(H.CATEGORIES[r.cat]?.title||r.cat)+' · '+src+' · <span dir="ltr">'+esc(r.slug)+'</span>'+(r.imageUrl?' · صورة':'')+(r.videoUrl?' · فيديو':'')+'</small></div><div class="actions"><span class="pill '+tone+'">'+label+'</span>'+btns.join('')+'</div></article>';
+ }).join('');
+}
+function helpFromForm(form){
+ const f=new FormData(form),get=k=>String(f.get(k)||'').trim();
+ const steps=get('steps').split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{const i=l.indexOf('|');return i<0?{title:l.slice(0,80),text:''}:{title:l.slice(0,i).trim(),text:l.slice(i+1).trim()}});
+ return {slug:get('slug').toLowerCase(),cat:get('cat'),title:get('title'),summary:get('summary'),steps,notice:get('notice'),imageUrl:get('imageUrl'),videoUrl:get('videoUrl'),order:Number.parseInt(get('order'),10),status:get('status')};
+}
+async function saveHelp(a,{isNew=false}={}){
+ const errors=globalThis.TesterHubHelp.validate(a);
+ if(isNew&&helpRows().some(r=>r.slug===a.slug))errors.push('هذا المعرّف مستخدم');
+ if(errors.length)throw Error(errors.join('، '));
+ const batch=writeBatch(state.db),{slug,...data}=a;
+ batch.set(doc(state.db,'helpArticles',slug),{...data,updatedAt:serverTimestamp(),updatedBy:state.account.uid});
+ batchAudit(batch,'save_help_article',slug,a.title);
+ await batch.commit();
+}
+async function removeHelp(slug,title){
+ const batch=writeBatch(state.db);
+ batch.delete(doc(state.db,'helpArticles',slug));
+ batchAudit(batch,'delete_help_article',slug,title);
+ await batch.commit();
+}
+async function helpAction(name,slug){
+ const row=helpRows().find(r=>r.slug===slug);
+ if(name==='help-new'){state.helpEdit='';renderList();return}
+ if(name==='help-edit'){state.helpEdit=slug;renderList();return}
+ if(name==='help-cancel'){state.helpEdit=null;renderList();return}
+ if(!row)return;
+ if(name==='help-hide'){
+  const base=globalThis.TesterHubHelp.DEFAULTS.find(d=>d.slug===slug);
+  if(!await confirmDialog({title:'إخفاء «'+row.title+'»؟',body:'يختفي من مركز المساعدة، وتگدر ترجعه بأي وقت.',action:'إخفاء'}))return;
+  await saveHelp({...base,status:'hidden'});toast('انخفى الشرح.');
+ }else if(name==='help-reset'||name==='help-delete'){
+  const del=name==='help-delete';
+  if(!await confirmDialog({title:del?'حذف «'+row.title+'» نهائياً؟':'استرجاع النسخة الأصلية؟',body:del?'ينحذف هذا الشرح من مركز المساعدة.':'تنحذف تعديلاتك ويرجع الشرح الأساسي كما هو.',action:del?'حذف':'استرجاع',danger:del}))return;
+  await removeHelp(slug,row.title);toast(del?'انحذف الشرح.':'رجع الشرح الأساسي.');
+ }
+ await loadHelpAdmin();
+}
 async function loadFeatures(){
  const snap=await getDoc(doc(state.db,'appConfig','features'));
  state.featureFlags={officialGroup:snap.exists()&&snap.data().officialGroup===true};
@@ -339,7 +420,7 @@ function renderList(){
  // App names filter as you type; only the email lookup needs a button.
  $('searchButton').hidden=type!=='users';
  $('composer').hidden=type!=='announcements';
- $('items').innerHTML=type==='activity'?renderActivity():type==='features'?renderFeatures():type==='support'?renderSupport():rows.length?rows.map(ROWS[type]).join(''):'<p class="none">'+(type==='announcements'?'ما انرسل أي إعلان بعد.':'لا توجد سجلات هنا.')+'</p>';
+ $('items').innerHTML=type==='help'?renderHelpAdmin():type==='activity'?renderActivity():type==='features'?renderFeatures():type==='support'?renderSupport():rows.length?rows.map(ROWS[type]).join(''):'<p class="none">'+(type==='announcements'?'ما انرسل أي إعلان بعد.':'لا توجد سجلات هنا.')+'</p>';
  $('more').hidden=!state.hasMore;
  for(const b of document.querySelectorAll('[data-tab]'))b.classList.toggle('active',b.dataset.tab===type);
 }
@@ -347,6 +428,7 @@ async function page(reset=false){
  if(state.tab==='support')return loadSupport();
  if(state.tab==='features')return loadFeatures();
  if(state.tab==='activity')return loadActivity();
+ if(state.tab==='help'){state.helpEdit=null;return loadHelpAdmin()}
  const source=TABS[state.tab];
  if(reset){state.rows=[];state.cursor=null;state.hasMore=false;state.details={}}
  const parts=[collection(state.db,source.collection||state.tab)];
@@ -433,6 +515,7 @@ document.addEventListener('click',event=>{
  if(!trigger||state.busy)return;
  if(trigger.dataset.action==='message-user'){state.tab='support';state.thread=trigger.dataset.id;state.filter='';guarded(()=>page(true));return}
  if(trigger.dataset.action==='open-thread'){state.thread=trigger.dataset.id;guarded(()=>page(true));return}
+ if(trigger.dataset.action?.startsWith('help-')){const name=trigger.dataset.action,slug=trigger.dataset.id;guarded(async()=>{if(['help-hide','help-reset','help-delete'].includes(name))busy(false);await helpAction(name,slug)});return}
  if(trigger.dataset.action==='toggle-feature'){
   const name=trigger.dataset.id,on=!!state.featureFlags?.[name];
   confirmDialog({title:on?'إيقاف الميزة؟':'تفعيل الميزة لكل المستخدمين؟',body:'يمكن التراجع في أي وقت، وما تنحذف أي بيانات.',action:on?'إيقاف':'تفعيل'}).then(ok=>{if(ok)guarded(()=>toggleFeature(name))});
@@ -447,6 +530,16 @@ document.addEventListener('click',event=>{
   const done=await ACTIONS[name](item);
   renderList();
   if(!['details','promote','edit-staff','revoke-staff'].includes(name)&&done!==false)await overview();
+ });
+});
+document.addEventListener('submit',event=>{
+ if(event.target.id!=='help-form')return;
+ event.preventDefault();
+ const form=event.target,article=helpFromForm(form);
+ guarded(async()=>{
+  try{await saveHelp(article,{isNew:form.dataset.new==='1'})}
+  catch(err){const box=document.getElementById('help-errors');if(box)box.textContent=err.message;throw err}
+  state.helpEdit=null;toast(article.status==='published'?'انحفظ ونُشر الشرح.':'انحفظ كمسودة.');await loadHelpAdmin();
  });
 });
 document.addEventListener('submit',event=>{

@@ -1,5 +1,5 @@
-const CACHE='testerhub-original-ui-v16';
-const SHELL=['./','./index.html','./admin.html','./src/admin.js','./splash.css','./legal.css','./privacy.html','./terms.html','./src/services/accounts.js','./src/services/deletion.js','./src/services/push.js','./firebase-config.js','./manifest.webmanifest','./assets/icon-192.png','./assets/icon-512.png','./assets/icon-maskable-512.png','./assets/icon-180.png','./assets/brand-icon.svg','./assets/brand-lockup.svg'];
+const CACHE='testerhub-original-ui-v17';
+const SHELL=['./','./index.html','./admin.html','./src/admin.js','./splash.css','./legal.css','./privacy.html','./terms.html','./src/services/accounts.js','./src/services/deletion.js','./src/services/push.js','./src/help/content.js','./help/index.html','./firebase-config.js','./manifest.webmanifest','./assets/icon-192.png','./assets/icon-512.png','./assets/icon-maskable-512.png','./assets/icon-180.png','./assets/brand-icon.svg','./assets/brand-lockup.svg'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)));self.skipWaiting()});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim()});
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const url=new URL(e.request.url);if(url.origin!==self.location.origin)return;
