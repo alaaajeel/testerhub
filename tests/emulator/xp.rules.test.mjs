@@ -44,14 +44,18 @@ function awardBatch(uid,{id,kind,reportId='',points=POINTS[kind],first=true,assi
  return batch;
 }
 const reviewEvent=(day,kind='report')=>({id:`p1_t1_${day}_review`,kind,reportId:`p1_t1_${day}`});
-const totals=async()=>(await env.withSecurityRulesDisabled(async c=>(await getDoc(doc(c.firestore(),'xpTotals','t1'))).data()));
+// withSecurityRulesDisabled resolves to nothing, so read into a variable.
+const adminRead=async(...path)=>{let data;await env.withSecurityRulesDisabled(async c=>{data=(await getDoc(doc(c.firestore(),...path))).data()});return data};
+const totals=()=>adminRead('xpTotals','t1');
 
 test('developer awards 10 XP for an accepted daily report and every total moves together',async()=>{
  await assertSucceeds(awardBatch('d1',reviewEvent('2026-01-01')).commit());
  const t=await totals();
  assert.equal(t.points,10);assert.equal(t.reports,1);assert.equal(t.apps,1);assert.equal(t.bugs,0);
- const w=await env.withSecurityRulesDisabled(async c=>(await getDoc(doc(c.firestore(),'xpPeriods',week()+'_t1'))).data());
- assert.equal(w.points,10);
+ assert.equal((await adminRead('xpPeriods',week()+'_t1')).points,10);
+ assert.equal((await adminRead('xpPeriods',month()+'_t1')).points,10);
+ const ledger=await adminRead('xpAssignments','p1_t1');assert.equal(ledger.points,10);assert.equal(ledger.reports,1);
+ assert.equal((await adminRead('contributions','p1_t1_2026-01-01_review')).awardedBy,'d1');
 });
 test('the tester can record the same proven reward, so a failed developer write is recovered',async()=>{
  await assertSucceeds(awardBatch('t1',reviewEvent('2026-01-01')).commit());
