@@ -127,17 +127,18 @@ test('rewards page fits a phone screen',async({page})=>{
  if(nav)expect(box.y+box.height).toBeLessThanOrEqual(nav.y+1);
 });
 
-test('Firestore: the developer award is one batch of an event and the four totals',async({page})=>{
+// The developer's phone with Firestore doubles; `hangAward` keeps the award batch waiting like a dropped connection.
+async function openDeveloperDoubles(page,{hangAward=false}={}){
  const day=new Date().toISOString().slice(0,10);
- await page.addInitScript(({day})=>{
+ await page.addInitScript(({day,hangAward})=>{
   window.fakeAuth={currentUser:{uid:'d1',email:'d1@example.com',emailVerified:true,getIdTokenResult:async()=>({claims:{email_verified:true}})},authStateReady:async()=>{}};
-  window.fs={n:0,batches:[],docs:{
+  window.fs={n:0,batches:[],hangAward,docs:{
    'users/d1':{name:'مطور',role:'developer',available:false},
    'projects/p1':{ownerUid:'d1',name:'Store App',link:'https://play.google.com/apps/testing/com.example.store'},
    'assignments/p1_t1':{projectId:'p1',testerUid:'t1',ownerUid:'d1',name:'Store App',link:'https://play.google.com/apps/testing/com.example.store',joinedDay:day,checkins:[day]},
    [`reports/p1_t1_${day}`]:{assignmentId:'p1_t1',projectId:'p1',testerUid:'t1',ownerUid:'d1',date:day,tested:'فتح التطبيق وتجربة وظيفة أساسية',outcome:'issue',notes:'خطأ عند الدفع بالبطاقة',status:'new',createdAt:new Date().toISOString()}
   }};
- },{day});
+ },{day,hangAward});
  const store=`const F=window.fs;
  export const getFirestore=()=>({});export const collection=(_,name)=>({__col:true,name});
  export const doc=(a,c,id)=>a&&a.__col?{c:a.name,id:'auto'+(++F.n)}:{c,id};
@@ -147,11 +148,15 @@ test('Firestore: the developer award is one batch of an event and the four total
  export const getDocs=async q=>{const docs=Object.entries(F.docs).filter(([k,v])=>k.startsWith(q.col+'/')&&q.w.every(x=>v[x.f]===x.v)).map(([k])=>snap({c:q.col,id:k.slice(q.col.length+1)}));return {docs,size:docs.length}};
  export const getDocsFromServer=getDocs;export const onSnapshot=()=>()=>{};
  export const serverTimestamp=()=>({server:true});export const increment=n=>({inc:n});export const arrayUnion=v=>({union:v});
- export const writeBatch=()=>{const ops=[];return {set:(r,v,o)=>ops.push({op:'set',path:key(r),value:v,merge:!!o?.merge}),update:(r,v)=>ops.push({op:'update',path:key(r),value:v}),commit:async()=>{F.batches.push(ops);for(const o of ops){const cur=F.docs[o.path]||{};F.docs[o.path]=o.op==='set'&&!o.merge?structuredClone(o.value):{...cur,...Object.fromEntries(Object.entries(o.value).map(([k,x])=>[k,x&&x.inc!==undefined?(cur[k]||0)+x.inc:x]))}}}}};
+ export const writeBatch=()=>{const ops=[];return {set:(r,v,o)=>ops.push({op:'set',path:key(r),value:v,merge:!!o?.merge}),update:(r,v)=>ops.push({op:'update',path:key(r),value:v}),commit:async()=>{if(F.hangAward&&ops.some(o=>o.path.startsWith('contributions/')))return new Promise(()=>{});F.batches.push(ops);for(const o of ops){const cur=F.docs[o.path]||{};F.docs[o.path]=o.op==='set'&&!o.merge?structuredClone(o.value):{...cur,...Object.fromEntries(Object.entries(o.value).map(([k,x])=>[k,x&&x.inc!==undefined?(cur[k]||0)+x.inc:x]))}}}}};
  export const runTransaction=async()=>{};export const updateDoc=async()=>{};export const setDoc=async()=>{};`;
  await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {apiKey:"test",projectId:"demo-testerhub"};'}));
  await page.route('https://www.gstatic.com/firebasejs/**',route=>route.fulfill({contentType:'application/javascript',body:route.request().url().endsWith('firebase-app.js')?'export const initializeApp=()=>({});':route.request().url().endsWith('firebase-auth.js')?'const a=window.fakeAuth;export const getAuth=()=>a;export const onAuthStateChanged=()=>()=>{};export const signOut=async()=>{};':store}));
  await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
+ return day;
+}
+test('Firestore: the developer award is one batch of an event and the four totals',async({page})=>{
+ const day=await openDeveloperDoubles(page);
  const result=await page.evaluate(day=>api.reviewReport('p1_t1_'+day,'accepted'),day);
  expect(result.awarded).toBe(20);
  const [review,award]=await page.evaluate(()=>window.fs.batches);
@@ -167,4 +172,17 @@ test('Firestore: the developer award is one batch of an event and the four total
  expect(award[5]).toMatchObject({merge:true,value:{testerUid:'t1',ownerUid:'d1',projectId:'p1',...counters}});
  // The tester's text is untouched by the review.
  expect(await page.evaluate(day=>window.fs.docs['reports/p1_t1_'+day].notes,day)).toBe('خطأ عند الدفع بالبطاقة');
+});
+
+test('Firestore: on a dropped connection the accepted review is not held up by the award',async({page})=>{
+ const day=await openDeveloperDoubles(page,{hangAward:true});
+ const started=Date.now();
+ const result=await page.evaluate(day=>api.reviewReport('p1_t1_'+day,'accepted'),day);
+ expect(result).toEqual({awarded:0,awardQueued:true});
+ expect(Date.now()-started).toBeLessThan(20000);
+ const batches=await page.evaluate(()=>window.fs.batches);
+ // The review is saved; the award has not been applied twice or partly.
+ expect(batches).toHaveLength(1);
+ expect(batches[0].map(o=>o.path)).toEqual([`reports/p1_t1_${day}`]);
+ expect(await page.evaluate(()=>Object.keys(window.fs.docs).filter(k=>['contributions/','xpTotals/','xpPeriods/','xpAssignments/'].some(c=>k.startsWith(c))))).toEqual([]);
 });
