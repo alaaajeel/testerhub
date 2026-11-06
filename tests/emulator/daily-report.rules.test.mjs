@@ -58,10 +58,11 @@ test('another tester cannot submit a report on someone else\'s assignment',async
  await assertFails(reportBatch('t2',{testerUid:'t1'}).commit());
  await assertFails(reportBatch('t2').commit());
 });
-test('owner can accept, ask for clarification and reject a report',async()=>{
+test('owner can ask for clarification, reject and accept a report; acceptance is final',async()=>{
  const ref=doc(db('d1'),'reports','p1_t1_2026-01-01');
- for(const reviewStatus of ['accepted','clarify','rejected','accepted'])
+ for(const reviewStatus of ['clarify','rejected','accepted'])
   await assertSucceeds(updateDoc(ref,{reviewStatus,reviewedAt:serverTimestamp(),reviewerUid:'d1'}));
+ await assertFails(updateDoc(ref,{reviewStatus:'rejected',reviewedAt:serverTimestamp(),reviewerUid:'d1'}));
 });
 test('clarification request can travel with a message in one batch',async()=>{
  const d=db('d1'),batch=writeBatch(d);

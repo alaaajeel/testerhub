@@ -56,7 +56,7 @@ test('client period keys match the rules formula',()=>{
  assert.equal(new Date(Date.UTC(2026,10,9)).getUTCDay(),1);
  assert.equal(x.xpMonthKey(Date.UTC(2026,10,30,23,59)),'M202611');
  assert.equal(x.xpMonthKey(Date.UTC(2026,0,1)),'M202601');
- assert.match(rules,/'W' \+ string\(math\.floor\(\(t\.toMillis\(\) \+ 259200000\) \/ 604800000\)\)/);
+ assert.match(rules,/'W' \+ string\(int\(\(t\.toMillis\(\) \+ 259200000\) \/ 604800000\)\)/);
  assert.match(rules,/'M' \+ string\(t\.year\(\) \* 100 \+ t\.month\(\)\)/);
  assert.match(html,/'W'\+Math\.floor\(\(ms\+259200000\)\/604800000\)/);
 });
