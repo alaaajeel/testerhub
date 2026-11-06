@@ -168,6 +168,12 @@ service cloud.firestore {
         && request.resource.data.testersCount is int
         && request.resource.data.testersCount == request.resource.data.selectedTesterUids.size()
         && request.resource.data.testersCount <= 400;
+      // How testers join: the official Google Group with self-join requests, or individual invitations.
+      allow update: if developer() && resource.data.ownerUid == request.auth.uid
+        && resource.data.get('status','recruiting') == 'recruiting'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['testMode'])
+        && request.resource.data.testMode in ['group','invites']
+        && featureOn('officialGroup');
       // First step of deletion. An owner cannot use it to escape an admin archive.
       allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'deleting'
@@ -211,7 +217,9 @@ service cloud.firestore {
         && request.resource.data.get('tasks',[]) == project(request.resource.data.projectId).data.get('tasks',[])
         && request.resource.data.get('groupLink','') == project(request.resource.data.projectId).data.get('groupLink','')
         && request.resource.data.testerUid != request.auth.uid
-        && profile(request.resource.data.testerUid).data.available == true
+        && (profile(request.resource.data.testerUid).data.available == true
+          || (exists(/databases/$(database)/documents/joinRequests/$(assignmentId))
+            && get(/databases/$(database)/documents/joinRequests/$(assignmentId)).data.status == 'approved'))
         && request.resource.data.joinedDay == null
         && request.resource.data.checkins == []
         && request.resource.data.invitationStatus == 'pending'
@@ -502,6 +510,73 @@ service cloud.firestore {
     }
     // Admin queue and audit logs are server-only. Firebase Admin SDK bypasses client rules.
     match /adminDeleteJobs/{jobId} { allow read, write: if false; }
+    // ---- Official Google Group and self-join (behind appConfig/features) ----
+    function featureOn(name) {
+      return exists(/databases/$(database)/documents/appConfig/features)
+        && get(/databases/$(database)/documents/appConfig/features).data.get(name, false) == true;
+    }
+    function opening(pid) { return get(/databases/$(database)/documents/openings/$(pid)); }
+    match /appConfig/{configId} {
+      allow get: if verified();
+      allow create, update: if adminAllowed() && configId == 'features'
+        && request.resource.data.keys().hasOnly(['officialGroup','updatedAt'])
+        && request.resource.data.officialGroup is bool
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+    // A public card for an app that takes self-join requests. Only its owner writes it, copying the app's own
+    // name and opt-in link; closing is always allowed so an owner can stop requests at any time.
+    match /openings/{projectId} {
+      allow get, list: if verified();
+      allow create, update: if developer()
+        && request.resource.data.keys().hasOnly(['projectId','ownerUid','ownerName','name','link','slots','status','updatedAt'])
+        && request.resource.data.projectId == projectId
+        && request.resource.data.ownerUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/projects/$(projectId)).data.ownerUid == request.auth.uid
+        && request.resource.data.name == getAfter(/databases/$(database)/documents/projects/$(projectId)).data.name
+        && request.resource.data.link == getAfter(/databases/$(database)/documents/projects/$(projectId)).data.link
+        && request.resource.data.ownerName == me().data.name
+        && request.resource.data.slots is int && request.resource.data.slots >= 1 && request.resource.data.slots <= 400
+        && request.resource.data.updatedAt == request.time
+        && (request.resource.data.status == 'closed'
+          || (request.resource.data.status == 'open' && featureOn('officialGroup')
+            && getAfter(/databases/$(database)/documents/projects/$(projectId)).data.get('testMode','invites') == 'group'
+            && getAfter(/databases/$(database)/documents/projects/$(projectId)).data.get('status','recruiting') == 'recruiting'));
+      allow delete: if canPurge(projectId, resource.data.ownerUid);
+    }
+    // One request per tester and app (fixed id), never for an app they already have, never their own app.
+    // Approval does not start anything: it only lets the owner send the usual invitation, and the 14 days
+    // start when the tester confirms the start after opening the app's opt-in link.
+    match /joinRequests/{requestId} {
+      allow get, list: if adminAllowed() || staff('deleteProjects') || (signedIn()
+        && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
+      allow create: if verified() && featureOn('officialGroup')
+        && request.resource.data.keys().hasOnly(['projectId','ownerUid','testerUid','testerName','status','createdAt','updatedAt'])
+        && requestId == request.resource.data.projectId + '_' + request.auth.uid
+        && request.resource.data.testerUid == request.auth.uid
+        && request.resource.data.testerName == me().data.name
+        && opening(request.resource.data.projectId).data.status == 'open'
+        && request.resource.data.ownerUid == opening(request.resource.data.projectId).data.ownerUid
+        && request.auth.uid != request.resource.data.ownerUid
+        && !exists(/databases/$(database)/documents/assignments/$(requestId))
+        && request.resource.data.status == 'waiting'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && (
+          (resource.data.ownerUid == request.auth.uid && resource.data.status == 'waiting'
+            && request.resource.data.status in ['approved','declined'])
+          || (resource.data.testerUid == request.auth.uid && resource.data.status == 'waiting'
+            && request.resource.data.status == 'cancelled')
+          || (resource.data.testerUid == request.auth.uid && verified() && featureOn('officialGroup')
+            && resource.data.status == 'cancelled' && request.resource.data.status == 'waiting'
+            && opening(resource.data.projectId).data.status == 'open'
+            && !exists(/databases/$(database)/documents/assignments/$(requestId)))
+        );
+      allow delete: if canPurge(resource.data.projectId, resource.data.ownerUid);
+    }
     match /adminAuditLogs/{auditId} {
       allow get, list: if adminAllowed() || staff('viewAudit');
       allow create: if (adminAllowed()
@@ -512,7 +587,7 @@ service cloud.firestore {
           || (staff('sendAnnouncements') && request.resource.data.action in ['send_announcement','withdraw_announcement']))
         && request.resource.data.keys().hasOnly(['actorUid','action','targetId','targetName','createdAt'])
         && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.action in ['suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion','grant_staff','update_staff','revoke_staff','send_announcement','withdraw_announcement']
+        && request.resource.data.action in ['toggle_feature','suspend_user','unsuspend_user','archive_project','restore_project','delete_project','process_deletion','grant_staff','update_staff','revoke_staff','send_announcement','withdraw_announcement']
         && request.resource.data.targetId is string
         && request.resource.data.targetId.size() <= 128
         && request.resource.data.targetName is string

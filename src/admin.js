@@ -26,6 +26,7 @@ const TABS={
  deletionRequests:{title:'طلبات حذف الحسابات',perm:'processDeletions',order:()=>'createdAt',desc:true},
  staffRoles:{title:'المشرفون',ownerOnly:true,order:()=>'grantedAt',desc:true},
  adminAuditLogs:{title:'سجل إجراءات الإدارة',perm:'viewAudit',order:()=>'createdAt',desc:true},
+ features:{title:'الميزات قيد التجربة',ownerOnly:true,note:'كل ميزة هنا معطّلة افتراضياً. تفعيلها يظهرها لكل المستخدمين فوراً، وإيقافها يخفيها بدون حذف أي بيانات. كل تغيير ينحفظ بسجل الإدارة.'},
  announcements:{title:'مركز إشعارات الإدارة',perm:'sendAnnouncements',order:()=>'createdAt',desc:true}
 };
 const STATUS={draft:['مسودة',''],recruiting:['يستقبل المختبرين','good'],paused:['متوقف','warn'],completed:['مكتمل',''],archived:['مؤرشف','warn'],deleting:['حذف غير مكتمل','bad']};
@@ -170,6 +171,24 @@ function detailLists(l){
   +sec('الرسائل',l.messages.slice().sort((a,b)=>timeOf(a)-timeOf(b)).map(m=>'<div class="line"><b>'+esc(person(m.senderUid))+'</b>: '+esc(m.text||'')+' <small>'+esc(stamped(m.createdAt))+'</small></div>'));
 }
 /* Support: one private thread per user. */
+async function loadFeatures(){
+ const snap=await getDoc(doc(state.db,'appConfig','features'));
+ state.featureFlags={officialGroup:snap.exists()&&snap.data().officialGroup===true};
+ state.rows=[];state.hasMore=false;renderList();
+}
+function renderFeatures(){
+ const on=!!state.featureFlags?.officialGroup;
+ return '<article class="item"><div class="info"><strong>مجموعة TesterHubIQ الرسمية وطلبات المشاركة الذاتية</strong><small>يظهر للمختبر زر الانضمام لـ testerhubiq@googlegroups.com وفرص الاختبار المفتوحة، ويختار المطور «مجموعة Google» أو «الدعوات الفردية» لكل تطبيق، مع قائمة انتظار ومختبرين احتياطيين. الدعوات الحالية ما تتأثر.</small><small>الحالة: '+(on?'مفعّلة':'معطّلة')+'</small></div><div class="actions"><button class="btn '+(on?'soft':'')+'" type="button" data-action="toggle-feature" data-id="officialGroup">'+(on?'إيقاف':'تفعيل')+'</button></div></article>';
+}
+async function toggleFeature(name){
+ const next=!state.featureFlags?.[name];
+ const batch=writeBatch(state.db);
+ batch.set(doc(state.db,'appConfig','features'),{[name]:next,updatedAt:serverTimestamp()},{merge:true});
+ batchAudit(batch,'toggle_feature',name,(next?'تفعيل ':'إيقاف ')+name);
+ await batch.commit();
+ toast(next?'تم تفعيل الميزة لكل المستخدمين.':'تم إيقاف الميزة. ما انحذفت أي بيانات.');
+ await loadFeatures();
+}
 async function loadSupport(){
  const ref=collection(state.db,'supportMessages');
  if(state.thread){
@@ -284,12 +303,13 @@ function renderList(){
  // App names filter as you type; only the email lookup needs a button.
  $('searchButton').hidden=type!=='users';
  $('composer').hidden=type!=='announcements';
- $('items').innerHTML=type==='support'?renderSupport():rows.length?rows.map(ROWS[type]).join(''):'<p class="none">'+(type==='announcements'?'ما انرسل أي إعلان بعد.':'لا توجد سجلات هنا.')+'</p>';
+ $('items').innerHTML=type==='features'?renderFeatures():type==='support'?renderSupport():rows.length?rows.map(ROWS[type]).join(''):'<p class="none">'+(type==='announcements'?'ما انرسل أي إعلان بعد.':'لا توجد سجلات هنا.')+'</p>';
  $('more').hidden=!state.hasMore;
  for(const b of document.querySelectorAll('[data-tab]'))b.classList.toggle('active',b.dataset.tab===type);
 }
 async function page(reset=false){
  if(state.tab==='support')return loadSupport();
+ if(state.tab==='features')return loadFeatures();
  const source=TABS[state.tab];
  if(reset){state.rows=[];state.cursor=null;state.hasMore=false;state.details={}}
  const parts=[collection(state.db,source.collection||state.tab)];
@@ -376,6 +396,11 @@ document.addEventListener('click',event=>{
  if(!trigger||state.busy)return;
  if(trigger.dataset.action==='message-user'){state.tab='support';state.thread=trigger.dataset.id;state.filter='';guarded(()=>page(true));return}
  if(trigger.dataset.action==='open-thread'){state.thread=trigger.dataset.id;guarded(()=>page(true));return}
+ if(trigger.dataset.action==='toggle-feature'){
+  const name=trigger.dataset.id,on=!!state.featureFlags?.[name];
+  confirmDialog({title:on?'إيقاف الميزة؟':'تفعيل الميزة لكل المستخدمين؟',body:'يمكن التراجع في أي وقت، وما تنحذف أي بيانات.',action:on?'إيقاف':'تفعيل'}).then(ok=>{if(ok)guarded(()=>toggleFeature(name))});
+  return;
+ }
  if(trigger.dataset.action==='back-threads'){state.thread=null;guarded(()=>page(true));return}
  const item=state.rows.find(x=>x.id===trigger.dataset.id),name=trigger.dataset.action;
  if(!item)return;
