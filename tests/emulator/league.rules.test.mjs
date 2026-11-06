@@ -50,3 +50,14 @@ test('nobody can write ranking rows directly',async()=>{
  await assertFails(deleteDoc(doc(db('t1'),'xpPeriods','W1_t2')));
  await assertFails(deleteDoc(doc(db('t1'),'xpTotals','t1')));
 });
+
+test('a member may add a small photo and hide or show themselves; nothing else fits',async()=>{
+ const photo='data:image/webp;base64,'+'A'.repeat(2000);
+ await assertSucceeds(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',photo,hidden:false,updatedAt:serverTimestamp()}));
+ await assertSucceeds(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',photo,hidden:true,updatedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',photo:'https://evil.example/x.png',updatedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',photo:'data:image/svg+xml;base64,AAAA',updatedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',photo:'data:image/jpeg;base64,'+'A'.repeat(40000),updatedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',hidden:'no',updatedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(db('t2'),'publicProfiles','t1'),{name:'Name t1',photo,updatedAt:serverTimestamp()}));
+});

@@ -29,7 +29,7 @@ test('league reads only verified period totals and is ordered by the server',()=
 });
 test('public names are opt-in, limited to the profile name, and removable by their owner',()=>{
  const block=rules.slice(rules.indexOf('match /publicProfiles/{uid}'),rules.indexOf('}',rules.indexOf('allow delete',rules.indexOf('match /publicProfiles/{uid}'))));
- assert.match(block,/hasOnly\(\['name','updatedAt'\]\)/);
+ assert.match(block,/hasOnly\(\['name','photo','hidden','updatedAt'\]\)/);
  assert.match(block,/request\.resource\.data\.name == me\(\)\.data\.name/);
  assert.match(block,/allow delete: if request\.auth != null && request\.auth\.uid == uid/);
  assert.match(html,/data-change="league-name" \$\{show\?'checked':''\}/);
@@ -41,14 +41,30 @@ test('both roles reach the league; no money or prize wording',()=>{
  const page=from('function leagueSection(','function rewards(');
  assert.doesNotMatch(page,/دينار|دولار|USD|جائزة مالية|سحب/);
 });
-test('the daily league is the first tab and sample rows are labelled and leave once five real members rank',()=>{
+test('the daily league is the first tab; warm-up rows compete marked «تجريبي» and fade by day and by real members',()=>{
  assert.match(html,/leagueKind='day'/);
  assert.match(html,/\['day','اليوم'\],\['week','هذا الأسبوع'\],\['month','هذا الشهر'\]/);
- const ctx=vm.createContext({clean:x=>String(x),formatNum:String});
- const f=vm.runInContext(from('const LEAGUE_SAMPLE_UNTIL=','function leagueSection(')+';leagueSamples',ctx);
- const two=f(2);
- assert.equal((two.match(/league-row sample/g)||[]).length,3);
- assert.match(two,/ليست أسماء حقيقية/);
- assert.doesNotMatch(two,/league-rank top/);
- assert.equal(f(5),'');assert.equal(f(9),'');
+ const ctx=vm.createContext({window:{TESTERHUB_LEAGUE_WARMUP_UNTIL:'2026-11-13T00:00:00Z'}});
+ const w=vm.runInContext(from('const LEAGUE_WARMUP_UNTIL=','function leagueSection(')+';({warmupRows,withWarmup})',ctx);
+ const start=Date.parse('2026-11-06T09:00:00Z'),day=86400000;
+ assert.equal(w.warmupRows(0,'day',start).length,5);
+ assert.equal(w.warmupRows(2,'day',start).length,3);
+ assert.equal(w.warmupRows(5,'day',start).length,0);
+ assert.ok(w.warmupRows(0,'day',start+4*day).length<5);
+ assert.equal(w.warmupRows(0,'day',Date.parse('2026-11-13T00:00:00Z')).length,0);
+ const list=plain(w.withWarmup([{uid:'a',points:35},{uid:'b',points:20}],'day',start));
+ assert.deepEqual(list.map(r=>[r.uid,r.rank]),[['sample-0',1],['a',2],['sample-1',3],['b',4],['sample-2',5]]);
+ assert.ok(list.filter(r=>r.sample).every(r=>r.uid.startsWith('sample-')));
+ assert.match(from('function leagueRow(','function leagueSection('),/sample-tag">تجريبي/);
+});
+test('names show by default from the profile, photos are optional, and hiding removes both',()=>{
+ const pub=vm.runInContext(from('const publicOf=','async function getLeague(')+';publicOf',vm.createContext({}));
+ const photo='data:image/webp;base64,AAAA';
+ assert.deepEqual(plain(pub({name:'سارة',photo})),{name:'سارة',photo});
+ assert.deepEqual(plain(pub({name:'سارة',photo,hidden:true})),{name:null,photo:null});
+ assert.deepEqual(plain(pub({name:'سارة',photo:'javascript:alert(1)'})),{name:'سارة',photo:null});
+ assert.deepEqual(plain(pub(null)),{name:null,photo:null});
+ const refresh=from('async function refreshLeagueName(','async function photoDataUrl(');
+ assert.match(refresh,/if\(!myPublicProfile\)return writePublicProfile\(\{hidden:false\}\)/);
+ assert.match(from('async function photoDataUrl(','const XP_BADGES='),/c\.width=c\.height=128/);
 });
