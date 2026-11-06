@@ -219,6 +219,16 @@ html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 .review-actions .cta.accept:not(:disabled){color:#08744f;border-color:#9fe0c4}
 .review-actions .cta.reject:not(:disabled){color:#aa3847;border-color:#f1c2c8}
 .review-actions .cta:disabled{opacity:1;background:#eef2f8;color:#5b6b8c}
+.xp-card .coins{font-size:30px;margin:2px 0 8px}
+.level-chip{font-size:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,#07b978,#0a9a6b);padding:6px 12px;border-radius:99px;white-space:nowrap}
+.xp-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:7px;margin-top:12px}
+.xp-stat{background:#f4f8ff;border:1px solid #e0e8f5;border-radius:12px;padding:8px 6px;text-align:center;display:flex;flex-direction:column;gap:2px;min-width:0}
+.xp-stat strong{font-size:17px;color:#15264c}
+.xp-stat span{font-size:11px;color:#7282a5;line-height:1.4}
+.legacy-xp{background:#fafbfd}
+.xp-rules summary{font-weight:800;cursor:pointer;min-height:32px}
+.xp-earned{margin-top:7px;font-size:12px;font-weight:800;color:#08744f}
+.retest-notice{margin:0 0 8px}
 .message-counter{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:50%;background:#fff0d3;color:#835317;font-size:11px;font-weight:700}
 .field textarea{min-height:92px;font-size:13px;line-height:1.8}
 
@@ -407,7 +417,7 @@ async function signup(input){
 async function login(email,password){if(isDemo)throw Error('وضع المعاينة لا يستخدم تسجيل الدخول');return accountService.login(email,password)}
 async function logout(){if(!isDemo)await authFns.signOut(auth)}
 async function getDashboard({fromServer=false}={}){
- if(isDemo){const d=demoState();return {projects:d.projects,assignments:d.assignments,testers:d.testers,reports:d.reports??[],messages:d.messages??[],settings:d.settings}}
+ if(isDemo){const d=demoState(),uid=d.role==='tester'?'t1':'d1',x=d.xp||{};return {projects:d.projects,assignments:d.assignments,testers:d.testers,reports:d.reports??[],messages:d.messages??[],settings:d.settings,xp:{totals:x.totals?.[uid]||null,ledgers:Object.fromEntries(Object.entries(x.ledgers||{}).filter(([,v])=>v.testerUid===uid))}}}
  const user=await currentUser();if(!user||user.profileMissing||!user.emailVerified||user.suspended)return {projects:[],assignments:[],testers:[],settings:{reminderHour:20}};
  const {collection,query,where,getDocs,getDocsFromServer}=storeFns;
  const read=fromServer?getDocsFromServer:getDocs;
@@ -421,12 +431,15 @@ async function getDashboard({fromServer=false}={}){
  ]);
  return {projects:p.docs.map(tidy),assignments:a.docs.map(tidy),testers:t.docs.map(testerProfile).filter(x=>x.uid!==user.uid),crossCount:await crossWorkCount(user,read),reports:r.docs.map(tidy),messages:m.docs.map(tidy),settings:{reminderHour:20}};
  }
- const [a,r,m]=await Promise.all([
+ const [a,r,m,x,l]=await Promise.all([
  read(query(collection(db,'assignments'),where('testerUid','==',user.uid))),
  read(query(collection(db,'reports'),where('testerUid','==',user.uid))),
- read(query(collection(db,'messages'),where('testerUid','==',user.uid)))
+ read(query(collection(db,'messages'),where('testerUid','==',user.uid))),
+ storeFns.getDoc(storeFns.doc(db,'xpTotals',user.uid)).catch(()=>null),
+ read(query(collection(db,'xpAssignments'),where('testerUid','==',user.uid))).catch(()=>null)
  ]);
- return {projects:[],assignments:a.docs.map(tidy),testers:[],reports:r.docs.map(tidy),messages:m.docs.map(tidy),crossCount:await crossWorkCount(user,read),settings:JSON.parse(previewStorage.getItem('testerhub_settings')||'{"reminderHour":20}')};
+ const xp={totals:x?.exists?.()?x.data():null,ledgers:Object.fromEntries((l?.docs||[]).map(d=>[d.id,d.data()]))};
+ return {projects:[],assignments:a.docs.map(tidy),testers:[],reports:r.docs.map(tidy),messages:m.docs.map(tidy),xp,crossCount:await crossWorkCount(user,read),settings:JSON.parse(previewStorage.getItem('testerhub_settings')||'{"reminderHour":20}')};
 }
 // One account holds both sides, so work waiting in the other view must not stay invisible.
 async function crossWorkCount(active,read){
@@ -598,6 +611,8 @@ function reportDayNumber(report,assignment){
 }
 async function submitDailyReport(assignmentId,input){
  const {outcome,notes}=validateDailyReport(input||{});
+ // Set only when today's report retests a problem the developer marked fixed; the rules verify it.
+ const retestOf=typeof input?.retestOf==='string'&&input.retestOf.startsWith(assignmentId+'_')?input.retestOf:'';
  if(!isDemo){
   const active=await currentUser();
   if(active?.role!=='tester')throw Error('هذه الوظيفة للمختبر فقط');
@@ -617,8 +632,9 @@ async function submitDailyReport(assignmentId,input){
     const at=new Date().toISOString();
     saved={id:reportRef.id,assignmentId,projectId:a.projectId,testerUid:active.uid,ownerUid:a.ownerUid,
       date,tested,outcome,notes,status:needsFollowUp({outcome})?'new':'ok',createdAt:at};
+    if(retestOf)saved.retestOf=retestOf;
     txn.set(reportRef,{assignmentId,projectId:a.projectId,testerUid:active.uid,ownerUid:a.ownerUid,
-      date,tested,outcome,notes,status:saved.status,
+      date,tested,outcome,notes,status:saved.status,...(retestOf?{retestOf}:{}),
       createdAt:at,submittedAt:storeFns.serverTimestamp()});
     txn.update(ref,{checkins:storeFns.arrayUnion(date),lastCheckinAt:storeFns.serverTimestamp()});
     const messageRef=storeFns.doc(storeFns.collection(db,'messages'));
@@ -642,6 +658,7 @@ async function submitDailyReport(assignmentId,input){
  if(a.checkins.includes(dayKey()))return existing?{...existing,alreadySaved:true}:Promise.reject(Error('سجلت تقرير اليوم مسبقاً'));
  const at=new Date().toISOString();
  const report={id:`${assignmentId}_${dayKey()}`,assignmentId,projectId:a.projectId,testerUid:'t1',ownerUid:a.ownerUid,date:dayKey(),tested:taskForDay(a),outcome,notes,status:needsFollowUp({outcome})?'new':'ok',createdAt:at};
+ if(retestOf){const fixed=d.reports.find(r=>r.id===retestOf);if(!fixed||fixed.assignmentId!==assignmentId||fixed.status!=='fixed')throw Error('المشكلة المطلوب إعادة اختبارها غير متاحة');report.retestOf=retestOf}
  d.reports.push(report);
  d.messages.push({id:`msg_${Date.now()}`,assignmentId,projectId:a.projectId,sender:'tester',text:messagePrefix(outcome)+notes,at});
  a.checkins.push(dayKey());save(d);
@@ -658,7 +675,8 @@ async function reviewReport(reportId,decision){
   const ref=storeFns.doc(db,'reports',reportId),snap=await storeFns.getDoc(ref);
   if(!snap.exists()||snap.data().ownerUid!==active.uid)throw Error('هذا التقرير غير تابع لتطبيقاتك');
   const r=snap.data();
-  if(r.reviewStatus===decision)return;
+  if(r.reviewStatus===decision)return {};
+  if(r.reviewStatus==='accepted')throw Error('التقرير مقبول مسبقاً ولا يمكن تغيير قراره');
   const batch=storeFns.writeBatch(db);
   batch.update(ref,{reviewStatus:decision,reviewedAt:storeFns.serverTimestamp(),reviewerUid:active.uid});
   if(decision==='clarify'){
@@ -667,14 +685,133 @@ async function reviewReport(reportId,decision){
     sender:'developer',senderUid:active.uid,at:new Date().toISOString(),createdAt:storeFns.serverTimestamp()});
   }
   await batch.commit();
-  return;
+  if(decision!=='accepted')return {};
+  try{return {awarded:await awardForAcceptedReport({...r,id:reportId,reviewStatus:'accepted'})}}
+  catch(err){console.warn('XP award:',err);return {awarded:0,awardFailed:true}}
  }
  const d=demoState(),r=d.reports.find(x=>x.id===reportId);
  if(!r||r.ownerUid!=='d1')throw Error('هذا التقرير غير تابع لتطبيقاتك');
- if(r.reviewStatus===decision)return;
+ if(r.reviewStatus===decision)return {};
+ if(r.reviewStatus==='accepted')throw Error('التقرير مقبول مسبقاً ولا يمكن تغيير قراره');
  r.reviewStatus=decision;r.reviewedAt=new Date().toISOString();r.reviewerUid='d1';
  if(decision==='clarify')d.messages.push({id:`clarify_${Date.now()}`,...note(r),sender:'developer',at:new Date().toISOString()});
  save(d);
+ return decision==='accepted'?{awarded:await awardForAcceptedReport({...r})}:{};
+}
+// ---- Contribution XP ----
+// Only reviewed, accepted work earns points. Each reward is a create-only event with a fixed ID, and the totals
+// can only grow by that event's points (firestore.rules), so points cannot be repeated or edited from the browser.
+const XP_POINTS={report:10,bug:20,retest:10,cycle:50};
+const XP_CYCLE_MIN_ACCEPTED=7;
+// Days before this UTC date were scored by the old formula (10 per reported day, +20 for 14 days). That
+// history is kept and shown on its own, unverified, and never mixed into verified points or rankings.
+const LEGACY_XP_CUTOFF=String(window.TESTERHUB_XP_START||'2026-11-10');
+const xpWeekKey=(ms=Date.now())=>'W'+Math.floor((ms+259200000)/604800000);
+const xpMonthKey=(ms=Date.now())=>{const d=new Date(ms);return 'M'+(d.getUTCFullYear()*100+d.getUTCMonth()+1)};
+const xpKindForReport=r=>needsFollowUp(r)?'bug':'report';
+function pendingXpEvents({reports=[],assignments=[],eventIds=new Set(),ledgers=new Map()}){
+ const out=[],seen=new Set(eventIds),newlyAccepted=new Map(),byId=new Map(assignments.map(a=>[a.id,a]));
+ const add=(id,kind,report,a)=>{
+  if(!a||seen.has(id))return false;seen.add(id);
+  out.push({id,kind,points:XP_POINTS[kind],reportId:report?.id||'',assignmentId:a.id,projectId:a.projectId,testerUid:a.testerUid,ownerUid:a.ownerUid});
+  return true;
+ };
+ const accepted=reports.filter(r=>r?.reviewStatus==='accepted'&&r.id);
+ for(const r of accepted)if(add(`${r.id}_review`,xpKindForReport(r),r,byId.get(r.assignmentId)))newlyAccepted.set(r.assignmentId,(newlyAccepted.get(r.assignmentId)||0)+1);
+ for(const r of accepted)if(r.retestOf)add(`${r.retestOf}_retest`,'retest',r,byId.get(r.assignmentId));
+ for(const a of assignments){
+  const ledger=ledgers.get(a.id)||{},count=(ledger.reports||0)+(ledger.bugs||0)+(newlyAccepted.get(a.id)||0);
+  if((a.checkins||[]).length>=14&&count>=XP_CYCLE_MIN_ACCEPTED)add(`${a.id}_cycle`,'cycle',null,a);
+ }
+ return out;
+}
+function legacyXp(assignments,cutoff=LEGACY_XP_CUTOFF){
+ return assignments.reduce((n,a)=>{const before=(a.checkins||[]).filter(day=>String(day)<cutoff).length;return n+before*10+(before>=14?20:0)},0);
+}
+function xpLevel(points){
+ const levels=[[0,'مبتدئ'],[100,'نشط'],[300,'محترف'],[700,'خبير'],[1500,'أسطوري']];
+ let i=0;while(i+1<levels.length&&points>=levels[i+1][0])i++;
+ const next=levels[i+1];
+ return {index:i+1,name:levels[i][1],from:levels[i][0],next:next?.[0]??null,nextName:next?.[1]??null};
+}
+// Writes one event and every total it changes in one batch. `firstForAssignment` must match whether the
+// assignment ledger exists, because the rules count each app helped exactly once.
+async function awardXp(ev,firstForAssignment){
+ if(isDemo){
+  const d=demoState();d.xp??={events:{},totals:{},periods:{},ledgers:{}};
+  if(d.xp.events[ev.id])return false;
+  const now=Date.now(),bump=(o,extra={})=>{o.points=(o.points||0)+ev.points;for(const k of ['report','bug','retest','cycle'])o[k+'s']=(o[k+'s']||0)+(ev.kind===k?1:0);Object.assign(o,extra);return o};
+  d.xp.events[ev.id]={...ev,week:xpWeekKey(now),month:xpMonthKey(now),createdAt:new Date(now).toISOString()};
+  const total=d.xp.totals[ev.testerUid]??={uid:ev.testerUid};bump(total,{apps:(total.apps||0)+(d.xp.ledgers[ev.assignmentId]?0:1)});
+  for(const period of [xpWeekKey(now),xpMonthKey(now)])bump(d.xp.periods[period+'_'+ev.testerUid]??={uid:ev.testerUid,period});
+  bump(d.xp.ledgers[ev.assignmentId]??={testerUid:ev.testerUid,ownerUid:ev.ownerUid,projectId:ev.projectId});
+  save(d);return true;
+ }
+ const active=await currentUser();
+ if(!active)throw Error('سجّل الدخول أولاً');
+ const {doc,writeBatch,serverTimestamp,increment}=storeFns,now=Date.now(),week=xpWeekKey(now),month=xpMonthKey(now);
+ const counters={points:increment(ev.points),reports:increment(ev.kind==='report'?1:0),bugs:increment(ev.kind==='bug'?1:0),
+  retests:increment(ev.kind==='retest'?1:0),cycles:increment(ev.kind==='cycle'?1:0),lastEventId:ev.id,updatedAt:serverTimestamp()};
+ const batch=writeBatch(db);
+ batch.set(doc(db,'contributions',ev.id),{kind:ev.kind,points:ev.points,testerUid:ev.testerUid,ownerUid:ev.ownerUid,projectId:ev.projectId,
+  assignmentId:ev.assignmentId,reportId:ev.reportId,awardedBy:active.uid,week,month,createdAt:serverTimestamp()});
+ batch.set(doc(db,'xpTotals',ev.testerUid),{uid:ev.testerUid,...counters,apps:increment(firstForAssignment?1:0)},{merge:true});
+ batch.set(doc(db,'xpPeriods',week+'_'+ev.testerUid),{uid:ev.testerUid,period:week,...counters},{merge:true});
+ batch.set(doc(db,'xpPeriods',month+'_'+ev.testerUid),{uid:ev.testerUid,period:month,...counters},{merge:true});
+ batch.set(doc(db,'xpAssignments',ev.assignmentId),{testerUid:ev.testerUid,ownerUid:ev.ownerUid,projectId:ev.projectId,...counters},{merge:true});
+ await batch.commit();
+ return true;
+}
+async function awardPending(events,ledgers){
+ let points=0;
+ for(const ev of events){
+  if(await awardXp(ev,!ledgers.has(ev.assignmentId)))points+=ev.points;
+  const l=ledgers.get(ev.assignmentId)||{};ledgers.set(ev.assignmentId,{...l,[ev.kind+'s']:(l[ev.kind+'s']||0)+1});
+ }
+ return points;
+}
+// Tester side: records any accepted work that has no event yet (for example a review saved before this
+// feature, or an award write that failed on the developer's phone). Returns the tester's XP state.
+async function syncMyXp(){
+ const active=await currentUser();if(!active)return null;
+ if(isDemo){
+  const d=demoState();d.xp??={events:{},totals:{},periods:{},ledgers:{}};
+  const mine=d.assignments.filter(a=>a.testerUid===active.uid);
+  const ledgers=new Map(Object.entries(d.xp.ledgers).filter(([,l])=>l.testerUid===active.uid));
+  const pending=pendingXpEvents({reports:d.reports.filter(r=>r.testerUid===active.uid),assignments:mine,eventIds:new Set(Object.keys(d.xp.events)),ledgers});
+  const added=await awardPending(pending,ledgers);
+  const fresh=demoState().xp;
+  return {added,totals:fresh.totals[active.uid]||null,ledgers:Object.fromEntries(Object.entries(fresh.ledgers).filter(([,l])=>l.testerUid===active.uid))};
+ }
+ const {collection,query,where,getDocs,getDocFromServer,doc}=storeFns;
+ const [a,r,e,l]=await Promise.all([
+  getDocs(query(collection(db,'assignments'),where('testerUid','==',active.uid))),
+  getDocs(query(collection(db,'reports'),where('testerUid','==',active.uid))),
+  getDocs(query(collection(db,'contributions'),where('testerUid','==',active.uid))),
+  getDocs(query(collection(db,'xpAssignments'),where('testerUid','==',active.uid)))
+ ]);
+ const ledgers=new Map(l.docs.map(x=>[x.id,x.data()]));
+ const pending=pendingXpEvents({reports:r.docs.map(tidy),assignments:a.docs.map(tidy),eventIds:new Set(e.docs.map(x=>x.id)),ledgers});
+ let added=0;
+ try{added=await awardPending(pending,ledgers)}catch(err){console.warn('XP sync:',err)}
+ const totals=await getDocFromServer(doc(db,'xpTotals',active.uid)).catch(()=>null);
+ const fresh=added?await getDocs(query(collection(db,'xpAssignments'),where('testerUid','==',active.uid))):l;
+ return {added,totals:totals?.exists()?totals.data():null,ledgers:Object.fromEntries(fresh.docs.map(x=>[x.id,x.data()]))};
+}
+// Developer side, right after accepting: award this report, its retest, and a completed cycle if now earned.
+async function awardForAcceptedReport(report){
+ if(isDemo){
+  const d=demoState(),a=d.assignments.find(x=>x.id===report.assignmentId);if(!a)return 0;d.xp??={events:{},totals:{},periods:{},ledgers:{}};
+  const ledgers=new Map(Object.entries(d.xp.ledgers));
+  return awardPending(pendingXpEvents({reports:[report],assignments:[a],eventIds:new Set(Object.keys(d.xp.events)),ledgers}),ledgers);
+ }
+ const {doc,getDoc}=storeFns;
+ const [aSnap,lSnap]=await Promise.all([getDoc(doc(db,'assignments',report.assignmentId)),getDoc(doc(db,'xpAssignments',report.assignmentId))]);
+ if(!aSnap.exists())return 0;
+ const a={id:aSnap.id,...aSnap.data()},ledgers=new Map(lSnap.exists()?[[a.id,lSnap.data()]]:[]);
+ const candidates=[`${report.id}_review`,...(report.retestOf?[`${report.retestOf}_retest`]:[]),`${a.id}_cycle`];
+ const existing=await Promise.all(candidates.map(id=>getDoc(doc(db,'contributions',id)).then(x=>x.exists()?id:null)));
+ return awardPending(pendingXpEvents({reports:[report],assignments:[a],eventIds:new Set(existing.filter(Boolean)),ledgers}),ledgers);
 }
 const messageRetryIds=new Map();
 async function messageRetryKey(uid,assignmentId,body){
@@ -794,7 +931,7 @@ async function switchRole(){
  const active=await currentUser();
  return accountService.updateProfile({role:active.role==='tester'?'developer':'tester'});
 }
-const api={isDemo,switchRole,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
+const api={isDemo,switchRole,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
 
 
 const app=document.getElementById('app');
@@ -851,7 +988,8 @@ function primaryAssignments(){return dashboard.assignments.filter(a=>a.testerUid
 function mineProjects(){return dashboard.projects.filter(p=>p.ownerUid===user?.uid)}
 function myProjectAssignments(id){return dashboard.assignments.filter(a=>a.projectId===id)}
 function currentDay(a){return trDays(api.daysSince(a.joinedDay))}
-function sumXp(){return primaryAssignments().reduce((n,a)=>n+(a.checkins?.length||0)*10+((a.checkins?.length||0)>=14?20:0),0)}
+function verifiedXp(){return dashboard.xp?.totals?.points||0}
+function assignmentXp(a){return dashboard.xp?.ledgers?.[a.id]?.points||0}
 function lastActive(a){const dates=a.checkins||[];if(!a.joinedDay)return false;return dates.some(key=>api.daysSince(key)<=3)||api.daysSince(a.joinedDay)<=3}
 function countActive(assignments){return assignments.filter(lastActive).length}
 const formatNum=n=>new Intl.NumberFormat('ar-IQ').format(n);
@@ -961,13 +1099,13 @@ async function syncNotificationPanel(){
 
 function reminderPending(){return user?.role==='tester'&&new Date().getHours()>=api.getReminderHour()&&classifyTesterWork(primaryAssignments()).due.length>0}
 function reminderUi(){return reminderPending()?`<div class="reminder-banner">🔔 وقت اختبارك اليوم! افتح التطبيقات الحالية، وبعد التجربة سجّل تقرير اليوم حتى يتحدث تقدمك.</div>`:''}
-function trackerCard(){const apps=primaryAssignments().filter(a=>a.joinedDay&&api.daysSince(a.joinedDay)<=14),a=apps[0],d=a?currentDay(a):0;return `<article class="surface feature"><div class="row between"><div class="stat-top">${ico('calendar',20)} الفترة الزمنية للاختبار — 14 يوماً</div><span class="mode-pill">${a?(api.daysSince(a.joinedDay)>14?'انتهت الفترة':'مستمر'):'جاهز'}</span></div><div class="test-summary"><span class="small">${clean(a?.name||'ابدأ أول اختبار لك')}</span><strong class="day-number">${d} / 14 يوماً</strong></div><div class="progress"><i style="width:${d/14*100}%"></i></div><div class="row between"><span class="tiny">${a?`اليوم ${d} من 14؛ مرور الأيام لا يعني اكتمال التقارير`:'انضم لتطبيق لتبدأ المتابعة'}</span><span class="badge">🪙 ${formatNum(sumXp())} XP</span></div></article>`}
+function trackerCard(){const apps=primaryAssignments().filter(a=>a.joinedDay&&api.daysSince(a.joinedDay)<=14),a=apps[0],d=a?currentDay(a):0;return `<article class="surface feature"><div class="row between"><div class="stat-top">${ico('calendar',20)} الفترة الزمنية للاختبار — 14 يوماً</div><span class="mode-pill">${a?(api.daysSince(a.joinedDay)>14?'انتهت الفترة':'مستمر'):'جاهز'}</span></div><div class="test-summary"><span class="small">${clean(a?.name||'ابدأ أول اختبار لك')}</span><strong class="day-number">${d} / 14 يوماً</strong></div><div class="progress"><i style="width:${d/14*100}%"></i></div><div class="row between"><span class="tiny">${a?`اليوم ${d} من 14؛ مرور الأيام لا يعني اكتمال التقارير`:'انضم لتطبيق لتبدأ المتابعة'}</span><span class="badge">🪙 ${formatNum(verifiedXp())} XP</span></div></article>`}
 function seedProjectName(id){return dashboard.projects.find(p=>p.id===id)||{}}
 function appMark(name){const n=String(name||'').toLowerCase();return n.includes('fit')?['leaf','green']:n.includes('game')?['gamepad','purple']:n.includes('media')?['play','blue']:['package','blue']}
 function assignmentCard(a){
  const [symbol,color]=appMark(a.name),d=currentDay(a),done=a.checkins?.length||0,checked=(a.checkins||[]).includes(api.dayKey()),expired=a.joinedDay&&api.daysSince(a.joinedDay)>14;
  const reports=(dashboard.reports||[]).filter(r=>r.assignmentId===a.id),recent=reports.find(r=>r.date===api.dayKey()),cooldown=classifyTesterWork([a]).cooldown.length>0;
- return `<article class="surface app-card"><div class="row"><div class="app-mark ${color}">${ico(symbol,29)}</div><div class="content"><div class="row between"><h4>${clean(a.name)}</h4><span class="badge">🪙 ${done*10+(done>=14?20:0)} XP</span></div><div class="tiny">اختبار مغلق · Google Play</div><p>${a.joinedDay?'جرّب التطبيق وقدّم تقريراً مختصراً':a.invitationStatus==='pending'?'دعوة بانتظار ردك':a.invitationStatus==='declined'?'رفضت هذه الدعوة':'رابط الانضمام إلى الاختبار متاح الآن'}</p></div></div>${a.joinedDay?`<div class="test-summary"><span class="tiny">اليوم ${d} من 14 · ${done} تقرير يومي</span><span class="${checked?'completion':'tiny'}">${checked?'✓ تقرير اليوم محفوظ':expired?'انتهت المتابعة':'بانتظار نتيجة التجربة'}</span></div><div class="progress" style="margin:9px 0"><i style="width:${Math.min(100,done/14*100)}%"></i></div><div class="assignment-actions"><button class="cta blue" data-action="open-store" data-id="${clean(a.id)}" ${playLinks(a.link).store?'':'disabled'}>${ico('link',15)} صفحة التطبيق بالمتجر</button><button class="cta outline" data-action="open-chat" data-id="${clean(a.id)}">${ico('message',15)} مراسلة المطور</button><button class="cta primary-report" data-action="write-report" data-id="${clean(a.id)}" ${checked||expired||cooldown?'disabled':''}>${ico('clipboard',16)} ${checked?'✓ تقرير اليوم مكتمل':expired?'انتهت فترة الاختبار':cooldown?'انتظر موعد التقرير التالي':'سجّل نتيجة اختبار اليوم'}</button></div><div class="card-note">افتح التطبيق من أيقونته على جهازك، نفّذ المهمة، ثم ارجع لإرسال التقرير. فتح الرابط وحده لا يحتسب اختباراً.</div><details><summary>روابط الانضمام والتنزيل</summary><div class="section-actions">${setupLinks(a)}</div></details>${recent?`<div class="assignment-subtitle">${recent.outcome==='issue'?'⚠ أرسلت بلاغ مشكلة للمطور':recent.outcome==='blocked'?'⚠ بلّغت أنك ما گدرت تكمل الاختبار':'✓ أكدت أن التطبيق اشتغل عندك'}${recent.notes?' · '+clean(recent.notes.slice(0,65)):''}</div>`:''}`:`<div class="section-actions" style="margin-top:10px">${a.invitationStatus==='pending'&&!invitationExpired(a)?`<button class="cta blue" data-action="accept-invite" data-id="${clean(a.id)}">قبول الدعوة</button><button class="cta outline" data-action="decline-invite" data-id="${clean(a.id)}">رفض الدعوة</button>`:a.invitationStatus==='declined'||invitationExpired(a)?`<span class="chip">${invitationExpired(a)?'انتهت مهلة الدعوة':'دعوة مرفوضة'}</span>`:`${setupLinks(a)}<button class="cta" data-action="confirm-join" data-id="${clean(a.id)}">${a.groupLink?4:3}. انضممت وثبّتّه — ابدأ الاختبار</button>`}</div>`}</article>`;
+ return `<article class="surface app-card"><div class="row"><div class="app-mark ${color}">${ico(symbol,29)}</div><div class="content"><div class="row between"><h4>${clean(a.name)}</h4><span class="badge">🪙 ${formatNum(assignmentXp(a))} XP</span></div><div class="tiny">اختبار مغلق · Google Play</div><p>${a.joinedDay?'جرّب التطبيق وقدّم تقريراً مختصراً':a.invitationStatus==='pending'?'دعوة بانتظار ردك':a.invitationStatus==='declined'?'رفضت هذه الدعوة':'رابط الانضمام إلى الاختبار متاح الآن'}</p></div></div>${a.joinedDay?`<div class="test-summary"><span class="tiny">اليوم ${d} من 14 · ${done} تقرير يومي</span><span class="${checked?'completion':'tiny'}">${checked?'✓ تقرير اليوم محفوظ':expired?'انتهت المتابعة':'بانتظار نتيجة التجربة'}</span></div><div class="progress" style="margin:9px 0"><i style="width:${Math.min(100,done/14*100)}%"></i></div><div class="assignment-actions"><button class="cta blue" data-action="open-store" data-id="${clean(a.id)}" ${playLinks(a.link).store?'':'disabled'}>${ico('link',15)} صفحة التطبيق بالمتجر</button><button class="cta outline" data-action="open-chat" data-id="${clean(a.id)}">${ico('message',15)} مراسلة المطور</button><button class="cta primary-report" data-action="write-report" data-id="${clean(a.id)}" ${checked||expired||cooldown?'disabled':''}>${ico('clipboard',16)} ${checked?'✓ تقرير اليوم مكتمل':expired?'انتهت فترة الاختبار':cooldown?'انتظر موعد التقرير التالي':'سجّل نتيجة اختبار اليوم'}</button></div><div class="card-note">افتح التطبيق من أيقونته على جهازك، نفّذ المهمة، ثم ارجع لإرسال التقرير. فتح الرابط وحده لا يحتسب اختباراً.</div><details><summary>روابط الانضمام والتنزيل</summary><div class="section-actions">${setupLinks(a)}</div></details>${recent?`<div class="assignment-subtitle">${recent.outcome==='issue'?'⚠ أرسلت بلاغ مشكلة للمطور':recent.outcome==='blocked'?'⚠ بلّغت أنك ما گدرت تكمل الاختبار':'✓ أكدت أن التطبيق اشتغل عندك'}${recent.notes?' · '+clean(recent.notes.slice(0,65)):''}</div>`:''}`:`<div class="section-actions" style="margin-top:10px">${a.invitationStatus==='pending'&&!invitationExpired(a)?`<button class="cta blue" data-action="accept-invite" data-id="${clean(a.id)}">قبول الدعوة</button><button class="cta outline" data-action="decline-invite" data-id="${clean(a.id)}">رفض الدعوة</button>`:a.invitationStatus==='declined'||invitationExpired(a)?`<span class="chip">${invitationExpired(a)?'انتهت مهلة الدعوة':'دعوة مرفوضة'}</span>`:`${setupLinks(a)}<button class="cta" data-action="confirm-join" data-id="${clean(a.id)}">${a.groupLink?4:3}. انضممت وثبّتّه — ابدأ الاختبار</button>`}</div>`}</article>`;
 }
 function reportForToday(a){return (dashboard.reports||[]).find(r=>r.assignmentId===a.id&&r.date===api.dayKey())}
 function reportTime(r){const ms=r?.submittedAt?.toMillis?.()??(typeof r?.submittedAt?.seconds==='number'?r.submittedAt.seconds*1000:Date.parse(r?.createdAt||''));return Number.isFinite(ms)?new Date(ms).toLocaleString('ar-IQ',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}):''}
@@ -978,14 +1116,19 @@ function dailyHeader(a){
  return `<div class="row between"><div class="lead">اختبار اليوم</div><span class="day-pill">اليوم ${d} من 14</span></div><div class="daily-app"><div class="app-mark ${color} small">${ico(symbol,20)}</div><strong>${clean(a.name)}</strong></div><div class="progress daily-progress"><i style="width:${Math.min(100,d/14*100)}%"></i></div>`;
 }
 // One compact card: app, day, task, open button, outcome, one text field, one submit button.
+// The newest problem the developer marked fixed and this tester has not retested yet.
+function retestTarget(a){
+ const mine=(dashboard.reports||[]).filter(r=>r.assignmentId===a.id);
+ return mine.filter(r=>needsFollowUp(r)&&r.status==='fixed'&&!mine.some(x=>x.retestOf===r.id)).sort((x,y)=>String(y.date).localeCompare(String(x.date)))[0]||null;
+}
 function todayTestCard(a){
- const saved=reportForToday(a),done=(a.checkins||[]).includes(api.dayKey());
+ const saved=reportForToday(a),done=(a.checkins||[]).includes(api.dayKey()),retest=done?null:retestTarget(a);
  if(done){
   const r=saved;
-  return `<section class="surface daily-test saved" aria-label="اختبار اليوم">${dailyHeader(a)}<div class="flag">✓ تم حفظ تقرير اليوم</div>${r?`<div class="daily-summary"><div class="row between">${outcomeChip(r)}${reviewChip(r)}</div><div class="tiny">المهمة: ${clean(r.tested||taskForDay(a))}</div><p>${clean(r.notes)}</p>${r.reviewStatus==='clarify'?'<div class="notice">المطور طلب توضيحاً. اكتب له التفاصيل في المحادثة.</div>':''}</div>`:''}<button class="cta outline wide" data-action="open-chat" data-id="${clean(a.id)}" style="margin-top:10px">${ico('message',15)} المحادثة ويا المطور</button></section>`;
+  return `<section class="surface daily-test saved" aria-label="اختبار اليوم">${dailyHeader(a)}<div class="flag">✓ تم حفظ تقرير اليوم</div>${r?`<div class="daily-summary"><div class="row between">${outcomeChip(r)}${reviewChip(r)}</div><div class="tiny">المهمة: ${clean(r.tested||taskForDay(a))}</div><p>${clean(r.notes)}</p>${r.reviewStatus==='clarify'?'<div class="notice">المطور طلب توضيحاً. اكتب له التفاصيل في المحادثة.</div>':''}${r.reviewStatus==='accepted'?`<div class="xp-earned">🪙 +${XP_POINTS[xpKindForReport(r)]+(r.retestOf?XP_POINTS.retest:0)} XP موثّقة</div>`:''}</div>`:''}<button class="cta outline wide" data-action="open-chat" data-id="${clean(a.id)}" style="margin-top:10px">${ico('message',15)} المحادثة ويا المطور</button></section>`;
  }
  return `<section class="surface daily-test" aria-label="اختبار اليوم">${dailyHeader(a)}<div class="daily-task"><span class="tiny">مهمة اليوم</span><p>${clean(taskForDay(a))}</p></div><button type="button" class="cta outline wide open-app" data-action="open-app" data-id="${clean(a.id)}">${ico('play',15)} فتح التطبيق</button><div class="tiny open-app-hint">يفتح Google Play، ومنه اضغط «فتح»</div>
- <form id="daily-report-form" data-id="${clean(a.id)}" novalidate><fieldset class="outcome-choices"><legend>شلون كانت التجربة؟</legend>${Object.entries(REPORT_OUTCOMES).map(([value,label])=>`<label class="${value}"><input type="radio" name="outcome" value="${value}"><span>${label}</span></label>`).join('')}</fieldset><div class="field"><label for="test-note" id="test-note-label">شنو جرّبت؟</label><textarea id="test-note" name="notes" rows="2" maxlength="800" placeholder="مثلاً: جرّبت تسجيل الدخول واشتغل بصورة طبيعية."></textarea></div><button class="cta wide" type="submit">${ico('clipboard',16)} إرسال التقرير</button></form></section>`;
+ ${retest?`<div class="notice retest-notice">🔁 المطور صلّح المشكلة اللي بلّغت عنها: «${clean(String(retest.notes||'').slice(0,90))}». جرّبها اليوم واكتب النتيجة.</div>`:''}<form id="daily-report-form" data-id="${clean(a.id)}" novalidate>${retest?`<input type="hidden" name="retestOf" value="${clean(retest.id)}">`:''}<fieldset class="outcome-choices"><legend>شلون كانت التجربة؟</legend>${Object.entries(REPORT_OUTCOMES).map(([value,label])=>`<label class="${value}"><input type="radio" name="outcome" value="${value}"><span>${label}</span></label>`).join('')}</fieldset><div class="field"><label for="test-note" id="test-note-label">شنو جرّبت؟</label><textarea id="test-note" name="notes" rows="2" maxlength="800" placeholder="مثلاً: جرّبت تسجيل الدخول واشتغل بصورة طبيعية."></textarea></div><button class="cta wide" type="submit">${ico('clipboard',16)} إرسال التقرير</button></form></section>`;
 }
 function dailyReport(){
  const a=primaryAssignments().find(x=>x.id===selectedAssignmentId);
@@ -1013,7 +1156,27 @@ function testerTests(){
  const group=(title,items)=>items.length?`<section aria-label="${clean(title)}"><div class="section-title">${title} · ${items.length}</div>${items.map(assignmentCard).join('')}</section>`:'';
  return `<div class="surface"><div class="row between"><div><div class="lead">اختباراتي</div><div class="small">ابدأ بالمطلوب اليوم، ثم راجع الدعوات. التواريخ محفوظة بتوقيت UTC.</div></div><button class="cta outline" data-action="refresh-tests">تحديث</button></div></div>${group('مطلوب اليوم',work.due)}${group('دعوات وتجهيز الاختبار',work.invites)}${group('بانتظار موعد التقرير التالي',work.cooldown)}${group('تقرير اليوم محفوظ',work.completed)}${group('المشاركات السابقة',work.expired)}${!all.length?'<div class="tab-empty"><h3>ما عندك اختبارات حالياً</h3>تظهر التطبيقات بعد إضافتك من المطور.</div>':''}`;
 }
-function rewards(){const xp=sumXp();return `<div class="surface" style="text-align:center;padding:29px 17px"><div class="medal">🪙</div><h3 style="margin:13px 0 5px">نقاط مكافآتك</h3><div class="coins">${xp} XP</div><div class="small">نقاط تشجيعية فقط، لا تعادل مبالغ مالية</div><div class="progress"><i style="width:${xp%100}%"></i></div><span class="chip">كل يوم مؤكد يزيد رصيدك</span></div><div class="surface"><div class="lead">كيف تكسب النقاط؟</div><div class="item-link">تأكيد اختبار اليوم <strong>+10 🪙</strong></div><div class="item-link">إكمال 14 يوماً <strong>+20 🪙</strong></div></div>`}
+let rewardsState='idle';
+async function openRewards(){
+ rewardsState='loading';render();
+ const uid=user?.uid;
+ try{const xp=await api.syncMyXp();if(user?.uid!==uid)return;if(xp)dashboard.xp={totals:xp.totals,ledgers:xp.ledgers};rewardsState='ready';if(xp?.added)toast('انضافت '+formatNum(xp.added)+' XP من مساهمات مقبولة')}
+ catch(err){console.warn('XP:',err);rewardsState='error'}
+ render();
+}
+function rewards(){
+ const t=dashboard.xp?.totals||{},points=t.points||0,level=xpLevel(points),legacy=legacyXp(primaryAssignments());
+ const waiting=(dashboard.reports||[]).filter(r=>r.testerUid===user.uid&&!r.reviewStatus).length;
+ const span=level.next?Math.min(100,Math.round((points-level.from)/(level.next-level.from)*100)):100;
+ const stat=(label,n)=>`<div class="xp-stat"><strong>${formatNum(n||0)}</strong><span>${label}</span></div>`;
+ return `<section class="surface xp-card"><div class="row between"><div><div class="tiny">نقاطك الموثّقة</div><div class="coins">${formatNum(points)} XP</div></div><span class="level-chip">${clean(level.name)}</span></div>
+ <div class="progress"><i style="width:${span}%"></i></div><div class="tiny">${level.next?`باقي ${formatNum(level.next-points)} XP للمستوى «${clean(level.nextName)}»`:'وصلت لأعلى مستوى'}</div>
+ ${rewardsState==='loading'?'<div class="tiny" style="margin-top:6px">جاري تحديث النقاط…</div>':rewardsState==='error'?'<div class="notice">تعذّر تحديث النقاط الآن. المعروض آخر نسخة محفوظة.</div>':''}
+ <div class="xp-stats">${stat('تطبيقات ساعدت بيها',t.apps)}${stat('تقارير مقبولة',t.reports)}${stat('بلاغات مؤكدة',t.bugs)}${stat('إعادات اختبار',t.retests)}${stat('دورات مكتملة',t.cycles)}</div>
+ ${waiting?`<div class="tiny" style="margin-top:8px">عندك ${formatNum(waiting)} تقرير بانتظار مراجعة المطور؛ تنحسب نقاطه بعد القبول.</div>`:''}</section>
+ ${legacy?`<div class="surface legacy-xp"><div class="row between"><strong>نقاط سابقة غير موثّقة</strong><span class="chip">${formatNum(legacy)} XP</span></div><div class="tiny">محفوظة من النظام القديم (أيام التأكيد قبل ${clean(LEGACY_XP_CUTOFF)}). ما تنحذف، بس ما تدخل بالنقاط الموثّقة أو الترتيب.</div></div>`:''}
+ <details class="surface xp-rules"><summary>كيف تنحسب النقاط؟</summary><div class="item-link">تقرير يومي مفيد قبله المطور <strong>+10</strong></div><div class="item-link">بلاغ مشكلة أكده المطور <strong>+20</strong></div><div class="item-link">إعادة اختبار مشكلة انصلحت وقبلها المطور <strong>+10</strong></div><div class="item-link">إكمال 14 يوم مع 7 تقارير مقبولة على الأقل <strong>+50</strong></div><div class="tiny" style="margin-top:8px">ما تنحسب نقاط لفتح الرابط أو التثبيت أو تقرير ما انراجع. النقاط تشجيعية فقط وما تعادل أي مبلغ.</div></details>`;
+}
 function stat(label,n,green=false){return `<div class="metric ${green?'green':''}">${ico('testers',23)}<div class="label">${label}</div><div class="num">${formatNum(n)}</div></div>`}
 function projectCard(p){const isDraft=p.status==='draft';const members=myProjectAssignments(p.id),n=members.length,active=members.filter(lastActive).length,percent=n?Math.round(active/n*100):0;return `<article class="surface app-card"><div class="row between"><div class="row"><div class="app-mark blue">${ico('package',29)}</div><div><div class="bold">${clean(p.name)}</div><div class="tiny">اختبار مغلق · ${n} مختبر</div></div></div><span class="${n?'flag':'chip'}">${isDraft?'مسودة':n?'وصل للمختبرين':'بلا دعوات'}</span></div><div class="divider"></div><div class="row between"><span class="tiny">نسبة النشاط</span><strong class="success">${percent}%</strong></div><div class="progress" style="margin:7px 0"><i style="width:${percent}%"></i></div><button class="cta blue wide" data-action="project-details" data-id="${clean(p.id)}">عرض المختبرين والتقدم</button><button class="cta outline wide" style="margin-top:9px;background:#fff2f3;color:#aa3847" data-action="delete-project" data-id="${clean(p.id)}">حذف التطبيق نهائياً</button></article>`}
 function devHome(){const projects=mineProjects(),project=projects[0],all=project?myProjectAssignments(project.id):[],number=all.length,active=all.filter(lastActive).length,pct=number?Math.round(active/number*100):0;return `${crossBanner()}<article class="surface feature"><div class="row between"><div class="row"><div class="app-mark" style="height:47px;width:47px;border-radius:13px;background:linear-gradient(120deg,#3382e9,#114285)">▰</div><div><div class="bold">${clean(project?.name||'تطبيقك الأول')}</div><div class="tiny">منصة الاختبار المغلق</div></div></div><span class="flag">${project?'نشط ●':'جاهز'}</span></div><div class="divider"></div><div class="metrics">${stat('إجمالي المختبرين',number)}${stat('المختبرون النشطون',active,true)}</div><div class="row" style="justify-content:center;margin:12px 0"><span class="tiny">${active} نشط · ${Math.max(0,number-active)} غير نشط</span></div><div class="divider"></div><div class="row between"><div><div class="bold">معدل النشاط</div><div class="small">${active} من ${number} مختبراً نشطون</div></div><div class="donut" style="--percent:${pct}%"><b>${pct}%</b></div></div></article><button class="cta blue wide" data-tab="new">${ico('add',17)} إضافة تطبيق للاختبار</button><div class="surface" style="margin-top:13px"><button class="item-link" data-tab="testers">${ico('testers',20)} قائمة المختبرين المتاحين <span>‹</span></button><button class="item-link" data-tab="apps">${ico('apps',20)} تطبيقاتي وروابط الاختبار <span>‹</span></button><button class="item-link" data-action="copy-emails">${ico('copy',20)} نسخ الإيميلات <span>‹</span></button></div>`}
@@ -1036,8 +1199,9 @@ function addTestersSection(p,assignments){
 // A developer sees what the tester wrote unchanged, and records a review decision beside it.
 function reportRecord(r,p,assignments){
  const a=assignments.find(x=>x.id===r.assignmentId),day=reportDayNumber(r,a),when=reportTime(r);
- const action=(decision,label,cls='')=>`<button type="button" class="cta outline ${cls}" data-action="review-report" data-id="${clean(r.id)}" data-decision="${decision}" ${r.reviewStatus===decision?'disabled aria-pressed="true"':''}>${label}</button>`;
- return `<div class="report-record"><div class="row between"><strong>${clean(testerLabel(r.testerUid,assignments))}</strong>${reviewChip(r)}</div><div class="tiny">${clean(p.name)}${day?' · اليوم '+day+' من 14':''} · ${clean(when||r.date)}</div><div class="row between" style="margin-top:6px">${outcomeChip(r)}</div><div class="tiny" style="margin-top:5px">المهمة: ${clean(r.tested||'اختبار عام')}</div><div class="report-notes">${clean(r.notes||'اختبر التطبيق ولم يبلغ عن مشاكل')}</div><div class="review-actions">${action('accepted','قبول التقرير','accept')}${action('clarify','طلب توضيح')}${action('rejected','رفض التقرير','reject')}</div><button class="item-link" data-action="open-chat" data-id="${clean(r.assignmentId)}">${ico('message',15)} مراسلة المختبر <span>‹</span></button></div>`;
+ const final=r.reviewStatus==='accepted';
+ const action=(decision,label,cls='')=>`<button type="button" class="cta outline ${cls}" data-action="review-report" data-id="${clean(r.id)}" data-decision="${decision}" ${r.reviewStatus===decision||final?'disabled':''} ${r.reviewStatus===decision?'aria-pressed="true"':''}>${label}</button>`;
+ return `<div class="report-record"><div class="row between"><strong>${clean(testerLabel(r.testerUid,assignments))}</strong>${reviewChip(r)}</div><div class="tiny">${clean(p.name)}${day?' · اليوم '+day+' من 14':''} · ${clean(when||r.date)}</div><div class="row between" style="margin-top:6px">${outcomeChip(r)}${r.retestOf?'<span class="chip">🔁 إعادة اختبار</span>':''}</div><div class="tiny" style="margin-top:5px">المهمة: ${clean(r.tested||'اختبار عام')}</div><div class="report-notes">${clean(r.notes||'اختبر التطبيق ولم يبلغ عن مشاكل')}</div><div class="review-actions">${action('accepted','قبول التقرير','accept')}${action('clarify','طلب توضيح')}${action('rejected','رفض التقرير','reject')}</div><button class="item-link" data-action="open-chat" data-id="${clean(r.assignmentId)}">${ico('message',15)} مراسلة المختبر <span>‹</span></button></div>`;
 }
 function projectDetails(id){
  const p=mineProjects().find(x=>x.id===id);if(!p)return devApps();
@@ -1222,11 +1386,11 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(authNext||role){const typedName=document.getElementById('auth-name'),typedEmail=document.getElementById('auth-email');if(typedName)authDraft.name=typedName.value;if(typedEmail)authDraft.email=typedEmail.value}
  if(authNext){authMode=authNext;render();return}
  if(role&&['tester','developer'].includes(role)){signupRole=role;render();return}
- if(next){drawerOpen=false;noticeOpen=false;if(next==='new')draftEditingId=null;tab=next;render();return}
+ if(next){drawerOpen=false;noticeOpen=false;if(next==='new')draftEditingId=null;tab=next;if(next==='rewards'){openRewards();return}render();return}
  if(!action)return;
  if(action==='open-menu'){drawerOpen=true;render();return}
  if(action==='close-menu'){drawerOpen=false;render();return}
- if(action==='menu-tab'){drawerOpen=false;tab=button.dataset.target||'home';render();return}
+ if(action==='menu-tab'){drawerOpen=false;tab=button.dataset.target||'home';if(tab==='rewards'){openRewards();return}render();return}
  // A notification panel must stay dismissible even during a slow Firebase request.
  if(action==='close-notices'){noticeOpen=false;render();return}
  if(action==='notice-go-tests'){noticeOpen=false;tab='tests';render();return}
@@ -1253,7 +1417,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='confirm-join'){await api.confirmJoin(id);await refresh();toast('تم تسجيل تأكيد انضمامك، وبدأ عداد 14 يوم');return}
  if(action==='write-report'){selectedAssignmentId=id;tab='report';render();return}
  if(action==='open-chat'){selectedAssignmentId=id;tab='chat';if(user.role==='developer')selectedProjectId=dashboard.assignments.find(a=>a.id===id)?.projectId||selectedProjectId;render();return}
- if(action==='review-report'){const decision=button.dataset.decision;await api.reviewReport(id,decision);await refresh();toast(decision==='accepted'?'تم قبول التقرير':decision==='clarify'?'تم طلب التوضيح وإرسال رسالة للمختبر':'تم رفض التقرير');return}
+ if(action==='review-report'){const decision=button.dataset.decision;const result=await api.reviewReport(id,decision)||{};await refresh();toast(decision==='accepted'?(result.awarded?'تم قبول التقرير وإضافة +'+formatNum(result.awarded)+' XP للمختبر':result.awardFailed?'تم قبول التقرير. النقاط تنضاف للمختبر عند فتحه صفحة النقاط':'تم قبول التقرير'):decision==='clarify'?'تم طلب التوضيح وإرسال رسالة للمختبر':'تم رفض التقرير');return}
  if(action==='mark-fixed'){await api.resolveLatestIssue(id);await refresh();tab='chat';toast('تم إبلاغ المختبر بأن المشكلة انحلّت');return}
  if(action==='project-details'){selectedProjectId=id;tab='details';render();return}
  if(action==='edit-draft'){draftEditingId=id;tab='new';render();return}
@@ -1307,7 +1471,7 @@ app.addEventListener('submit',event=>{event.preventDefault();const form=event.ta
  if(form.id==='auth-form')pending(async()=>{const f=new FormData(form),email=String(f.get('email')||'').trim(),password=String(f.get('password')||'');if(authMode==='login')user=await api.login(email,password);else user=await api.signup({name:String(f.get('name')||''),email,password,role:signupRole,available:!!f.get('available')});tab='home';await updateAdminAccess();await refresh();toast('أهلاً بك في TesterHub')});
  if(form.id==='daily-report-form')pending(async()=>{
   const f=new FormData(form),id=form.dataset.id||selectedAssignmentId;
-  const result=await api.submitDailyReport(id,{outcome:String(f.get('outcome')||''),notes:String(f.get('notes')||'')});
+  const result=await api.submitDailyReport(id,{outcome:String(f.get('outcome')||''),notes:String(f.get('notes')||''),retestOf:String(f.get('retestOf')||'')});
   selectedAssignmentId=id;await refresh();
   toast(result?.alreadySaved?'تقرير اليوم محفوظ مسبقاً، وهذا هو التقرير المحفوظ':'تم إرسال تقريرك إلى المطور ✓');
  });
