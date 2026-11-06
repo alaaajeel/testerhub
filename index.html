@@ -229,6 +229,23 @@ html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 .xp-rules summary{font-weight:800;cursor:pointer;min-height:32px}
 .xp-earned{margin-top:7px;font-size:12px;font-weight:800;color:#08744f}
 .retest-notice{margin:0 0 8px}
+.badge-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.xp-badge{font-size:11px;font-weight:700;background:#fff7e3;color:#8a5a00;border:1px solid #f3dca5;border-radius:99px;padding:4px 9px}
+.segmented{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#eef3fb;border-radius:12px;padding:4px;margin:10px 0}
+.segmented button{min-height:38px;border:0;border-radius:9px;background:transparent;font:inherit;font-size:13px;font-weight:700;color:#5b6b8c;cursor:pointer}
+.segmented button.active{background:#fff;color:#1559b7;box-shadow:0 2px 6px rgba(21,70,141,.12)}
+.league-list{display:grid;gap:6px}
+.league-row{display:flex;align-items:center;gap:10px;min-height:48px;padding:7px 10px;border:1px solid #e1eaf7;border-radius:12px;background:#fbfcff;min-width:0}
+.league-row.mine{border-color:#0caa79;background:#ebfaf3}
+.league-rank{width:28px;height:28px;flex:none;display:grid;place-items:center;border-radius:50%;background:#eef2f8;font-size:12px;font-weight:800;color:#5b6b8c}
+.league-rank.top{background:linear-gradient(135deg,#f5c242,#e3a33e);color:#fff}
+.league-who{flex:1;min-width:0;display:flex;flex-direction:column}
+.league-who strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.league-points{font-size:13px;font-weight:800;color:#15264c;white-space:nowrap}
+.league-gap{text-align:center;color:#7282a5;line-height:1}
+.league-name{display:flex;gap:9px;align-items:flex-start;margin:12px 0 8px;font-size:13px;font-weight:700;cursor:pointer}
+.league-name input{width:18px;height:18px;margin-top:2px;flex:none;accent-color:#0caa79}
+.league-name small{display:block;font-weight:400;font-size:11px;color:#7282a5;margin-top:2px}
 .message-counter{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:50%;background:#fff0d3;color:#835317;font-size:11px;font-weight:700}
 .field textarea{min-height:92px;font-size:13px;line-height:1.8}
 
@@ -813,6 +830,60 @@ async function awardForAcceptedReport(report){
  const existing=await Promise.all(candidates.map(id=>getDoc(doc(db,'contributions',id)).then(x=>x.exists()?id:null)));
  return awardPending(pendingXpEvents({reports:[report],assignments:[a],eventIds:new Set(existing.filter(Boolean)),ledgers}),ledgers);
 }
+// ---- Contributors league (دوري المساهمين) ----
+// Simple derived badges: shown from verified totals only.
+const XP_BADGES=[
+ ['أول تقرير مقبول',t=>(t.reports||0)+(t.bugs||0)>=1],
+ ['صائد الأخطاء',t=>(t.bugs||0)>=3],
+ ['مُعيد الاختبار',t=>(t.retests||0)>=1],
+ ['دورة كاملة',t=>(t.cycles||0)>=1],
+ ['داعم 5 تطبيقات',t=>(t.apps||0)>=5],
+ ['مساهم ثابت',t=>(t.reports||0)+(t.bugs||0)>=30]
+];
+const xpBadges=t=>XP_BADGES.filter(([,ok])=>ok(t||{})).map(([name])=>name);
+const LEAGUE_SIZE=20;
+// Ranks by points; ties are ordered by account id so the list does not jump between loads.
+function rankLeague(rows){return rows.slice().sort((a,b)=>(b.points||0)-(a.points||0)||String(a.uid).localeCompare(String(b.uid))).map((r,i)=>({...r,rank:i+1}))}
+async function getLeague(kind='week'){
+ const active=await currentUser();if(!active)return null;
+ const period=kind==='month'?xpMonthKey():xpWeekKey();
+ if(isDemo){
+  const d=demoState(),x=d.xp||{periods:{},totals:{}},names=d.publicProfiles||{};
+  const all=rankLeague(Object.values(x.periods||{}).filter(p=>p.period===period));
+  const decorate=r=>({...r,name:names[r.uid]?.name||null,total:x.totals?.[r.uid]?.points||0,apps:x.totals?.[r.uid]?.apps||0});
+  const mine=all.find(r=>r.uid===active.uid);
+  return {period,kind,rows:all.slice(0,LEAGUE_SIZE).map(decorate),me:mine?decorate(mine):null,rank:mine?.rank||null,showName:!!names[active.uid]};
+ }
+ const {collection,query,where,orderBy,limit,getDocs,getDoc,doc,documentId,getCountFromServer}=storeFns;
+ const [top,mine,shown]=await Promise.all([
+  getDocs(query(collection(db,'xpPeriods'),where('period','==',period),orderBy('points','desc'),limit(LEAGUE_SIZE))),
+  getDoc(doc(db,'xpPeriods',period+'_'+active.uid)),
+  getDoc(doc(db,'publicProfiles',active.uid))
+ ]);
+ const rows=top.docs.map(x=>x.data());
+ const uids=[...new Set(rows.map(r=>r.uid).concat(active.uid))];
+ const lookup=async name=>{const out=new Map();for(let i=0;i<uids.length;i+=30){const q=await getDocs(query(collection(db,name),where(documentId(),'in',uids.slice(i,i+30))));for(const x of q.docs)out.set(x.id,x.data())}return out};
+ const [names,totals]=await Promise.all([lookup('publicProfiles'),lookup('xpTotals')]);
+ const decorate=r=>({...r,name:names.get(r.uid)?.name||null,total:totals.get(r.uid)?.points||0,apps:totals.get(r.uid)?.apps||0});
+ const me=mine.exists()?mine.data():null;
+ let rank=null;
+ if(me){const ahead=await getCountFromServer(query(collection(db,'xpPeriods'),where('period','==',period),where('points','>',me.points||0)));rank=ahead.data().count+1}
+ return {period,kind,rows:rankLeague(rows).map(decorate),me:me?decorate(me):null,rank,showName:shown.exists()};
+}
+// Opt-in only: the league shows a name just for members who switch this on, and only their profile name.
+async function setLeagueName(show){
+ const active=await currentUser();if(!active)throw Error('سجّل الدخول أولاً');
+ if(isDemo){const d=demoState();d.publicProfiles??={};if(show)d.publicProfiles[active.uid]={name:active.name};else delete d.publicProfiles[active.uid];save(d);return}
+ const ref=storeFns.doc(db,'publicProfiles',active.uid);
+ if(show)await storeFns.setDoc(ref,{name:active.name,updatedAt:storeFns.serverTimestamp()});
+ else await storeFns.deleteDoc(ref);
+}
+async function refreshLeagueName(){
+ if(isDemo)return;
+ const active=await currentUser(),ref=storeFns.doc(db,'publicProfiles',active.uid);
+ const shown=await storeFns.getDoc(ref).catch(()=>null);
+ if(shown?.exists()&&shown.data().name!==active.name)await storeFns.setDoc(ref,{name:active.name,updatedAt:storeFns.serverTimestamp()});
+}
 const messageRetryIds=new Map();
 async function messageRetryKey(uid,assignmentId,body){
  const bytes=new TextEncoder().encode(uid+'|'+assignmentId+'|'+body);
@@ -920,6 +991,7 @@ async function addProjectTesters(projectId,testers){
 async function requestAccountDeletion(){
  if(isDemo)throw Error('غير متاح في وضع المعاينة');
  await storeFns.setDoc(storeFns.doc(db,'deletionRequests',auth.currentUser.uid),{email:auth.currentUser.email,status:'open',createdAt:storeFns.serverTimestamp()});
+ await storeFns.deleteDoc(storeFns.doc(db,'publicProfiles',auth.currentUser.uid)).catch(err=>console.warn('League name:',err));
 }
 async function deleteProject(projectId){
  if(isDemo){const d=demoState();d.projects=d.projects.filter(p=>p.id!==projectId);d.assignments=d.assignments.filter(a=>a.projectId!==projectId);d.reports=d.reports.filter(r=>r.projectId!==projectId);d.messages=d.messages.filter(m=>m.projectId!==projectId);save(d);return}
@@ -931,7 +1003,7 @@ async function switchRole(){
  const active=await currentUser();
  return accountService.updateProfile({role:active.role==='tester'?'developer':'tester'});
 }
-const api={isDemo,switchRole,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
+const api={isDemo,switchRole,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,getLeague,setLeagueName,refreshLeagueName,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
 
 
 const app=document.getElementById('app');
@@ -996,10 +1068,10 @@ const formatNum=n=>new Intl.NumberFormat('ar-IQ').format(n);
 function siteHeader(){return `<div class="status"><span>10:24</span><span>◆ ◕ 100%</span></div><header class="hero"><div class="header"><button class="round-ico" data-action="open-menu" aria-label="فتح القائمة" aria-haspopup="dialog">${ico('menu',21)}</button><div class="logo"><img class="header-brand-icon" src="./assets/brand-icon.svg" alt="" width="33" height="33"/>TesterHub</div><button class="round-ico" data-action="notice" aria-label="الإشعارات" aria-haspopup="dialog">${ico('bell',20)}${noticeBadgeCount()?`<span class="bell-count">${Math.min(99,noticeBadgeCount())}</span>`:''} </button></div><div class="hello"><h2>${user?.role==='developer'?'لوحة المطور':'مرحباً، '+clean(user?.name||'مختبر')}</h2><p>${user?.role==='developer'?'إدارة الاختبار المغلق لتطبيقاتك':'تابع تطبيقاتك وخطواتك نحو إكمال الاختبار'}</p></div></header>`}
 function appMenu(){
  if(!drawerOpen||!user)return '';
- const menu=user.role==='developer'?[['home','الرئيسية'],['apps','تطبيقاتي'],['testers','المختبرون'],['new','إضافة تطبيق'],['profile','حسابي']]:[['home','الرئيسية'],['tests','اختباراتي'],['rewards','المكافآت'],['profile','حسابي']];
+ const menu=user.role==='developer'?[['home','الرئيسية'],['apps','تطبيقاتي'],['testers','المختبرون'],['new','إضافة تطبيق'],['rewards','دوري المساهمين'],['profile','حسابي']]:[['home','الرئيسية'],['tests','اختباراتي'],['rewards','دوري المساهمين'],['profile','حسابي']];
  return `<div class="drawer-overlay"><button class="drawer-backdrop" type="button" data-action="close-menu" aria-label="إغلاق القائمة"></button><aside class="app-drawer" role="dialog" aria-modal="true" aria-label="قائمة التطبيق"><div class="drawer-head"><span class="drawer-brand"><img src="./assets/brand-icon.svg" width="36" height="36" alt=""/>TesterHub</span><button class="drawer-close" data-action="close-menu" aria-label="إغلاق القائمة">✕</button></div><div class="drawer-identity"><strong>${clean(user.name)}</strong><span>${clean(user.email||'')}</span><small>${user.role==='developer'?'واجهة المطور':'واجهة المختبر'}</small></div><nav class="drawer-links">${menu.map(([k,label])=>`<button type="button" data-action="menu-tab" data-target="${k}" class="${tab===k?'selected':''}">${clean(label)}<span>‹</span></button>`).join('')}<button type="button" data-action="switch-role">الانتقال إلى واجهة ${user.role==='developer'?'المختبر':'المطور'}<span>‹</span></button></nav>${adminAuthorized?'<a class="drawer-signout" href="./admin.html" style="display:block;text-decoration:none;text-align:center">🛡 لوحة الإدارة</a>':''}<div class="drawer-foot"><button class="drawer-signout" data-action="logout">${ico('power',18)} تسجيل الخروج</button><div class="drawer-version">TesterHub · تطبيق ويب قابل للتثبيت</div></div></aside></div>`;
 }
-function bottomBar(){const tabs=user.role==='developer'?[['home','home','الرئيسية'],['apps','apps','تطبيقاتي'],['testers','testers','المختبرون'],['profile','user','حسابي']]:[['home','home','الرئيسية'],['tests','tests','اختباراتي'],['rewards','rewards','المكافآت'],['profile','user','حسابي']];return `<nav class="nav" aria-label="التنقل الرئيسي">${tabs.map(([key,icon,label])=>`<button data-tab="${key}" ${tab===key?'class="active" aria-current="page"':''}>${ico(icon)}<span>${label}</span></button>`).join('')}</nav>`}
+function bottomBar(){const tabs=user.role==='developer'?[['home','home','الرئيسية'],['apps','apps','تطبيقاتي'],['testers','testers','المختبرون'],['profile','user','حسابي']]:[['home','home','الرئيسية'],['tests','tests','اختباراتي'],['rewards','rewards','الدوري'],['profile','user','حسابي']];return `<nav class="nav" aria-label="التنقل الرئيسي">${tabs.map(([key,icon,label])=>`<button data-tab="${key}" ${tab===key?'class="active" aria-current="page"':''}>${ico(icon)}<span>${label}</span></button>`).join('')}</nav>`}
 function welcomeBanner(){if(!api.isDemo)return '';return `<div class="demo-banner">نسخة معاينة — البيانات تجريبية ومحفوظة على هذا الجهاز فقط</div>`}
 
 const FIFTEEN_DAYS=15*86400000;
@@ -1156,13 +1228,41 @@ function testerTests(){
  const group=(title,items)=>items.length?`<section aria-label="${clean(title)}"><div class="section-title">${title} · ${items.length}</div>${items.map(assignmentCard).join('')}</section>`:'';
  return `<div class="surface"><div class="row between"><div><div class="lead">اختباراتي</div><div class="small">ابدأ بالمطلوب اليوم، ثم راجع الدعوات. التواريخ محفوظة بتوقيت UTC.</div></div><button class="cta outline" data-action="refresh-tests">تحديث</button></div></div>${group('مطلوب اليوم',work.due)}${group('دعوات وتجهيز الاختبار',work.invites)}${group('بانتظار موعد التقرير التالي',work.cooldown)}${group('تقرير اليوم محفوظ',work.completed)}${group('المشاركات السابقة',work.expired)}${!all.length?'<div class="tab-empty"><h3>ما عندك اختبارات حالياً</h3>تظهر التطبيقات بعد إضافتك من المطور.</div>':''}`;
 }
-let rewardsState='idle';
+let rewardsState='idle',leagueKind='week',league=null,leagueState='idle';
 async function openRewards(){
  rewardsState='loading';render();
  const uid=user?.uid;
  try{const xp=await api.syncMyXp();if(user?.uid!==uid)return;if(xp)dashboard.xp={totals:xp.totals,ledgers:xp.ledgers};rewardsState='ready';if(xp?.added)toast('انضافت '+formatNum(xp.added)+' XP من مساهمات مقبولة')}
  catch(err){console.warn('XP:',err);rewardsState='error'}
+ await loadLeague();
+}
+async function loadLeague(kind=leagueKind){
+ leagueKind=kind;leagueState='loading';render();
+ const uid=user?.uid;
+ try{const data=await api.getLeague(kind);if(user?.uid!==uid||leagueKind!==kind)return;league=data;leagueState='ready'}
+ catch(err){console.warn('League:',err);leagueState='error'}
  render();
+}
+function leagueRow(r,mine){
+ const level=xpLevel(r.total||0),name=mine?'أنت':r.name||'مساهم';
+ return `<div class="league-row ${mine?'mine':''}"><span class="league-rank ${r.rank<=3?'top':''}">${formatNum(r.rank)}</span><div class="league-who"><strong>${clean(name)}</strong><span class="tiny">${clean(level.name)}${r.apps?' · ساعد '+formatNum(r.apps)+' تطبيق':''}</span></div><span class="league-points">${formatNum(r.points||0)} XP</span></div>`;
+}
+function leagueSection(){
+ const tabs=[['week','هذا الأسبوع'],['month','هذا الشهر']].map(([k,label])=>`<button type="button" class="${leagueKind===k?'active':''}" data-action="league-kind" data-id="${k}" aria-pressed="${leagueKind===k}">${label}</button>`).join('');
+ let body='';
+ if(leagueState==='loading'&&!league)body='<div class="tiny">جاري تحميل الترتيب…</div>';
+ else if(leagueState==='error')body='<div class="notice">تعذّر تحميل الترتيب الآن. حاول مرة ثانية.</div>';
+ else if(league){
+  const rows=league.rows.map(r=>leagueRow(r,r.uid===user.uid)).join('');
+  const meOutside=league.me&&!league.rows.some(r=>r.uid===user.uid);
+  body=(rows||`<div class="empty">ماكو نقاط موثّقة ${leagueKind==='month'?'هذا الشهر':'هذا الأسبوع'} لحد الآن. أول تقرير مقبول يحطك بالترتيب.</div>`)+
+   (meOutside?`<div class="league-gap">…</div>${leagueRow({...league.me,rank:league.rank},true)}`:'')+
+   (!league.me&&rows?'<div class="tiny" style="margin-top:8px">تدخل الترتيب أول ما ينقبل لك تقرير.</div>':'');
+ }
+ const show=!!league?.showName;
+ return `<section class="surface league" aria-label="دوري المساهمين"><div class="row between"><div class="lead">🏆 دوري المساهمين</div><span class="tiny">بالنقاط الموثّقة</span></div><div class="segmented" role="group" aria-label="فترة الترتيب">${tabs}</div><div class="league-list">${body}</div>
+ <label class="league-name"><input type="checkbox" data-change="league-name" ${show?'checked':''} ${league?'':'disabled'}><span>اظهر اسمي بالترتيب<small>بدون تفعيل يظهر اسمك «مساهم». البريد ما يظهر أبداً.</small></span></label>
+ <div class="tiny">الترتيب الأسبوعي يبدأ من جديد كل إثنين، فالكل يگدر ينافس، حتى المتطوعين اللي ما عندهم تطبيق.</div></section>`;
 }
 function rewards(){
  const t=dashboard.xp?.totals||{},points=t.points||0,level=xpLevel(points),legacy=legacyXp(primaryAssignments());
@@ -1172,10 +1272,10 @@ function rewards(){
  return `<section class="surface xp-card"><div class="row between"><div><div class="tiny">نقاطك الموثّقة</div><div class="coins">${formatNum(points)} XP</div></div><span class="level-chip">${clean(level.name)}</span></div>
  <div class="progress"><i style="width:${span}%"></i></div><div class="tiny">${level.next?`باقي ${formatNum(level.next-points)} XP للمستوى «${clean(level.nextName)}»`:'وصلت لأعلى مستوى'}</div>
  ${rewardsState==='loading'?'<div class="tiny" style="margin-top:6px">جاري تحديث النقاط…</div>':rewardsState==='error'?'<div class="notice">تعذّر تحديث النقاط الآن. المعروض آخر نسخة محفوظة.</div>':''}
- <div class="xp-stats">${stat('تطبيقات ساعدت بيها',t.apps)}${stat('تقارير مقبولة',t.reports)}${stat('بلاغات مؤكدة',t.bugs)}${stat('إعادات اختبار',t.retests)}${stat('دورات مكتملة',t.cycles)}</div>
- ${waiting?`<div class="tiny" style="margin-top:8px">عندك ${formatNum(waiting)} تقرير بانتظار مراجعة المطور؛ تنحسب نقاطه بعد القبول.</div>`:''}</section>
+ ${xpBadges(t).length?`<div class="badge-row">${xpBadges(t).map(b=>`<span class="xp-badge">🎖 ${clean(b)}</span>`).join('')}</div>`:''}<div class="xp-stats">${stat('تطبيقات ساعدت بيها',t.apps)}${stat('تقارير مقبولة',t.reports)}${stat('بلاغات مؤكدة',t.bugs)}${stat('إعادات اختبار',t.retests)}${stat('دورات مكتملة',t.cycles)}</div>
+ ${waiting?`<div class="tiny" style="margin-top:8px">عندك ${formatNum(waiting)} تقرير بانتظار مراجعة المطور؛ تنحسب نقاطه بعد القبول.</div>`:''}</section>${leagueSection()}
  ${legacy?`<div class="surface legacy-xp"><div class="row between"><strong>نقاط سابقة غير موثّقة</strong><span class="chip">${formatNum(legacy)} XP</span></div><div class="tiny">محفوظة من النظام القديم (أيام التأكيد قبل ${clean(LEGACY_XP_CUTOFF)}). ما تنحذف، بس ما تدخل بالنقاط الموثّقة أو الترتيب.</div></div>`:''}
- <details class="surface xp-rules"><summary>كيف تنحسب النقاط؟</summary><div class="item-link">تقرير يومي مفيد قبله المطور <strong>+10</strong></div><div class="item-link">بلاغ مشكلة أكده المطور <strong>+20</strong></div><div class="item-link">إعادة اختبار مشكلة انصلحت وقبلها المطور <strong>+10</strong></div><div class="item-link">إكمال 14 يوم مع 7 تقارير مقبولة على الأقل <strong>+50</strong></div><div class="tiny" style="margin-top:8px">ما تنحسب نقاط لفتح الرابط أو التثبيت أو تقرير ما انراجع. النقاط تشجيعية فقط وما تعادل أي مبلغ.</div></details>`;
+ <details class="surface xp-rules"><summary>كيف تنحسب النقاط والمستويات؟</summary><div class="tiny" style="margin:6px 0">المستويات: مبتدئ، نشط من 100، محترف من 300، خبير من 700، أسطوري من 1500 XP.</div><div class="item-link">تقرير يومي مفيد قبله المطور <strong>+10</strong></div><div class="item-link">بلاغ مشكلة أكده المطور <strong>+20</strong></div><div class="item-link">إعادة اختبار مشكلة انصلحت وقبلها المطور <strong>+10</strong></div><div class="item-link">إكمال 14 يوم مع 7 تقارير مقبولة على الأقل <strong>+50</strong></div><div class="tiny" style="margin-top:8px">ما تنحسب نقاط لفتح الرابط أو التثبيت أو تقرير ما انراجع. النقاط تشجيعية فقط وما تعادل أي مبلغ.</div></details>`;
 }
 function stat(label,n,green=false){return `<div class="metric ${green?'green':''}">${ico('testers',23)}<div class="label">${label}</div><div class="num">${formatNum(n)}</div></div>`}
 function projectCard(p){const isDraft=p.status==='draft';const members=myProjectAssignments(p.id),n=members.length,active=members.filter(lastActive).length,percent=n?Math.round(active/n*100):0;return `<article class="surface app-card"><div class="row between"><div class="row"><div class="app-mark blue">${ico('package',29)}</div><div><div class="bold">${clean(p.name)}</div><div class="tiny">اختبار مغلق · ${n} مختبر</div></div></div><span class="${n?'flag':'chip'}">${isDraft?'مسودة':n?'وصل للمختبرين':'بلا دعوات'}</span></div><div class="divider"></div><div class="row between"><span class="tiny">نسبة النشاط</span><strong class="success">${percent}%</strong></div><div class="progress" style="margin:7px 0"><i style="width:${percent}%"></i></div><button class="cta blue wide" data-action="project-details" data-id="${clean(p.id)}">عرض المختبرين والتقدم</button><button class="cta outline wide" style="margin-top:9px;background:#fff2f3;color:#aa3847" data-action="delete-project" data-id="${clean(p.id)}">حذف التطبيق نهائياً</button></article>`}
@@ -1222,7 +1322,7 @@ function render(){
  if(!user){app.innerHTML=authScreen();return}
  if(!api.isDemo&&user.suspended){app.innerHTML=suspendedScreen();return}
  if(!api.isDemo&&(user.profileMissing||!user.emailVerified)){app.innerHTML=accountGate();return}
- const screens=user.role==='developer'?{home:devHome,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),chat:chatPage,profile}:{home:testerHome,tests:testerTests,report:dailyReport,chat:chatPage,rewards,profile};
+ const screens=user.role==='developer'?{home:devHome,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),chat:chatPage,rewards,profile}:{home:testerHome,tests:testerTests,report:dailyReport,chat:chatPage,rewards,profile};
  const content=(screens[tab]||screens.home)();
  app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar()+appMenu()+notificationPanel();
 }
@@ -1421,6 +1521,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='mark-fixed'){await api.resolveLatestIssue(id);await refresh();tab='chat';toast('تم إبلاغ المختبر بأن المشكلة انحلّت');return}
  if(action==='project-details'){selectedProjectId=id;tab='details';render();return}
  if(action==='edit-draft'){draftEditingId=id;tab='new';render();return}
+ if(action==='league-kind'){await loadLeague(id==='month'?'month':'week');return}
  if(action==='refresh-tests'){await refresh();toast('تم تحديث الاختبارات');return}
  if(action==='switch-role'){await changeRole();return}
  if(action==='request-deletion'){if(!confirm('طلب حذف حسابك؟ ستراجع الإدارة الطلب خلال 14 يوماً، ويبقى حسابك يعمل حتى ذلك الحين.'))return;await api.requestAccountDeletion();toast('وصل طلبك إلى الإدارة');return}
@@ -1463,11 +1564,12 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
 window.addEventListener('keydown',event=>{if(event.key==='Escape'&&(drawerOpen||noticeOpen)){drawerOpen=false;noticeOpen=false;render();}});
 app.addEventListener('change',event=>{const node=event.target;
  if(node.name==='outcome'){const note=document.getElementById('test-note'),label=document.getElementById('test-note-label');if(note&&label){const hints={ok:['شنو جرّبت؟','مثلاً: جرّبت تسجيل الدخول واشتغل بصورة طبيعية.'],issue:['شنو جرّبت؟ وشنو المشكلة؟','مثلاً: ضغطت تسجيل الدخول وعلّق التطبيق بشاشة بيضاء.'],blocked:['شنو جرّبت؟ وليش ما گدرت تكمل؟','مثلاً: التطبيق ما ينفتح ويطلع خطأ بالتحميل.']},[text,hint]=hints[node.value]||hints.ok;label.textContent=text;note.placeholder=hint;}return;}if(node.id==='reminder-hour'){try{api.setReminderHour(Number(node.value));pushService?.sync(user.uid).catch(err=>console.warn('Push registration:',err));toast('تم تحديث وقت التذكير')}catch(err){toast(err.message)}return}
+ if(node.dataset.change==='league-name'){pending(async()=>{try{await api.setLeagueName(node.checked);league&&(league.showName=node.checked);await loadLeague();toast(node.checked?'صار اسمك يظهر بالترتيب':'اسمك صار مخفي بالترتيب')}catch(err){node.checked=!node.checked;throw err}});return}
  if(node.dataset.change==='availability'){pending(async()=>{try{await api.setAvailability(node.checked);user=await api.currentUser();toast(user.available?'تم إظهار بريدك للمطورين':'تم إخفاء بريدك من القائمة')}finally{render()}})}
 });
 app.addEventListener('submit',event=>{event.preventDefault();const form=event.target;
  if(form.id==='complete-profile-form')pending(async()=>{const f=new FormData(form);user=await accountService.completeProfile({name:f.get('name'),role:'tester',available:f.has('available')});await refresh()});
- if(form.id==='profile-form')pending(async()=>{const f=new FormData(form);user=await accountService.updateProfile({name:f.get('name'),...(user.role==='tester'?{participationPaused:f.has('paused')}: {})});await refresh();toast('تم حفظ بيانات الحساب')});
+ if(form.id==='profile-form')pending(async()=>{const f=new FormData(form);user=await accountService.updateProfile({name:f.get('name'),...(user.role==='tester'?{participationPaused:f.has('paused')}: {})});await api.refreshLeagueName().catch(err=>console.warn('League name:',err));await refresh();toast('تم حفظ بيانات الحساب')});
  if(form.id==='auth-form')pending(async()=>{const f=new FormData(form),email=String(f.get('email')||'').trim(),password=String(f.get('password')||'');if(authMode==='login')user=await api.login(email,password);else user=await api.signup({name:String(f.get('name')||''),email,password,role:signupRole,available:!!f.get('available')});tab='home';await updateAdminAccess();await refresh();toast('أهلاً بك في TesterHub')});
  if(form.id==='daily-report-form')pending(async()=>{
   const f=new FormData(form),id=form.dataset.id||selectedAssignmentId;
