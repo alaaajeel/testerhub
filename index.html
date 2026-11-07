@@ -1898,10 +1898,11 @@ document.addEventListener('keydown',()=>armBackGuard(),{capture:true});
  document.addEventListener('focusout',()=>setTimeout(update,60));
 })();
 
-let liveSubscriptions=[],liveSyncUid=null,liveSyncTimer=null,liveSyncDeferred=false,liveFetchInProgress=false;
+const LIVE_REFRESH_MIN_GAP=60000;
+let liveSubscriptions=[],liveSyncUid=null,liveSyncTimer=null,liveSyncDeferred=false,liveFetchInProgress=false,lastLiveFetchAt=0;
 function stopLiveSync(){
  for(const unsub of liveSubscriptions){try{unsub()}catch{}}
- liveSubscriptions=[];liveSyncUid=null;liveSyncDeferred=false;
+ liveSubscriptions=[];liveSyncUid=null;liveSyncDeferred=false;lastLiveFetchAt=0;
  if(liveSyncTimer!==null)clearTimeout(liveSyncTimer);
  liveSyncTimer=null;
 }
@@ -1925,7 +1926,7 @@ function startLiveSync(){
     initialized=true;
     return;
    }
-   if(user?.uid!==uid)return;
+   if(user?.uid!==uid||!snap.docChanges().length)return;
    const incoming=snap.docs.filter(d=>!knownIds.has(d.id));
    knownIds=ids;
    if(incoming.length&&'Notification' in window&&Notification.permission==='granted'){
@@ -1971,13 +1972,16 @@ function queueLiveSync(){
 async function flushLiveSync(){
  liveSyncTimer=null;
  if(!canRerenderLive()||liveFetchInProgress)return;
+ const wait=LIVE_REFRESH_MIN_GAP-(Date.now()-lastLiveFetchAt);
+ if(wait>0){liveSyncTimer=setTimeout(flushLiveSync,wait);return}
  liveFetchInProgress=true;
+ lastLiveFetchAt=Date.now();
  const uid=user.uid;
  try{
   const fresh=await api.getDashboard();
   if(user?.uid===uid){dashboard=fresh;liveSyncDeferred=false;render()}
  }catch(err){console.warn('Cloud notification sync:',err)}
- finally{liveFetchInProgress=false}
+ finally{liveFetchInProgress=false;if(liveSyncDeferred&&canRerenderLive()&&liveSyncTimer===null)liveSyncTimer=setTimeout(flushLiveSync,LIVE_REFRESH_MIN_GAP)}
 }
 
 let leagueNameChecked='';
