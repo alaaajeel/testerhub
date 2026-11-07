@@ -15,15 +15,15 @@ test('every built-in article from the draft is present and valid',()=>{
  for(const s of H.POPULAR)assert.ok(H.DEFAULTS.some(a=>a.slug===s),s);
  assert.equal(Object.keys(H.CATEGORIES).join(),'start,tester,developer,faq');
 });
-test('owner edits override, hidden removes, drafts and broken entries never show',()=>{
+test('published edits override, the hidden list switches built-ins off, drafts, hidden and broken entries never show',()=>{
  const edit={slug:'xp',cat:'faq',title:'متى تنضاف النقاط؟',summary:'',steps:[{title:'أرسل',text:'تقرير'}],notice:'',imageUrl:'',videoUrl:'',order:1,status:'published'};
- const list=H.merge([edit,{slug:'account',status:'hidden'},{...edit,slug:'draft-new',status:'draft'},{...edit,slug:'broken',title:''},{...edit,slug:'new-one',order:2}]);
+ const list=H.merge([edit,{...edit,slug:'secret',status:'hidden'},{...edit,slug:'draft-new',status:'draft'},{...edit,slug:'broken',title:''},{...edit,slug:'new-one',order:2},{...edit,slug:'not-showing',title:'تعديل على شرح مخفي'}],['account','not-showing']);
  assert.equal(list.find(a=>a.slug==='xp').title,'متى تنضاف النقاط؟');
  assert.equal(list[0].slug,'xp');
  assert.ok(!list.some(a=>a.slug==='account'));
- assert.ok(!list.some(a=>a.slug==='draft-new'||a.slug==='broken'));
+ assert.ok(!list.some(a=>['draft-new','broken','secret','not-showing'].includes(a.slug)));
  assert.ok(list.some(a=>a.slug==='new-one'));
- assert.equal(list.length,16);
+ assert.equal(list.length,15);
 });
 test('Arabic search ignores hamza and taa marbuta forms and needs every word',()=>{
  const list=H.merge();
@@ -57,4 +57,10 @@ test('the console escapes everything it shows and records each change',()=>{
 test('both the tester and the developer views include the help page',()=>{
  const line=html.match(/const screens=([^\n]*);/)[1];
  assert.equal((line.match(/help:helpPage/g)||[]).length,2);
+});
+test('the app asks Firestore for published articles only',()=>{
+ const load=html.slice(html.indexOf('async function loadHelpArticles('),html.indexOf('async function getDashboard('));
+ assert.ok(load.includes("where('status','==','published')"));
+ assert.doesNotMatch(load,/'hidden'|'draft'/);
+ assert.ok(load.includes("doc(db,'helpSettings','public')"));
 });

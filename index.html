@@ -592,10 +592,14 @@ async function stampTesterSeen(){
  for(const a of running.slice(0,10))await storeFns.updateDoc(storeFns.doc(db,'assignments',a.id),{testerSeenAt:storeFns.serverTimestamp()}).catch(err=>console.warn('Seen:',err));
 }
 async function loadHelpArticles(){
- if(isDemo||!db)return [];
- const {collection,query,where,getDocs}=storeFns;
- const snap=await getDocs(query(collection(db,'helpArticles'),where('status','in',['published','hidden'])));
- return snap.docs.map(d=>({...d.data(),slug:d.id}));
+ if(isDemo||!db)return {articles:[],hiddenDefaults:[]};
+ const {collection,query,where,getDocs,getDoc,doc}=storeFns;
+ const [snap,settings]=await Promise.all([
+  getDocs(query(collection(db,'helpArticles'),where('status','==','published'))),
+  getDoc(doc(db,'helpSettings','public')).catch(()=>null)
+ ]);
+ const hidden=settings?.exists?.()?settings.data().hiddenDefaults:[];
+ return {articles:snap.docs.map(d=>({...d.data(),slug:d.id})),hiddenDefaults:Array.isArray(hidden)?hidden:[]};
 }
 async function getDashboard({fromServer=false}={}){
  if(isDemo){const d=demoState(),uid=d.role==='tester'?'t1':'d1',x=d.xp||{};return {projects:d.projects,assignments:d.assignments,testers:d.testers,reports:d.reports??[],messages:d.messages??[],settings:d.settings,xp:{totals:x.totals?.[uid]||null,ledgers:Object.fromEntries(Object.entries(x.ledgers||{}).filter(([,v])=>v.testerUid===uid))}}}
@@ -1760,7 +1764,7 @@ function renderView(){
 }
 let selectedProjectId=null,selectedAssignmentId=null,draftEditingId=null,selectedTesterUid=null,testerBack='testers';
 // ---- Help center ----
-let helpView='',helpTerm='',helpStored=[],helpState='idle';
+let helpView='',helpTerm='',helpStored=[],helpHidden=[],helpState='idle';
 function helpFromHash(hash=location.hash){
  const m=String(hash||'').match(/^#help(?:\/(category|article)\/([a-z0-9-]{1,60}))?\/?$/);
  return m?(m[1]?m[1]+':'+m[2]:''):null;
@@ -1774,11 +1778,11 @@ function syncHelpHash(){
   else if(!want&&location.hash.startsWith('#help'))history.replaceState(history.state,'',location.pathname+location.search);
  }catch{}
 }
-function helpList(){return TesterHubHelp.merge(helpStored)}
+function helpList(){return TesterHubHelp.merge(helpStored,helpHidden)}
 function loadHelp(){
  if(helpState!=='idle')return;
  helpState='loading';
- api.loadHelpArticles().then(list=>{helpStored=list;helpState='ready'}).catch(err=>{console.warn('Help:',err);helpState='failed'}).finally(()=>{
+ api.loadHelpArticles().then(r=>{helpStored=r.articles;helpHidden=r.hiddenDefaults;helpState='ready'}).catch(err=>{console.warn('Help:',err);helpState='failed'}).finally(()=>{
   if(tab!=='help')return;
   const body=document.getElementById('help-body');if(body)body.innerHTML=helpBody();else render();
  });

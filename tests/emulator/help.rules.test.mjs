@@ -13,7 +13,7 @@ const anon = () => env.unauthenticatedContext().firestore();
 const admin = fn => env.withSecurityRulesDisabled(c => fn(c.firestore()));
 const article = (uid, extra = {}) => ({cat: 'faq', title: 'شلون أبدأ؟', summary: 'شرح قصير', steps: [{title: 'افتح التطبيق', text: 'من الشاشة الرئيسية'}], notice: '', imageUrl: '', videoUrl: '', order: 10, status: 'published', updatedAt: serverTimestamp(), updatedBy: uid, ...extra});
 const seeded = status => ({cat: 'faq', title: 'Title ' + status, summary: '', steps: [{title: 'a', text: 'b'}], notice: '', imageUrl: '', videoUrl: '', order: 1, status, updatedBy: 'boss'});
-const published = q => query(collection(q, 'helpArticles'), where('status', 'in', ['published', 'hidden']));
+const published = q => query(collection(q, 'helpArticles'), where('status', '==', 'published'));
 
 beforeEach(async () => {
  await env.clearFirestore();
@@ -27,13 +27,16 @@ beforeEach(async () => {
  });
 });
 
-test('anyone, even signed out, reads published and hidden entries but never drafts', async () => {
- for (const q of [anon(), db('t1'), db('t1', false)]) {
-  assert.equal((await assertSucceeds(getDocs(published(q)))).size, 2);
+test('anyone, even signed out, reads published articles only; drafts and hidden ones stay with the owner', async () => {
+ for (const q of [anon(), db('t1'), db('t1', false), db('sup')]) {
+  assert.equal((await assertSucceeds(getDocs(published(q)))).size, 1);
   await assertSucceeds(getDoc(doc(q, 'helpArticles', 'pub-one')));
   await assertFails(getDoc(doc(q, 'helpArticles', 'draft-one')));
+  await assertFails(getDoc(doc(q, 'helpArticles', 'hid-one')));
+  await assertFails(getDocs(query(collection(q, 'helpArticles'), where('status', 'in', ['published', 'hidden']))));
   await assertFails(getDocs(collection(q, 'helpArticles')));
  }
+ await assertSucceeds(getDoc(doc(db('boss'), 'helpArticles', 'hid-one')));
  assert.equal((await assertSucceeds(getDocs(collection(db('boss'), 'helpArticles')))).size, 3);
 });
 
@@ -77,4 +80,21 @@ test('saving and deleting are recorded in the audit log', async () => {
  del.set(doc(collection(b, 'adminAuditLogs')), {actorUid: 'boss', action: 'delete_help_article', targetId: 'audited', targetName: 'شلون أبدأ؟', createdAt: serverTimestamp()});
  await assertSucceeds(del.commit());
  await assertFails(setDoc(doc(db('sup'), 'adminAuditLogs', 'x'), {actorUid: 'sup', action: 'save_help_article', targetId: 'a', targetName: 'a', createdAt: serverTimestamp()}));
+});
+
+test('the list of switched-off built-in articles holds slugs only and only the owner changes it', async () => {
+ const put = (q, data) => setDoc(doc(q, 'helpSettings', 'public'), {hiddenDefaults: ['install-pwa'], updatedAt: serverTimestamp(), updatedBy: 'boss', ...data});
+ await assertSucceeds(put(db('boss'), {}));
+ for (const q of [anon(), db('t1'), db('t1', false)]) {
+  assert.deepEqual((await assertSucceeds(getDoc(doc(q, 'helpSettings', 'public')))).data().hiddenDefaults, ['install-pwa']);
+  await assertFails(getDocs(collection(q, 'helpSettings')));
+ }
+ await assertFails(put(db('sup'), {updatedBy: 'sup'}));
+ await assertFails(put(db('t1'), {updatedBy: 't1'}));
+ await assertFails(put(db('boss'), {hiddenDefaults: ['<b>bad</b>']}));
+ await assertFails(put(db('boss'), {hiddenDefaults: Array.from({length: 17}, (_, i) => 'slug-' + i)}));
+ await assertFails(put(db('boss'), {hiddenDefaults: ['xp'], note: 'extra'}));
+ await assertFails(put(db('boss'), {updatedAt: new Date()}));
+ await assertFails(setDoc(doc(db('boss'), 'helpSettings', 'other'), {hiddenDefaults: [], updatedAt: serverTimestamp(), updatedBy: 'boss'}));
+ await assertFails(deleteDoc(doc(db('boss'), 'helpSettings', 'public')));
 });

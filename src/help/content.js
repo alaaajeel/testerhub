@@ -496,14 +496,15 @@
     if (!["published", "draft", "hidden"].includes(a.status)) errors.push("الحالة غير معروفة");
     return errors;
   }
-  // Stored articles replace built-in ones with the same slug; "hidden" removes it; drafts never show.
-  function merge(stored = []) {
-    const map = new Map(DEFAULTS.map(a => [a.slug, {...a, builtIn: true}]));
+  // Published stored articles replace built-in ones with the same slug or add new ones; hiddenDefaults switches
+  // built-in ones off. Anything not published (draft, hidden) never shows.
+  function merge(stored = [], hiddenDefaults = []) {
+    const off = new Set(Array.isArray(hiddenDefaults) ? hiddenDefaults : []);
+    const map = new Map(DEFAULTS.filter(a => !off.has(a.slug)).map(a => [a.slug, {...a, builtIn: true}]));
     for (const s of stored) {
       if (!s || !SLUG.test(String(s.slug || s.id || ""))) continue;
       const slug = s.slug || s.id;
-      if (s.status === "hidden") { map.delete(slug); continue; }
-      if (s.status !== "published" || validate({...s, slug}).length) continue;
+      if (s.status !== "published" || off.has(slug) || validate({...s, slug}).length) continue;
       map.set(slug, {...s, slug, builtIn: false});
     }
     return [...map.values()].sort((a, b) => a.order - b.order || a.slug.localeCompare(b.slug));

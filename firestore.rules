@@ -636,10 +636,41 @@ service cloud.firestore {
         && d.updatedBy == request.auth.uid;
     }
     match /helpArticles/{slug} {
-      // Anyone, even signed out, reads what the app shows; drafts stay with the owner.
-      allow get, list: if resource.data.status in ['published','hidden'] || adminAllowed();
+      // Anyone, even signed out, reads published articles only; drafts and hidden ones stay with the owner.
+      allow get, list: if resource.data.status == 'published' || adminAllowed();
       allow create, update: if adminAllowed() && slug.matches('[a-z0-9][a-z0-9-]{1,59}') && validHelp(request.resource.data);
       allow delete: if adminAllowed();
+    }
+    // Which built-in articles are switched off. Slugs only: built-in text is part of the app already.
+    function slugList(l) {
+      return l is list && l.size() <= 16
+          && (l.size() <= 0 || (l[0] is string && l[0].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 1 || (l[1] is string && l[1].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 2 || (l[2] is string && l[2].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 3 || (l[3] is string && l[3].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 4 || (l[4] is string && l[4].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 5 || (l[5] is string && l[5].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 6 || (l[6] is string && l[6].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 7 || (l[7] is string && l[7].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 8 || (l[8] is string && l[8].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 9 || (l[9] is string && l[9].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 10 || (l[10] is string && l[10].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 11 || (l[11] is string && l[11].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 12 || (l[12] is string && l[12].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 13 || (l[13] is string && l[13].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 14 || (l[14] is string && l[14].matches('[a-z0-9][a-z0-9-]{1,59}')))
+          && (l.size() <= 15 || (l[15] is string && l[15].matches('[a-z0-9][a-z0-9-]{1,59}')));
+    }
+    match /helpSettings/{settingId} {
+      allow get: if settingId == 'public';
+      allow list: if false;
+      allow create, update: if adminAllowed() && settingId == 'public'
+        && request.resource.data.keys().hasOnly(['hiddenDefaults','updatedAt','updatedBy'])
+        && request.resource.data.keys().hasAll(['hiddenDefaults','updatedAt','updatedBy'])
+        && slugList(request.resource.data.hiddenDefaults)
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if false;
     }
     match /adminAuditLogs/{auditId} {
       allow get, list: if adminAllowed() || staff('viewAudit');

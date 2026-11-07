@@ -211,13 +211,15 @@ function renderActivity(){
 // ---- Help center articles ----
 const HELP_STATUS={published:['منشور','ok'],draft:['مسودة',''],hidden:['مخفي','warn']};
 async function loadHelpAdmin(){
- const snap=await getDocs(collection(state.db,'helpArticles'));
+ const [snap,settings]=await Promise.all([getDocs(collection(state.db,'helpArticles')),getDoc(doc(state.db,'helpSettings','public'))]);
  state.helpStored=snap.docs.map(x=>({...x.data(),slug:x.id}));
+ state.helpHidden=settings.exists()&&Array.isArray(settings.data().hiddenDefaults)?settings.data().hiddenDefaults:[];
  state.rows=[];state.hasMore=false;renderList();
 }
 function helpRows(){
  const H=globalThis.TesterHubHelp,stored=new Map((state.helpStored||[]).map(a=>[a.slug,a])),rows=[];
- for(const d of H.DEFAULTS){const s=stored.get(d.slug);rows.push({...(s&&s.status!=='hidden'?s:d),slug:d.slug,builtIn:true,stored:s||null,status:s?s.status:'published'})}
+ const off=new Set(state.helpHidden||[]);
+ for(const d of H.DEFAULTS){const s=stored.get(d.slug);rows.push({...(s||d),slug:d.slug,builtIn:true,stored:s||null,status:off.has(d.slug)?'hidden':s?s.status:'published'})}
  for(const s of stored.values())if(!H.DEFAULTS.some(d=>d.slug===s.slug))rows.push({...s,builtIn:false,stored:s});
  return rows.sort((a,b)=>(a.order??0)-(b.order??0)||a.slug.localeCompare(b.slug));
 }
@@ -243,10 +245,11 @@ function renderHelpAdmin(){
  if(state.helpEdit!==undefined&&state.helpEdit!==null)return helpEditor(state.helpEdit===''?null:helpRows().find(r=>r.slug===state.helpEdit));
  const H=globalThis.TesterHubHelp;
  return '<div class="actions" style="margin-bottom:12px"><button class="btn" type="button" data-action="help-new">+ شرح جديد</button></div>'+helpRows().map(r=>{
-  const [label,tone]=HELP_STATUS[r.status]||[r.status,''],src=r.builtIn?(r.stored&&r.stored.status!=='hidden'?'أساسي معدّل':'أساسي'):'جديد';
+  const [label,tone]=HELP_STATUS[r.status]||[r.status,''],src=r.builtIn?(r.stored?'أساسي معدّل':'أساسي'):'جديد';
   const btns=['<button class="btn soft" type="button" data-action="help-edit" data-id="'+esc(r.slug)+'">تعديل</button>'];
   if(r.builtIn&&r.status!=='hidden')btns.push('<button class="btn soft" type="button" data-action="help-hide" data-id="'+esc(r.slug)+'">إخفاء</button>');
-  if(r.builtIn&&r.stored)btns.push('<button class="btn soft" type="button" data-action="help-reset" data-id="'+esc(r.slug)+'">'+(r.status==='hidden'?'إظهار الأصلي':'استرجاع الأصلي')+'</button>');
+  if(r.builtIn&&r.status==='hidden')btns.push('<button class="btn soft" type="button" data-action="help-show" data-id="'+esc(r.slug)+'">إظهار</button>');
+  if(r.builtIn&&r.stored&&r.status!=='hidden')btns.push('<button class="btn soft" type="button" data-action="help-reset" data-id="'+esc(r.slug)+'">استرجاع الأصلي</button>');
   if(!r.builtIn)btns.push('<button class="btn danger" type="button" data-action="help-delete" data-id="'+esc(r.slug)+'">حذف</button>');
   return '<article class="item"><div class="info"><strong>'+esc(r.title)+'</strong><small>'+esc(H.CATEGORIES[r.cat]?.title||r.cat)+' · '+src+' · <span dir="ltr">'+esc(r.slug)+'</span>'+(r.imageUrl?' · صورة':'')+(r.videoUrl?' · فيديو':'')+'</small></div><div class="actions"><span class="pill '+tone+'">'+label+'</span>'+btns.join('')+'</div></article>';
  }).join('');
@@ -265,6 +268,14 @@ async function saveHelp(a,{isNew=false}={}){
  batchAudit(batch,'save_help_article',slug,a.title);
  await batch.commit();
 }
+async function setHidden(slug,title,hide){
+ const list=new Set(state.helpHidden||[]);
+ if(hide)list.add(slug);else list.delete(slug);
+ const batch=writeBatch(state.db);
+ batch.set(doc(state.db,'helpSettings','public'),{hiddenDefaults:[...list].filter(s=>globalThis.TesterHubHelp.DEFAULTS.some(d=>d.slug===s)),updatedAt:serverTimestamp(),updatedBy:state.account.uid});
+ batchAudit(batch,'save_help_article',slug,(hide?'إخفاء: ':'إظهار: ')+title);
+ await batch.commit();
+}
 async function removeHelp(slug,title){
  const batch=writeBatch(state.db);
  batch.delete(doc(state.db,'helpArticles',slug));
@@ -278,9 +289,10 @@ async function helpAction(name,slug){
  if(name==='help-cancel'){state.helpEdit=null;renderList();return}
  if(!row)return;
  if(name==='help-hide'){
-  const base=globalThis.TesterHubHelp.DEFAULTS.find(d=>d.slug===slug);
   if(!await confirmDialog({title:'إخفاء «'+row.title+'»؟',body:'يختفي من مركز المساعدة، وتگدر ترجعه بأي وقت.',action:'إخفاء'}))return;
-  await saveHelp({...base,status:'hidden'});toast('انخفى الشرح.');
+  await setHidden(slug,row.title,true);toast('انخفى الشرح.');
+ }else if(name==='help-show'){
+  await setHidden(slug,row.title,false);toast('رجع الشرح يظهر.');
  }else if(name==='help-reset'||name==='help-delete'){
   const del=name==='help-delete';
   if(!await confirmDialog({title:del?'حذف «'+row.title+'» نهائياً؟':'استرجاع النسخة الأصلية؟',body:del?'ينحذف هذا الشرح من مركز المساعدة.':'تنحذف تعديلاتك ويرجع الشرح الأساسي كما هو.',action:del?'حذف':'استرجاع',danger:del}))return;
