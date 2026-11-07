@@ -36,7 +36,7 @@ beforeEach(async()=>{
 test('developer deletes their app with all its records and leaves other apps alone',async()=>{
  const d=db('d1');
  const counts=await countRelated({db:d,f,projectId:'p1',ownerUid:'d1'});
- assert.deepEqual(counts,{messages:1,reports:2,assignments:1,applications:1});
+ assert.deepEqual(counts,{messages:1,reports:2,joinRequests:0,assignments:1,applications:1});
  assert.equal(await deleteProject({db:d,f,projectId:'p1',ownerUid:'d1'}),true);
  const left=await remaining();
  assert.deepEqual(left.projects,['other']);

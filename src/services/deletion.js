@@ -1,6 +1,6 @@
 /* Permanent project deletion without a server, shared by the developer app and the admin console. */
 (function (root) {
-  const RELATED = ['messages', 'reports', 'assignments', 'applications'];
+  const RELATED = ['messages', 'reports', 'assignments', 'applications', 'joinRequests'];
   // Firestore rules read the same few documents for every write, so one batch can hold many deletes.
   const BATCH_SIZE = 100;
   const scoped = (f, db, name, projectId, ownerUid, extra = []) => {
@@ -32,6 +32,9 @@
       }
     }
     const finish = f.writeBatch(db);
+    // The public self-join card, if this app ever had one.
+    const card = f.doc(db, 'openings', projectId);
+    if ((await f.getDoc(card).catch(() => null))?.exists()) finish.delete(card);
     finish.delete(ref);
     if (audit) audit(finish);
     await finish.commit();
