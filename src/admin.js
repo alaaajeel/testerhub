@@ -345,9 +345,22 @@ function renderSupport(){
  return state.rows.map(t=>'<article class="item"><div class="info"><strong>'+esc(person(t.id))+'</strong><small>'+(t.last.sender==='admin'?'أنت: ':'')+esc(String(t.last.text||'').slice(0,120))+'</small><small>'+esc(stamped(t.last.createdAt))+'</small></div><div class="actions">'+(t.last.sender==='user'?'<span class="tag warn">بانتظار ردك</span>':'')+button('open-thread',t.id,'فتح')+'</div></article>').join('');
 }
 async function overview(){
- const all=[['users','المستخدمون',allowed('viewUsers')],['projects','التطبيقات',true],['assignments','المشاركات (مختبر × تطبيق)',allowed('deleteProjects')],['reports','التقارير',allowed('deleteProjects')||allowed('viewReports')],['messages','الرسائل',allowed('deleteProjects')]].filter(x=>x[2]);
- const counts=await Promise.all(all.map(x=>getCountFromServer(collection(state.db,x[0]))));
- $('metrics').innerHTML=all.map((x,i)=>'<div class="metric"><small>'+esc(x[1])+'</small><strong>'+number(counts[i].data().count)+'</strong></div>').join('');
+ // Aggregation counts (not collection scans); show the user/activity summary on every admin tab.
+ // Individual failures must never blank out the remaining metrics (e.g. Spark quota).
+ const stats=[
+  {label:'إجمالي المستخدمين',q:()=>collection(state.db,'users'),show:allowed('viewUsers')},
+  {label:'المختبرون',q:()=>query(collection(state.db,'users'),where('role','==','tester')),show:allowed('viewUsers')},
+  {label:'المطورون',q:()=>query(collection(state.db,'users'),where('role','==','developer')),show:allowed('viewUsers')},
+  {label:'متصلون الآن (تقديري)',q:()=>query(collection(state.db,'presence'),where('lastSeenAt','>=',Timestamp.fromMillis(Date.now()-2*60000))),show:allowed('viewUsers')},
+  {label:'نشطون خلال 24 ساعة',q:()=>query(collection(state.db,'presence'),where('lastSeenAt','>=',Timestamp.fromMillis(Date.now()-86400000))),show:allowed('viewUsers')},
+  {label:'التطبيقات',q:()=>collection(state.db,'projects'),show:true},
+  {label:'المشاركات (مختبر × تطبيق)',q:()=>collection(state.db,'assignments'),show:allowed('deleteProjects')},
+  {label:'التقارير',q:()=>collection(state.db,'reports'),show:allowed('deleteProjects')||allowed('viewReports')},
+  {label:'الرسائل',q:()=>collection(state.db,'messages'),show:allowed('deleteProjects')}
+ ].filter(x=>x.show);
+ const results=await Promise.all(stats.map(x=>getCountFromServer(x.q()).then(s=>s.data().count).catch(()=>null)));
+ $('metrics').innerHTML=stats.map((x,i)=>'<div class="metric"><small>'+esc(x.label)+'</small><strong>'+ (results[i]===null?'—':number(results[i])) +'</strong></div>').join('')
+  +(allowed('viewUsers')?'<div class="metrics-note">«متصل الآن» و«نشطون» تقديرات من آخر ظهور داخل TesterHub، مو دليل على فتح التطبيقات المختبرة. إذا ظهرت — فتعذرت قراءة المؤشر فقط، مو أن البيانات انحذفت. <button class="btn soft" type="button" data-tab="activity">تفاصيل مراقبة النشاط</button></div>':'');
 }
 const button=(action,id,label,tone='soft')=>'<button class="btn '+tone+'" type="button" data-action="'+action+'" data-id="'+esc(id)+'">'+label+'</button>';
 function projectRow(item){

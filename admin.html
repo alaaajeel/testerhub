@@ -31,6 +31,7 @@ main{max-width:1120px;margin:0 auto;padding:22px 16px 64px}
 #gate a{color:var(--blue);font-weight:600}
 .who{color:var(--muted);font-size:13px;margin:0 0 14px}
 .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px;margin-bottom:18px}
+.metrics-title{font-size:16px;color:var(--navy);margin:5px 2px 12px;font-weight:800}.metrics-note{grid-column:1/-1;color:var(--muted);font-size:12px;line-height:1.8;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:4px 2px}
 .help-form{display:grid;gap:10px;margin-top:6px}.help-form label{display:grid;gap:4px;font-size:13px;font-weight:700}.help-form input,.help-form select,.help-form textarea{font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;color:inherit}.help-form textarea{min-height:90px;resize:vertical}.help-form .steps{min-height:170px}.help-form .row2{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.help-form .hint{font-size:12px;font-weight:400;opacity:.75}.help-errors{color:#b42318;font-size:13px;margin:0}.activity-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px}.pill{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800;background:#eef3fb;color:#4b5d7f}.pill.ok{background:#e6f7ef;color:#078e5f}.pill.warn{background:#fff4e5;color:#b45f06}.metric{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px}
 .metric small{display:block;color:var(--muted);font-size:12.5px}.metric strong{display:block;font-size:28px;line-height:1.35;color:var(--navy);font-weight:700}
 .head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
@@ -112,6 +113,7 @@ dialog footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
  <section id="gate" class="card" role="status" aria-live="polite">جارٍ التحقق من صلاحية المشرف...</section>
  <section id="console" hidden>
   <p id="identity" class="who"></p>
+  <h2 class="metrics-title">إحصائيات المنصة والمستخدمين</h2>
   <div id="metrics" class="metrics"></div>
   <section class="card">
    <div class="head"><h1 id="listTitle">التطبيقات</h1>
