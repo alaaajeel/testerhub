@@ -612,7 +612,7 @@ async function getDashboard({fromServer=false}={}){
  const [p,a,t,r,m]=await Promise.all([
  read(query(collection(db,'projects'),where('ownerUid','==',user.uid))),
  read(query(collection(db,'assignments'),where('ownerUid','==',user.uid))),
- read(query(collection(db,'users'),where('available','==',true))),
+ loadTesterDirectory(user.uid,read,fromServer).then(docs=>({docs})),
  read(query(collection(db,'reports'),where('ownerUid','==',user.uid))),
  read(query(collection(db,'messages'),where('ownerUid','==',user.uid)))
  ]);
@@ -627,6 +627,23 @@ async function getDashboard({fromServer=false}={}){
  ]);
  const xp={totals:x?.exists?.()?x.data():null,ledgers:Object.fromEntries((l?.docs||[]).map(d=>[d.id,d.data()]))};
  return {projects:[],assignments:a.docs.map(tidy),testers:[],reports:r.docs.map(tidy),messages:m.docs.map(tidy),xp,crossCount:await crossWorkCount(user,read),support:await supportThread(user,read),...selfJoin,settings:JSON.parse(previewStorage.getItem('testerhub_settings')||'{"reminderHour":20}')};
+}
+const DIRECTORY_TTL=15*60000;
+let directoryCache={uid:'',at:0,docs:null};
+async function loadTesterDirectory(uid,read,fresh){
+ if(!fresh&&directoryCache.uid===uid&&directoryCache.docs&&Date.now()-directoryCache.at<DIRECTORY_TTL)return directoryCache.docs;
+ const {collection,query,where}=storeFns;
+ const snap=await read(query(collection(db,'users'),where('available','==',true)));
+ directoryCache={uid,at:Date.now(),docs:snap.docs};
+ return snap.docs;
+}
+// A tester's XP after a report was reviewed: two small reads instead of the whole dashboard.
+async function loadTesterXp(uid){
+ const [x,l]=await Promise.all([
+  storeFns.getDoc(storeFns.doc(db,'xpTotals',uid)).catch(()=>null),
+  storeFns.getDocs(storeFns.query(storeFns.collection(db,'xpAssignments'),storeFns.where('testerUid','==',uid))).catch(()=>null)
+ ]);
+ return {totals:x?.exists?.()?x.data():null,ledgers:Object.fromEntries((l?.docs||[]).map(d=>[d.id,d.data()]))};
 }
 async function supportThread(active,read){
  try{
@@ -1257,7 +1274,7 @@ async function switchRole(){
  const active=await currentUser();
  return accountService.updateProfile({role:active.role==='tester'?'developer':'tester'});
 }
-const api={isDemo,loadHelpArticles,setProjectTestMode,requestToJoin,cancelJoinRequest,decideJoinRequest,switchRole,sendSupport,setProfilePhoto,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,loadAdminNotices,markAdminNoticesRead,getLeague,setLeagueName,refreshLeagueName,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
+const api={isDemo,loadTesterXp,loadHelpArticles,setProjectTestMode,requestToJoin,cancelJoinRequest,decideJoinRequest,switchRole,sendSupport,setProfilePhoto,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,loadAdminNotices,markAdminNoticesRead,getLeague,setLeagueName,refreshLeagueName,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
 
 
 const app=document.getElementById('app');
@@ -1898,10 +1915,11 @@ document.addEventListener('keydown',()=>armBackGuard(),{capture:true});
  document.addEventListener('focusout',()=>setTimeout(update,60));
 })();
 
-let liveSubscriptions=[],liveSyncUid=null,liveSyncTimer=null,liveSyncDeferred=false,liveFetchInProgress=false;
+let liveSubscriptions=[],liveSyncUid=null,liveSyncTimer=null,liveSyncDeferred=false,liveFetchInProgress=false,livePending={};
+const LIVE_KEYS={projects:'projects',assignments:'assignments',reports:'reports',messages:'messages',supportMessages:'support'};
 function stopLiveSync(){
  for(const unsub of liveSubscriptions){try{unsub()}catch{}}
- liveSubscriptions=[];liveSyncUid=null;liveSyncDeferred=false;
+ liveSubscriptions=[];liveSyncUid=null;liveSyncDeferred=false;livePending={};
  if(liveSyncTimer!==null)clearTimeout(liveSyncTimer);
  liveSyncTimer=null;
 }
@@ -1919,6 +1937,7 @@ function startLiveSync(){
   let initialized=false,knownIds=new Set();
   liveSubscriptions.push(storeFns.onSnapshot(q,snap=>{
    const ids=new Set(snap.docs.map(d=>d.id));
+   if(user?.uid===uid)livePending[collectionName]=snap.docs.map(tidy);
    if(!initialized){
     // Waiting for a server-confirmed snapshot here swallowed the first real change.
     knownIds=ids;
@@ -1972,10 +1991,13 @@ async function flushLiveSync(){
  liveSyncTimer=null;
  if(!canRerenderLive()||liveFetchInProgress)return;
  liveFetchInProgress=true;
- const uid=user.uid;
+ const uid=user.uid,changed=livePending;livePending={};
  try{
-  const fresh=await api.getDashboard();
-  if(user?.uid===uid){dashboard=fresh;liveSyncDeferred=false;render()}
+  // The listener snapshots are complete for their queries, so they replace those lists at no extra read.
+  const next={...dashboard};
+  for(const [name,list] of Object.entries(changed))if(LIVE_KEYS[name])next[LIVE_KEYS[name]]=list;
+  if(changed.reports&&user.role==='tester')next.xp=await api.loadTesterXp(uid);
+  if(user?.uid===uid){dashboard=next;liveSyncDeferred=false;render()}
  }catch(err){console.warn('Cloud notification sync:',err)}
  finally{liveFetchInProgress=false}
 }
@@ -2203,7 +2225,7 @@ async function maybeDailyReminder(){
 }
 // Listeners stay live while hidden, so a full re-read on every return would only burn the Spark read quota.
 let lastFullRefresh=Date.now();
-window.addEventListener('visibilitychange',async()=>{if(!document.hidden&&user){try{if(Date.now()-lastFullRefresh>300000){lastFullRefresh=Date.now();await refresh()}if(liveSyncDeferred)queueLiveSync();maybeDailyReminder()}catch(err){console.warn('Refresh failed',err)}}});
+window.addEventListener('visibilitychange',async()=>{if(!document.hidden&&user){try{if(Date.now()-lastFullRefresh>1800000){lastFullRefresh=Date.now();await refresh()}if(liveSyncDeferred)queueLiveSync();maybeDailyReminder()}catch(err){console.warn('Refresh failed',err)}}});
 document.addEventListener('focusout',()=>{if(liveSyncDeferred)queueLiveSync()});
 setInterval(()=>{maybeDailyReminder()},60000);
 
