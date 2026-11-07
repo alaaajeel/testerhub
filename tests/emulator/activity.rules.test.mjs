@@ -104,3 +104,17 @@ test('activity never changes reports, the 14-day counter or XP', async () => {
  let xp = 0; await admin(async d => { xp = (await getDocs(collection(d, 'xpTotals'))).size + (await getDocs(collection(d, 'xpAssignments'))).size; });
  assert.equal(xp, 0);
 });
+
+test('another developer sees nothing of a tester\'s activity, here or in their own app', async () => {
+ await admin(async d => {
+  await setDoc(doc(d, 'users', 'd2'), {name: 'User d2', email: 'd2@example.com', role: 'developer', available: false});
+  await setDoc(doc(d, 'assignments', 'p2_t1'), {projectId: 'p2', testerUid: 't1', ownerUid: 'd2', joinedDay: '2026-11-05', checkins: []});
+ });
+ await assertSucceeds(updateDoc(doc(db('t1'), 'assignments', 'p1_t1'), {testerSeenAt: serverTimestamp()}));
+ await assertFails(getDoc(doc(db('d2'), 'assignments', 'p1_t1')));
+ await assertFails(getDocs(query(collection(db('d2'), 'assignments'), where('testerUid', '==', 't1'))));
+ await assertFails(getDoc(doc(db('d2'), 'presence', 't1')));
+ // Their own record of the same tester never carries the other app's stamp.
+ const own = (await assertSucceeds(getDoc(doc(db('d2'), 'assignments', 'p2_t1')))).data();
+ assert.equal('testerSeenAt' in own, false);
+});
