@@ -1753,7 +1753,7 @@ function renderView(){
  if(!user){app.innerHTML=authScreen();return}
  if(!api.isDemo&&user.suspended){app.innerHTML=suspendedScreen();return}
  if(!api.isDemo&&(user.profileMissing||!user.emailVerified)){app.innerHTML=accountGate();return}
- const screens=user.role==='developer'?{home:devHome,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),tester:testerDetails,chat:chatPage,support:supportPage,help:helpPage,rewards,announcements:announcementsPage,profile}:{home:testerHome,tests:testerTests,report:dailyReport,chat:chatPage,support:supportPage,rewards,announcements:announcementsPage,profile};
+ const screens=user.role==='developer'?{home:devHome,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),tester:testerDetails,chat:chatPage,support:supportPage,help:helpPage,rewards,announcements:announcementsPage,profile}:{home:testerHome,tests:testerTests,report:dailyReport,chat:chatPage,support:supportPage,help:helpPage,rewards,announcements:announcementsPage,profile};
  const content=(screens[tab]||screens.home)();
  app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar()+appMenu()+notificationPanel();
 }
@@ -1765,7 +1765,7 @@ function helpFromHash(hash=location.hash){
  return m?(m[1]?m[1]+':'+m[2]:''):null;
 }
 {const start=helpFromHash();if(start!==null){tab='help';helpView=start}}
-window.addEventListener('hashchange',()=>{const v=helpFromHash();if(v===null)return;drawerOpen=false;noticeOpen=false;tab='help';helpView=v;helpTerm='';render()});
+window.addEventListener('hashchange',()=>{if(Date.now()-(backNav?.handledAt||0)<400){syncHelpHash();return}const v=helpFromHash();if(v===null)return;drawerOpen=false;noticeOpen=false;tab='help';helpView=v;helpTerm='';render()});
 function syncHelpHash(){
  try{
   const want=tab==='help'?'#help'+(helpView?'/'+helpView.replace(':','/'):''):'';
@@ -1841,7 +1841,7 @@ function trackScreen(){
 function armBackGuard(){
  if(backNav.guarded||Date.now()<backNav.exitUntil)return;
  if(navigator.userActivation&&!navigator.userActivation.hasBeenActive)return;
- try{history.pushState({testerhub:'back-guard'},'');backNav.guarded=true}catch{}
+ try{history.pushState({testerhub:'back-guard'},'');backNav.guarded=true;backNav.len=history.length}catch{}
 }
 function closeTopLayer(){
  const dialog=document.querySelector('dialog[open]');
@@ -1851,6 +1851,9 @@ function closeTopLayer(){
  return false;
 }
 function handleBack(){
+ // Opening a #help link adds a history entry; that is navigation, not the back button. hashchange handles it.
+ if(history.length>(backNav.len||0)){backNav.len=history.length;return}
+ backNav.handledAt=Date.now();
  backNav.guarded=false;
  if(closeTopLayer()){render();return}
  const prev=backNav.stack.pop();
