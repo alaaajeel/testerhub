@@ -64,7 +64,7 @@ test('the developer follow-up flags testers quiet for two days or more and says 
   {id:'notStarted',joinedDay:null,checkins:[]}
  ],now);
  assert.deepEqual(list.map(r=>[r.a.id,r.flagged]),[['quiet',true],['quietButSeen',false],['fresh',false]]);
- assert.match(from('function followUpSection(','function testModeSection('),/عدم فتح TesterHub ما يعني إن المختبر ما يستخدم تطبيقك/);
+ assert.match(from('function followUpSection(','function testModeSection('),/فتح TesterHub ما يثبت إن المختبر جرّب تطبيقك، وعدم فتحه ما يعني إنه ما يستخدمه/);
 });
 test('activity code never writes check-ins, start days, report times or XP',()=>{
  const code=from('const ONLINE_MS=','async function getDashboard(');
@@ -72,4 +72,22 @@ test('activity code never writes check-ins, start days, report times or XP',()=>
  // The developer follow-up only reads; its buttons send a message or invite a backup.
  const follow=from('const FOLLOW_UP_DAYS=','function testModeSection(');
  assert.doesNotMatch(follow,/updateDoc|setDoc|writeBatch/);
+});
+test('the developer follow-up only covers this app and only for its owner',()=>{
+ const today=new Date(),key=n=>new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate()-n)).toISOString().slice(0,10);
+ const daysSince=eval(html.match(/const daysSince=(\(dateKey\)=>\{[^\n]*?\});/)[1]);
+ const ctx=vm.createContext({api:{daysSince},DAY_MS:86400000,user:{uid:'d1'},clean:String,formatNum:String,ico:()=>'',testerLabel:uid=>uid});
+ const section=vm.runInContext(from('const INACTIVE_AFTER_DAYS=','function participationPanel(')+from('const stamp=','async function setProjectTestMode(')+from('function agoText(','function testModeSection(')+';followUpSection',ctx);
+ const quiet=(id,projectId,ownerUid)=>({id,projectId,ownerUid,testerUid:'tester-'+id,joinedDay:key(5),checkins:[key(5)]});
+ const out=section({id:'p1',ownerUid:'d1'},[quiet('a','p1','d1'),quiet('b','p2','d1'),quiet('c','p1','d2')]);
+ assert.match(out,/tester-a/);
+ assert.doesNotMatch(out,/tester-b|tester-c/);
+ assert.equal(section({id:'p9',ownerUid:'d2'},[quiet('d','p9','d2')]),'');
+ assert.match(out,/فتح TesterHub ما يثبت إن المختبر جرّب تطبيقك/);
+});
+test('testers are told what the developer sees, in the app and the privacy page',()=>{
+ assert.match(html,/class="tiny seen-note">خلال فترة اختبار أي تطبيق، يشوف مطوره متى فتحت TesterHub آخر مرة/);
+ assert.match(html,/ما يشوف نشاطك بتطبيقات غيره، ولا يُعتبر فتح TesterHub دليلاً على أنك جرّبت التطبيق/);
+ const privacy=readFileSync(new URL('../privacy.html',import.meta.url),'utf8');
+ assert.match(privacy,/خلال فترة ذلك الاختبار فقط. لا يرى نشاطك في تطبيقات غيره/);
 });
