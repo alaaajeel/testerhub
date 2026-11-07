@@ -68,3 +68,23 @@ test('XP is never a client-writable field and the old formula is gone from the U
  assert.doesNotMatch(users,/points|xp/i);
  assert.match(rules,/resource\.data\.get\('reviewStatus',''\) != 'accepted'/);
 });
+
+test('one refused award does not hold back other apps, and the same app waits for the next sync',async()=>{
+ const src=from('function settleWithin(','\n',0)+'\n'+from('async function awardPending(','// Tester side:');
+ const calls=[];
+ const ctx=vm.createContext({console:{warn(){}},calls,awardXp:async(ev,first)=>{calls.push([ev.id,first]);if(ev.id==='bad')throw Object.assign(Error('denied'),{code:'permission-denied'});return true}});
+ const awardPending=vm.runInContext(src+';awardPending',ctx);
+ const ev=(id,assignmentId,points=10)=>({id,assignmentId,kind:'report',points});
+ const ledgers=new Map();
+ const points=await awardPending([ev('bad','a1'),ev('later','a1'),ev('ok','a2',20)],ledgers);
+ assert.equal(points,20);
+ assert.deepEqual(plain(calls),[['bad',true],['ok',true]]);
+ assert.equal(ledgers.has('a1'),false);
+ await assert.rejects(awardPending([ev('bad','a3')],new Map()),/denied/);
+});
+test('a write that waits on the network is released after a bounded wait',async()=>{
+ const settleWithin=vm.runInContext(from('function settleWithin(','\n',0)+';settleWithin',vm.createContext({setTimeout,clearTimeout,Promise}));
+ assert.deepEqual(plain(await settleWithin(Promise.resolve(5),50)),{done:true,value:5});
+ assert.deepEqual(plain(await settleWithin(new Promise(()=>{}),20)),{done:false});
+ assert.match(html,/const XP_WRITE_WAIT=12000;/);
+});

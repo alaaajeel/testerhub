@@ -744,7 +744,9 @@ async function reviewReport(reportId,decision){
   }
   await batch.commit();
   if(decision!=='accepted')return {};
-  try{return {awarded:await awardForAcceptedReport({...r,id:reportId,reviewStatus:'accepted'})}}
+  // On a weak network the award batch waits for the connection; the review itself is already saved, so the
+  // screen is released after a short wait and the SDK delivers the batch later (or the tester's sync does).
+  try{const award=await settleWithin(awardForAcceptedReport({...r,id:reportId,reviewStatus:'accepted'}),XP_WRITE_WAIT);return award.done?{awarded:award.value}:{awarded:0,awardQueued:true}}
   catch(err){console.warn('XP award:',err);return {awarded:0,awardFailed:true}}
  }
  const d=demoState(),r=d.reports.find(x=>x.id===reportId);
@@ -761,6 +763,9 @@ async function reviewReport(reportId,decision){
 // can only grow by that event's points (firestore.rules), so points cannot be repeated or edited from the browser.
 const XP_POINTS={report:10,bug:20,retest:10,cycle:50};
 const XP_CYCLE_MIN_ACCEPTED=7;
+const XP_WRITE_WAIT=12000;
+// Resolves with the result if the promise settles in time; otherwise reports it as still running.
+function settleWithin(promise,ms){let timer;return Promise.race([promise.then(value=>({done:true,value})),new Promise(ok=>{timer=setTimeout(()=>ok({done:false}),ms)})]).finally(()=>clearTimeout(timer))}
 // Days before this UTC date were scored by the old formula (10 per reported day, +20 for 14 days). That
 // history is kept and shown on its own, unverified, and never mixed into verified points or rankings.
 const LEGACY_XP_CUTOFF=String(window.TESTERHUB_XP_START||'2026-11-06');
@@ -823,12 +828,17 @@ async function awardXp(ev,firstForAssignment){
  await batch.commit();
  return true;
 }
+// One refused event no longer holds back other apps' events. Later events of the same app wait for the next
+// sync, because the rules count an app as helped only on its first event.
 async function awardPending(events,ledgers){
- let points=0;
+ let points=0,firstError=null;const blocked=new Set();
  for(const ev of events){
-  if(await awardXp(ev,!ledgers.has(ev.assignmentId)))points+=ev.points;
+  if(blocked.has(ev.assignmentId))continue;
+  try{if(await awardXp(ev,!ledgers.has(ev.assignmentId)))points+=ev.points}
+  catch(err){blocked.add(ev.assignmentId);firstError??=err;console.warn('XP event:',ev.id,err);continue}
   const l=ledgers.get(ev.assignmentId)||{};ledgers.set(ev.assignmentId,{...l,[ev.kind+'s']:(l[ev.kind+'s']||0)+1});
  }
+ if(firstError&&!points)throw firstError;
  return points;
 }
 // Tester side: records any accepted work that has no event yet (for example a review saved before this
@@ -853,11 +863,11 @@ async function syncMyXp(){
  ]);
  const ledgers=new Map(l.docs.map(x=>[x.id,x.data()]));
  const pending=pendingXpEvents({reports:r.docs.map(tidy),assignments:a.docs.map(tidy),eventIds:new Set(e.docs.map(x=>x.id)),ledgers});
- let added=0;
- try{added=await awardPending(pending,ledgers)}catch(err){console.warn('XP sync:',err)}
+ let added=0,queued=false;
+ try{const run=await settleWithin(awardPending(pending,ledgers),XP_WRITE_WAIT);if(run.done)added=run.value;else queued=true}catch(err){console.warn('XP sync:',err)}
  const totals=await getDocFromServer(doc(db,'xpTotals',active.uid)).catch(()=>null);
  const fresh=added?await getDocs(query(collection(db,'xpAssignments'),where('testerUid','==',active.uid))):l;
- return {added,totals:totals?.exists()?totals.data():null,ledgers:Object.fromEntries(fresh.docs.map(x=>[x.id,x.data()]))};
+ return {added,queued,totals:totals?.exists()?totals.data():null,ledgers:Object.fromEntries(fresh.docs.map(x=>[x.id,x.data()]))};
 }
 // Developer side, right after accepting: award this report, its retest, and a completed cycle if now earned.
 async function awardForAcceptedReport(report){
@@ -1398,7 +1408,7 @@ let rewardsState='idle',leagueKind='day',league=null,leagueState='idle';
 async function openRewards(){
  rewardsState='loading';render();
  const uid=user?.uid;
- try{const xp=await api.syncMyXp();if(user?.uid!==uid)return;if(xp)dashboard.xp={totals:xp.totals,ledgers:xp.ledgers};rewardsState='ready';if(xp?.added)toast('انضافت '+formatNum(xp.added)+' XP من مساهمات مقبولة')}
+ try{const xp=await api.syncMyXp();if(user?.uid!==uid)return;if(xp)dashboard.xp={totals:xp.totals,ledgers:xp.ledgers};rewardsState='ready';if(xp?.queued)toast('الاتصال ضعيف؛ نقاطك تنحسب تلقائياً أول ما يرجع الاتصال');else if(xp?.added)toast('انضافت '+formatNum(xp.added)+' XP من مساهمات مقبولة')}
  catch(err){console.warn('XP:',err);rewardsState='error'}
  await api.refreshLeagueName().catch(err=>console.warn('League name:',err));
  await loadLeague();
@@ -1805,7 +1815,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='confirm-join'){await api.confirmJoin(id);await refresh();toast('تم تسجيل تأكيد انضمامك، وبدأ عداد 14 يوم');return}
  if(action==='write-report'){selectedAssignmentId=id;tab='report';render();return}
  if(action==='open-chat'){selectedAssignmentId=id;tab='chat';if(user.role==='developer')selectedProjectId=dashboard.assignments.find(a=>a.id===id)?.projectId||selectedProjectId;render();return}
- if(action==='review-report'){const decision=button.dataset.decision;const result=await api.reviewReport(id,decision)||{};await refresh();toast(decision==='accepted'?(result.awarded?'تم قبول التقرير وإضافة +'+formatNum(result.awarded)+' XP للمختبر':result.awardFailed?'تم قبول التقرير. النقاط تنضاف للمختبر عند فتحه صفحة النقاط':'تم قبول التقرير'):decision==='clarify'?'تم طلب التوضيح وإرسال رسالة للمختبر':'تم رفض التقرير');return}
+ if(action==='review-report'){const decision=button.dataset.decision;const result=await api.reviewReport(id,decision)||{};await refresh();toast(decision==='accepted'?(result.awarded?'تم قبول التقرير وإضافة +'+formatNum(result.awarded)+' XP للمختبر':result.awardQueued?'تم قبول التقرير. الاتصال ضعيف، والنقاط تنضاف تلقائياً أول ما يرجع الاتصال':result.awardFailed?'تم قبول التقرير. النقاط تنضاف للمختبر عند فتحه صفحة النقاط':'تم قبول التقرير'):decision==='clarify'?'تم طلب التوضيح وإرسال رسالة للمختبر':'تم رفض التقرير');return}
  if(action==='mark-fixed'){await api.resolveLatestIssue(id);await refresh();tab='chat';toast('تم إبلاغ المختبر بأن المشكلة انحلّت');return}
  if(action==='project-details'){selectedProjectId=id;tab='details';render();return}
  if(action==='edit-draft'){draftEditingId=id;tab='new';render();return}
