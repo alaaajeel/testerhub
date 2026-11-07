@@ -1777,7 +1777,7 @@ function renderView(){
  if(!api.isDemo&&(user.profileMissing||!user.emailVerified)){app.innerHTML=accountGate();return}
  const screens=user.role==='developer'?{home:devHome,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),tester:testerDetails,chat:chatPage,support:supportPage,help:helpPage,rewards,announcements:announcementsPage,profile}:{home:testerHome,tests:testerTests,report:dailyReport,chat:chatPage,support:supportPage,help:helpPage,rewards,announcements:announcementsPage,profile};
  const content=(screens[tab]||screens.home)();
- app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar()+appMenu()+notificationPanel();
+ app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+appMenu()+notificationPanel();
 }
 let selectedProjectId=null,selectedAssignmentId=null,draftEditingId=null,selectedTesterUid=null,testerBack='testers';
 // ---- Help center ----
