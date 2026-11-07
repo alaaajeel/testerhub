@@ -235,7 +235,7 @@ html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 .segmented button.active{background:#fff;color:#1559b7;box-shadow:0 2px 6px rgba(21,70,141,.12)}
 .league-list{display:grid;gap:6px}
 .league-row{display:flex;align-items:center;gap:10px;min-height:48px;padding:7px 10px;border:1px solid #e1eaf7;border-radius:12px;background:#fbfcff;min-width:0}
-.drawer-label{display:inline-flex;align-items:center;gap:10px}.drawer-label svg.ico{color:#4a78c2}.selected .drawer-label svg.ico{color:inherit}svg.ico{display:inline-block;vertical-align:-.2em;flex:none}.xp-badge svg.ico,.badge svg.ico,.chip svg.ico{vertical-align:-.15em}.league-photo,.profile-photo{border-radius:50%;object-fit:cover;flex:none;background:#e8eef8}.league-photo{width:34px;height:34px}.profile-photo{width:54px;height:54px}.sample-tag{font-size:10px;font-weight:700;color:#7a8aa6;background:#eef3fb;border-radius:999px;padding:1px 7px;vertical-align:middle}.photo-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}.photo-pick{cursor:pointer;flex:none}.league-row.mine{border-color:#0caa79;background:#ebfaf3}
+.drawer-label{display:inline-flex;align-items:center;gap:10px}.drawer-label svg.ico{color:#4a78c2}.selected .drawer-label svg.ico{color:inherit}svg.ico{display:inline-block;vertical-align:-.2em;flex:none}.xp-badge svg.ico,.badge svg.ico,.chip svg.ico{vertical-align:-.15em}.league-photo,.profile-photo{border-radius:50%;object-fit:cover;flex:none;background:#e8eef8}.league-photo{width:34px;height:34px}.profile-photo{width:54px;height:54px}.photo-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}.photo-pick{cursor:pointer;flex:none}.league-row.mine{border-color:#0caa79;background:#ebfaf3}
 .league-rank{width:28px;height:28px;flex:none;display:grid;place-items:center;border-radius:50%;background:#eef2f8;font-size:12px;font-weight:800;color:#5b6b8c}
 .league-rank.top{background:linear-gradient(135deg,#f5c242,#e3a33e);color:#fff}
 .league-who{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -887,9 +887,12 @@ const XP_BADGES=[
 const xpBadges=t=>XP_BADGES.filter(([,ok])=>ok(t||{})).map(([name])=>name);
 const LEAGUE_SIZE=20;
 // Ranks by points; ties are ordered by account id so the list does not jump between loads.
-function rankLeague(rows){return rows.slice().sort((a,b)=>(b.points||0)-(a.points||0)||String(a.uid).localeCompare(String(b.uid))).map((r,i)=>({...r,rank:i+1}))}
+// Equal points share a rank (1, 1, 3), the same number the server count gives a member outside the list;
+// the account id only keeps the display order steady.
+function rankLeague(rows){const sorted=rows.slice().sort((a,b)=>(b.points||0)-(a.points||0)||String(a.uid).localeCompare(String(b.uid)));return sorted.map(r=>({...r,rank:1+sorted.filter(x=>(x.points||0)>(r.points||0)).length}))}
 // What the league may show of a member: their profile name and photo, unless they chose to hide them.
-const publicOf=p=>p&&!p.hidden?{name:p.name||null,photo:typeof p.photo==='string'&&/^data:image\/(webp|jpeg);base64,/.test(p.photo)?p.photo:null}:{name:null,photo:null};
+const leagueConsent=p=>!!p&&(p.consent===true||(!('consent' in p)&&!('hidden' in p)));
+const publicOf=p=>leagueConsent(p)?{name:p.name||null,photo:typeof p.photo==='string'&&/^data:image\/(webp|jpeg);base64,/.test(p.photo)?p.photo:null}:{name:null,photo:null};
 async function getLeague(kind='day'){
  const active=await currentUser();if(!active)return null;
  const period=kind==='month'?xpMonthKey():kind==='week'?xpWeekKey():xpDayKey();
@@ -898,7 +901,7 @@ async function getLeague(kind='day'){
   const all=rankLeague(Object.values(x.periods||{}).filter(p=>p.period===period));
   const decorate=r=>({...r,...publicOf(names[r.uid]),total:x.totals?.[r.uid]?.points||0,apps:x.totals?.[r.uid]?.apps||0});
   const mine=all.find(r=>r.uid===active.uid);
-  return {period,kind,rows:all.slice(0,LEAGUE_SIZE).map(decorate),me:mine?decorate(mine):null,rank:mine?.rank||null,showName:!!names[active.uid]&&!names[active.uid].hidden};
+  return {period,kind,rows:all.slice(0,LEAGUE_SIZE).map(decorate),me:mine?decorate(mine):null,rank:mine?.rank||null,showName:leagueConsent(names[active.uid])};
  }
  const {collection,query,where,orderBy,limit,getDocs,getDoc,doc,documentId,getCountFromServer}=storeFns;
  const [top,mine,shown]=await Promise.all([
@@ -914,10 +917,9 @@ async function getLeague(kind='day'){
  const me=mine.exists()?mine.data():null;
  let rank=null;
  if(me){const ahead=await getCountFromServer(query(collection(db,'xpPeriods'),where('period','==',period),where('points','>',me.points||0)));rank=ahead.data().count+1}
- return {period,kind,rows:rankLeague(rows).map(decorate),me:me?decorate(me):null,rank,showName:shown.exists()&&!shown.data().hidden};
+ return {period,kind,rows:rankLeague(rows).map(decorate),me:me?decorate(me):null,rank,showName:shown.exists()&&leagueConsent(shown.data())};
 }
-// Opt-in only: the league shows a name just for members who switch this on, and only their profile name.
-// Members appear in the league by their profile name unless they hide it; the email never appears.
+// Opt-in only: the league shows a member's profile name and photo after they switch this on; never the email.
 let myPublicProfile=null;
 async function writePublicProfile(changes){
  const active=await currentUser();if(!active)throw Error('سجّل الدخول أولاً');
@@ -928,16 +930,15 @@ async function writePublicProfile(changes){
  const next={...(myPublicProfile||{}),name:active.name,...changes};for(const k of Object.keys(next))if(next[k]===null)delete next[k];
  myPublicProfile=next;return next;
 }
-async function setLeagueName(show){return writePublicProfile({hidden:!show})}
+async function setLeagueName(show){return writePublicProfile({consent:!!show,hidden:null})}
 async function setProfilePhoto(photo){return writePublicProfile({photo:photo||null})}
-// Creates the league entry for members who never chose, and keeps the shown name equal to the profile name.
+// Keeps the shown name equal to the profile name. It never creates an entry: showing a name is the member's choice.
 async function refreshLeagueName(){
  const active=await currentUser();if(!active)return null;
- if(isDemo){myPublicProfile=demoState().publicProfiles?.[active.uid]||await writePublicProfile({hidden:false});return myPublicProfile}
+ if(isDemo){myPublicProfile=demoState().publicProfiles?.[active.uid]||null;return myPublicProfile}
  const shown=await storeFns.getDoc(storeFns.doc(db,'publicProfiles',active.uid)).catch(()=>null);
  if(!shown)return myPublicProfile;
  myPublicProfile=shown.exists()?shown.data():null;
- if(!myPublicProfile)return writePublicProfile({hidden:false}).catch(err=>{console.warn('League name:',err);return null});
  if(myPublicProfile.name!==active.name)return writePublicProfile({}).catch(err=>{console.warn('League name:',err);return myPublicProfile});
  return myPublicProfile;
 }
@@ -1412,22 +1413,7 @@ async function loadLeague(kind=leagueKind){
 function leaguePhoto(r){return r.photo?`<img class="league-photo" src="${clean(r.photo)}" alt="" width="34" height="34" loading="lazy">`:avatar(r.name||'م')}
 function leagueRow(r,mine){
  const level=xpLevel(r.total||0),name=mine?(r.name?r.name+' (أنت)':'أنت'):r.name||'مساهم';
- return `<div class="league-row ${mine?'mine':''}"><span class="league-rank ${r.rank<=3?'top':''}">${formatNum(r.rank)}</span>${leaguePhoto(r)}<div class="league-who"><strong>${clean(name)}${r.sample?' <span class="sample-tag">تجريبي</span>':''}</strong><span class="tiny">${clean(level.name)}${r.apps?' · ساعد '+formatNum(r.apps)+' تطبيق':''}</span></div><span class="league-points">${formatNum(r.points||0)} XP</span></div>`;
-}
-// First-week warm-up: until this date, up to five sample members compete in the same list so the board
-// is not empty. Each is marked «تجريبي», none is ever stored, and they leave one by one as days pass
-// and as real members join.
-const LEAGUE_WARMUP_UNTIL=Date.parse(String(window.TESTERHUB_LEAGUE_WARMUP_UNTIL||'2026-11-13T00:00:00Z'));
-const LEAGUE_WARMUP=[['زينب',{day:40,week:130,month:130}],['حسين',{day:30,week:100,month:100}],['مريم',{day:20,week:70,month:70}],['علي',{day:20,week:50,month:50}],['نور',{day:10,week:30,month:30}]];
-function warmupRows(real,kind,now=Date.now()){
- if(!(now<LEAGUE_WARMUP_UNTIL))return [];
- const byDay=Math.ceil(LEAGUE_WARMUP.length*(LEAGUE_WARMUP_UNTIL-now)/(7*86400000));
- const count=Math.max(0,Math.min(LEAGUE_WARMUP.length,byDay,LEAGUE_WARMUP.length-real));
- return LEAGUE_WARMUP.slice(0,count).map(([name,p],i)=>({uid:'sample-'+i,sample:true,name,points:p[kind]||p.week,total:p.week,apps:1}));
-}
-// Real members stay ahead of a sample on equal points.
-function withWarmup(rows,kind,now){
- return rows.concat(warmupRows(rows.length,kind,now)).sort((a,b)=>(b.points||0)-(a.points||0)||(a.sample?1:0)-(b.sample?1:0)).map((r,i)=>({...r,rank:i+1}));
+ return `<div class="league-row ${mine?'mine':''}"><span class="league-rank ${r.rank<=3?'top':''}">${formatNum(r.rank)}</span>${leaguePhoto(r)}<div class="league-who"><strong>${clean(name)}</strong><span class="tiny">${clean(level.name)}${r.apps?' · ساعد '+formatNum(r.apps)+' تطبيق':''}</span></div><span class="league-points">${formatNum(r.points||0)} XP</span></div>`;
 }
 function leagueSection(){
  const tabs=[['day','اليوم'],['week','هذا الأسبوع'],['month','هذا الشهر']].map(([k,label])=>`<button type="button" class="${leagueKind===k?'active':''}" data-action="league-kind" data-id="${k}" aria-pressed="${leagueKind===k}">${label}</button>`).join('');
@@ -1435,17 +1421,16 @@ function leagueSection(){
  if(leagueState==='loading'&&!league)body='<div class="tiny">جاري تحميل الترتيب…</div>';
  else if(leagueState==='error')body='<div class="notice">تعذّر تحميل الترتيب الآن. حاول مرة ثانية.</div>';
  else if(league){
-  const list=withWarmup(league.rows,leagueKind),rows=list.map(r=>leagueRow(r,r.uid===user.uid)).join('');
+  const rows=league.rows.map(r=>leagueRow(r,r.uid===user.uid)).join('');
   const meOutside=league.me&&!league.rows.some(r=>r.uid===user.uid);
-  const samplesAhead=league.me?list.filter(r=>r.sample&&(r.points||0)>(league.me.points||0)).length:0;
   const period=leagueKind==='month'?'هذا الشهر':leagueKind==='week'?'هذا الأسبوع':'اليوم';
   body=(rows||`<div class="empty">ماكو نقاط موثّقة ${period} لحد الآن. أول تقرير مقبول يحطك بالترتيب.</div>`)+
-   (meOutside?`<div class="league-gap">…</div>${leagueRow({...league.me,rank:(league.rank||0)+samplesAhead},true)}`:'')+
+   (meOutside?`<div class="league-gap">…</div>${leagueRow({...league.me,rank:league.rank},true)}`:'')+
    (!league.me&&rows?'<div class="tiny" style="margin-top:8px">تدخل الترتيب أول ما ينقبل لك تقرير.</div>':'');
  }
  const show=!!league?.showName;
  return `<section class="surface league" aria-label="دوري المساهمين"><div class="row between"><div class="lead">${ico('rewards',19)} دوري المساهمين</div><span class="tiny">بالنقاط الموثّقة</span></div><div class="segmented" role="group" aria-label="فترة الترتيب">${tabs}</div><div class="league-list">${body}</div>
- <label class="league-name"><input type="checkbox" data-change="league-name" ${show?'checked':''} ${league?'':'disabled'}><span>اظهر اسمي وصورتي بالترتيب<small>يظهر اسمك من ملفك الشخصي وصورتك إن أضفتها. إذا ألغيت التفعيل يظهر «مساهم». البريد ما يظهر أبداً.</small></span></label>
+ <label class="league-name"><input type="checkbox" data-change="league-name" ${show?'checked':''} ${league?'':'disabled'}><span>اظهر اسمي وصورتي بالترتيب<small>بموافقتك يظهر اسمك من ملفك الشخصي وصورتك إن أضفتها. بدونها يظهر «مساهم» بلا صورة. البريد ما يظهر أبداً.</small></span></label>
  <div class="tiny">ترتيب اليوم يبدأ من جديد كل يوم، والأسبوعي كل إثنين، فالكل يگدر ينافس، حتى المتطوعين اللي ما عندهم تطبيق.</div></section>`;
 }
 function rewards(){
@@ -1531,7 +1516,7 @@ function projectDetails(id){
 
  ${p.status==='draft'?'':groupLinkSection(p)}${addTestersSection(p,assignments)}<div class="section-title">المختبرون المشاركون</div>${assignments.length?`<div class="surface tester-list">${assignments.map(a=>testerRow({uid:a.testerUid,name:testerLabel(a.testerUid,assignments),status:testerStatus(a)+' · '+formatNum(a.checkins?.length||0)+' يوم بتقرير',progress:(a.checkins?.length||0)/14*100,active:lastActive(a),count:threadMessages(a.id).length})).join('')}</div>`:'<div class="tab-empty">لم ينضم مختبرون بعد</div>'}`;
 }
-function profile(){return `${adminAuthorized?'<div class="surface"><a class="cta blue wide" style="display:block;text-align:center;text-decoration:none;padding:12px" href="./admin.html">'+ico('shield',18)+' لوحة إدارة المنصة</a></div>':''}${profileEditor()}<div class="surface"><div class="user-bar"><div><div class="bold">${clean(user.name)}</div><small class="email-ltr">${clean(user.email)}</small></div>${myPublicProfile?.photo?`<img class="profile-photo" src="${clean(myPublicProfile.photo)}" alt="صورتك" width="54" height="54">`:`<div class="app-mark" style="width:54px;height:54px;border-radius:50%;background:linear-gradient(125deg,#2a78dc,#0eae8b);color:#fff;display:grid;place-items:center">${ico('user',28)}</div>`}</div><div class="photo-actions"><label class="cta outline photo-pick">${ico('camera',16)} ${myPublicProfile?.photo?'تغيير صورتك':'إضافة صورة شخصية'}<input type="file" accept="image/*" data-change="profile-photo" hidden></label>${myPublicProfile?.photo?'<button type="button" class="cta outline" data-action="remove-photo">إزالة الصورة</button>':''}</div><div class="tiny">تظهر صورتك واسمك بترتيب الدوري ليعرفك الكل. البريد ما يظهر أبداً.</div><div class="divider"></div><span class="chip">${user.role==='developer'?'واجهة المطور':'واجهة المختبر'}</span></div>${user.role==='tester'?`<div class="surface"><div class="lead">المشاركة بالاختبارات</div><label class="checks"><input type="checkbox" data-change="availability" ${user.available?'checked':''}/><span>إظهار بريدي للمطورين كأحد المختبرين المتاحين</span></label><div class="small">لن يظهر بريدك إلا للمطورين المسجلين، لغرض إضافتك إلى قائمة الاختبار.</div></div><div class="surface"><div class="lead">تذكيري اليومي</div><div class="setting-row"><span class="small">وقت التذكير</span><select id="reminder-hour">${Array.from({length:24},(_,i)=>`<option value="${i}" ${i===api.getReminderHour()?'selected':''}>${(i%12)||12}:00 ${i<12?'ص':'م'}</option>`).join('')}</select></div><button class="cta outline wide" data-action="enable-reminder">${ico('bell',16)} السماح بإشعار التذكير</button><button class="cta outline wide" style="margin-top:8px" data-action="calendar-reminder">${ico('calendar',16)} إضافة تذكير 14 يوم إلى تقويم الهاتف</button><div class="card-note">${window.TESTERHUB_VAPID_KEY?'بعد السماح تصلك الإشعارات حتى والتطبيق مغلق، وقد تتأخر قليلاً.':'تذكير المتصفح يظهر أثناء فتح التطبيق. التذكير بالتقويم يحتاج استيراد ملف المواعيد داخل تطبيق التقويم حتى يصلك والهاتف مقفل.'}</div></div>`:''}<div class="surface"><div class="lead">التطبيق</div>${api.isDemo?'':`<button class="item-link" data-tab="support">${ico('message',20)} رسائل إدارة TesterHub ${unreadSupport().length?`<span class="message-counter">${unreadSupport().length}</span>`:'<span>‹</span>'}</button>`}${api.isDemo?'':`<button class="item-link" data-action="switch-role">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button>`}${user.role==='developer'?`<button class="item-link" data-action="enable-reminder">${ico('bell',20)} السماح بالإشعارات <span>‹</span></button>`:''}<button class="item-link" data-action="install">${ico('add',20)} تثبيت على الشاشة الرئيسية <span>‹</span></button>${api.isDemo?`<button class="item-link" data-action="switch-demo">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button><button class="item-link" data-action="reset-demo">إعادة بيانات المعاينة <span>‹</span></button>`:`<button class="item-link" data-action="logout">${ico('power',20)} تسجيل الخروج <span>‹</span></button>`}<a class="item-link" style="text-decoration:none" href="./privacy.html">${ico('shield',20)} سياسة الخصوصية <span>‹</span></a><a class="item-link" style="text-decoration:none" href="./terms.html">${ico('clipboard',20)} الشروط <span>‹</span></a>${api.isDemo?'':`<button class="item-link" data-action="request-deletion">${ico('trash',20)} طلب حذف حسابي <span>‹</span></button>`}</div>`}
+function profile(){return `${adminAuthorized?'<div class="surface"><a class="cta blue wide" style="display:block;text-align:center;text-decoration:none;padding:12px" href="./admin.html">'+ico('shield',18)+' لوحة إدارة المنصة</a></div>':''}${profileEditor()}<div class="surface"><div class="user-bar"><div><div class="bold">${clean(user.name)}</div><small class="email-ltr">${clean(user.email)}</small></div>${myPublicProfile?.photo?`<img class="profile-photo" src="${clean(myPublicProfile.photo)}" alt="صورتك" width="54" height="54">`:`<div class="app-mark" style="width:54px;height:54px;border-radius:50%;background:linear-gradient(125deg,#2a78dc,#0eae8b);color:#fff;display:grid;place-items:center">${ico('user',28)}</div>`}</div><div class="photo-actions"><label class="cta outline photo-pick">${ico('camera',16)} ${myPublicProfile?.photo?'تغيير صورتك':'إضافة صورة شخصية'}<input type="file" accept="image/*" data-change="profile-photo" hidden></label>${myPublicProfile?.photo?'<button type="button" class="cta outline" data-action="remove-photo">إزالة الصورة</button>':''}</div><div class="tiny">تظهر صورتك واسمك بالدوري فقط إذا فعّلت «اظهر اسمي وصورتي» بصفحة الدوري. البريد ما يظهر أبداً.</div><div class="divider"></div><span class="chip">${user.role==='developer'?'واجهة المطور':'واجهة المختبر'}</span></div>${user.role==='tester'?`<div class="surface"><div class="lead">المشاركة بالاختبارات</div><label class="checks"><input type="checkbox" data-change="availability" ${user.available?'checked':''}/><span>إظهار بريدي للمطورين كأحد المختبرين المتاحين</span></label><div class="small">لن يظهر بريدك إلا للمطورين المسجلين، لغرض إضافتك إلى قائمة الاختبار.</div></div><div class="surface"><div class="lead">تذكيري اليومي</div><div class="setting-row"><span class="small">وقت التذكير</span><select id="reminder-hour">${Array.from({length:24},(_,i)=>`<option value="${i}" ${i===api.getReminderHour()?'selected':''}>${(i%12)||12}:00 ${i<12?'ص':'م'}</option>`).join('')}</select></div><button class="cta outline wide" data-action="enable-reminder">${ico('bell',16)} السماح بإشعار التذكير</button><button class="cta outline wide" style="margin-top:8px" data-action="calendar-reminder">${ico('calendar',16)} إضافة تذكير 14 يوم إلى تقويم الهاتف</button><div class="card-note">${window.TESTERHUB_VAPID_KEY?'بعد السماح تصلك الإشعارات حتى والتطبيق مغلق، وقد تتأخر قليلاً.':'تذكير المتصفح يظهر أثناء فتح التطبيق. التذكير بالتقويم يحتاج استيراد ملف المواعيد داخل تطبيق التقويم حتى يصلك والهاتف مقفل.'}</div></div>`:''}<div class="surface"><div class="lead">التطبيق</div>${api.isDemo?'':`<button class="item-link" data-tab="support">${ico('message',20)} رسائل إدارة TesterHub ${unreadSupport().length?`<span class="message-counter">${unreadSupport().length}</span>`:'<span>‹</span>'}</button>`}${api.isDemo?'':`<button class="item-link" data-action="switch-role">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button>`}${user.role==='developer'?`<button class="item-link" data-action="enable-reminder">${ico('bell',20)} السماح بالإشعارات <span>‹</span></button>`:''}<button class="item-link" data-action="install">${ico('add',20)} تثبيت على الشاشة الرئيسية <span>‹</span></button>${api.isDemo?`<button class="item-link" data-action="switch-demo">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button><button class="item-link" data-action="reset-demo">إعادة بيانات المعاينة <span>‹</span></button>`:`<button class="item-link" data-action="logout">${ico('power',20)} تسجيل الخروج <span>‹</span></button>`}<a class="item-link" style="text-decoration:none" href="./privacy.html">${ico('shield',20)} سياسة الخصوصية <span>‹</span></a><a class="item-link" style="text-decoration:none" href="./terms.html">${ico('clipboard',20)} الشروط <span>‹</span></a>${api.isDemo?'':`<button class="item-link" data-action="request-deletion">${ico('trash',20)} طلب حذف حسابي <span>‹</span></button>`}</div>`}
 function profileEditor(){if(api.isDemo)return '';return `<div class="surface"><form id="profile-form"><div class="field"><label for="profile-name">الاسم</label><input id="profile-name" name="name" minlength="2" maxlength="80" required value="${clean(user.name)}" /></div>${user.role==='tester'?`<label class="checks"><input type="checkbox" name="paused" ${user.participationPaused?'checked':''}/><span>إيقاف المشاركة الجديدة مؤقتاً وإخفاء بريدي</span></label><p class="small">المشاركات الحالية وتواريخها تبقى محفوظة؛ هذا الخيار لا يوقف عداد الاختبار الجاري.</p>`:''}<button class="cta blue" type="submit">حفظ الحساب</button></form></div>`}
 function accountGate(){return `<div class="login-shell"><div class="auth-card"><h2>${user.profileMissing?'إكمال بيانات حسابك':'تأكيد البريد الإلكتروني'}</h2><p>${clean(user.email)}</p>${user.profileMissing?`<p>حساب الدخول موجود. أكمل ملفك بنفس الحساب دون إنشاء حساب جديد.</p><form id="complete-profile-form"><div class="field"><label for="recover-name">الاسم</label><input id="recover-name" name="name" minlength="2" maxlength="80" required /></div><label class="checks"><input type="checkbox" name="available"/><span>أوافق على مشاركة بريدي مع المطورين للاختبارات.</span></label><button class="cta blue" type="submit">إكمال الحساب</button></form>`:`<p>أكد ملكية بريدك حتى تفتح لوحة الحساب. المشاركات والتقارير القديمة تبقى محفوظة.</p><button class="cta blue wide" data-action="send-verification">إرسال رسالة تأكيد البريد</button><button class="item-link" data-action="check-verification">تحققت من بريدي — تحديث الحالة</button>`}<button class="item-link" data-action="logout">تسجيل الخروج</button></div></div>`}
 function suspendedScreen(){return `<div class="login-shell"><div class="auth-card"><h2>هذا الحساب موقوف</h2><p>${clean(user.email)}</p><p>أوقفت إدارة TesterHub هذا الحساب، ولا يمكن استخدامه حالياً. بياناتك محفوظة ولم تُحذف.</p><button class="cta blue wide" data-action="logout">تسجيل الخروج</button></div></div>`}

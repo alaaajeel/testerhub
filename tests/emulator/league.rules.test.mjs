@@ -59,5 +59,7 @@ test('a member may add a small photo and hide or show themselves; nothing else f
  await assertFails(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',photo:'data:image/svg+xml;base64,AAAA',updatedAt:serverTimestamp()}));
  await assertFails(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',photo:'data:image/jpeg;base64,'+'A'.repeat(40000),updatedAt:serverTimestamp()}));
  await assertFails(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',hidden:'no',updatedAt:serverTimestamp()}));
+ await assertSucceeds(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',photo,consent:true,updatedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(db('t1'),'publicProfiles','t1'),{name:'Name t1',consent:'yes',updatedAt:serverTimestamp()}));
  await assertFails(setDoc(doc(db('t2'),'publicProfiles','t1'),{name:'Name t1',photo,updatedAt:serverTimestamp()}));
 });

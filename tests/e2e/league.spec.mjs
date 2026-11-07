@@ -3,8 +3,7 @@ import {test,expect} from '@playwright/test';
 // tests/emulator/league.rules.test.mjs.
 
 const utcDaysAgo=n=>new Date(Date.now()-n*86400000).toISOString().slice(0,10);
-async function openPreview(page,{warmupUntil='2000-01-01T00:00:00Z'}={}){
- await page.addInitScript(until=>{window.TESTERHUB_LEAGUE_WARMUP_UNTIL=until},warmupUntil);
+async function openPreview(page){
  await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
  await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
 }
@@ -29,12 +28,12 @@ async function seedLeague(page,{others=3,mine=null,names={}}={}){
  await expect(page.locator('.league-list')).not.toContainText('جاري تحميل');
 }
 
-test('today\'s ranking lists contributors by verified points, with profile names unless hidden',async({page})=>{
- await openPreview(page);await seedLeague(page,{mine:85,names:{o0:{name:'سارة'}}});
+test('today\'s ranking lists contributors by verified points, with names only by consent',async({page})=>{
+ await openPreview(page);await seedLeague(page,{mine:85,names:{o0:{name:'سارة',consent:true},o1:{name:'بلا موافقة',hidden:false}}});
  const rows=page.locator('.league-row');
  await expect(rows).toHaveCount(4);
  // 100, 90, mine 85, 80.
- await expect(rows.locator('strong')).toHaveText(['سارة','مساهم','مختبر 1 (أنت)','مساهم']);
+ await expect(rows.locator('strong')).toHaveText(['سارة','مساهم','أنت','مساهم']);
  await expect(rows.nth(2)).toHaveClass(/mine/);
  await expect(rows.nth(2)).toContainText('٨٥ XP');
  await expect(rows.nth(2).locator('.league-rank')).toHaveText('٣');
@@ -60,27 +59,26 @@ test('a contributor below the top 20 still sees their own rank',async({page})=>{
  await expect(page.locator('.league-row.mine .league-rank')).toHaveText('٢٦');
 });
 
-test('my name shows by default and hiding it is my choice',async({page})=>{
+test('showing my name and photo is my choice, off until I turn it on',async({page})=>{
  await openPreview(page);await seedLeague(page,{mine:30});
  const box=page.locator('[data-change="league-name"]');
- await expect(box).toBeChecked();
- expect(await page.evaluate(()=>demoState().publicProfiles.t1)).toEqual({name:'مختبر 1',hidden:false});
- await box.uncheck();
- await expect(page.locator('#toast')).toContainText('مخفي');
- expect(await page.evaluate(()=>demoState().publicProfiles.t1)).toEqual({name:'مختبر 1',hidden:true});
- await expect(page.locator('.league-row.mine strong')).toHaveText('أنت');
- await page.locator('[data-change="league-name"]').check();
+ await expect(box).not.toBeChecked();
+ expect(await page.evaluate(()=>demoState().publicProfiles.t1)).toBeUndefined();
+ await box.check();
  await expect(page.locator('#toast')).toContainText('صار اسمك يظهر');
- expect(await page.evaluate(()=>demoState().publicProfiles.t1.hidden)).toBe(false);
+ expect(await page.evaluate(()=>demoState().publicProfiles.t1)).toEqual({name:'مختبر 1',consent:true});
+ await expect(page.locator('.league-row.mine strong')).toHaveText('مختبر 1 (أنت)');
+ await page.locator('[data-change="league-name"]').uncheck();
+ await expect(page.locator('#toast')).toContainText('مخفي');
+ expect(await page.evaluate(()=>demoState().publicProfiles.t1.consent)).toBe(false);
+ await expect(page.locator('.league-row.mine strong')).toHaveText('أنت');
 });
 
-test('in the first week, warm-up members compete in the same list and are marked',async({page})=>{
- await openPreview(page,{warmupUntil:new Date(Date.now()+6*86400000).toISOString()});await seedLeague(page,{others:1,mine:35});
- const samples=page.locator('.league-row .sample-tag');
- await expect(samples).toHaveCount(3);
- await expect(samples.first()).toHaveText('تجريبي');
- await expect(page.locator('.league-row.mine strong')).toContainText('مختبر 1');
- expect(await page.evaluate(()=>Object.keys(demoState().publicProfiles||{}).some(k=>k.startsWith('sample'))||JSON.stringify(demoState().xp).includes('sample'))).toBe(false);
+test('equal points share a rank in the list',async({page})=>{
+ await openPreview(page);await seedLeague(page,{others:2,mine:90});
+ // o0 100, o1 90, mine 90.
+ await expect(page.locator('.league-row .league-rank')).toHaveText(['١','٢','٢']);
+ await expect(page.locator('.league-row .sample-tag')).toHaveCount(0);
 });
 
 test('an empty day invites the first accepted report',async({page})=>{
