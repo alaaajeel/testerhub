@@ -156,3 +156,27 @@ test('deleting an app also removes its requests and public card', async () => {
  await assertSucceeds(deleteDoc(doc(db('d1'), 'openings', 'p1')));
  await assertFails(deleteDoc(doc(db('t1'), 'joinRequests', 'p1_t1')));
 });
+
+test('switching the feature off blocks new requests and leaves every earlier record as it was', async () => {
+ await openGroupMode();
+ await assertSucceeds(setDoc(doc(db('t1'), 'joinRequests', 'p1_t1'), ask('t1')));
+ await approve('t1');
+ await assertSucceeds(setDoc(doc(db('d1'), 'assignments', 'p1_t1'), invite('t1')));
+ await assertSucceeds(setDoc(doc(db('t2'), 'joinRequests', 'p1_t2'), ask('t2')));
+ await assertSucceeds(updateDoc(doc(db('t2'), 'joinRequests', 'p1_t2'), {status: 'cancelled', updatedAt: serverTimestamp()}));
+ const snapshot = async () => JSON.stringify(await Promise.all([['openings', 'p1'], ['joinRequests', 'p1_t1'], ['joinRequests', 'p1_t2'], ['assignments', 'p1_t1'], ['assignments', 'p1_t3'], ['projects', 'p1']].map(p => read(...p))));
+ const before = await snapshot();
+ await flag(false);
+ // The old open card is still there, yet nobody can ask, or ask again after cancelling.
+ await assertFails(setDoc(doc(db('t3'), 'joinRequests', 'p1_t3'), ask('t3')));
+ await admin(d => setDoc(doc(d, 'users', 'n1'), {name: 'Tester n1', email: 'n1@example.com', role: 'tester', available: false}));
+ await assertFails(setDoc(doc(db('n1'), 'joinRequests', 'p1_n1'), ask('n1')));
+ await assertFails(updateDoc(doc(db('t2'), 'joinRequests', 'p1_t2'), {status: 'waiting', updatedAt: serverTimestamp()}));
+ // Nor can a developer open new requests or switch an app to the group.
+ await assertFails(setDoc(doc(db('d1'), 'openings', 'p1'), card({slots: 9})));
+ await assertFails(updateDoc(doc(db('d1'), 'projects', 'p1'), {testMode: 'invites'}));
+ // Nothing was deleted or changed.
+ assert.equal(await snapshot(), before);
+ assert.equal((await read('assignments', 'p1_t1')).invitationStatus, 'pending');
+ assert.deepEqual((await read('assignments', 'p1_t3')).checkins, ['2026-11-01']);
+});

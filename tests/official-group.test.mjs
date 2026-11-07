@@ -43,3 +43,21 @@ test('old invitations keep working: the email list path is unchanged and still f
  assert.match(rules,/profile\(request\.resource\.data\.testerUid\)\.data\.available == true\n?\r?\n? *\|\| \(exists\(\/databases\/\$\(database\)\/documents\/joinRequests/);
  assert.match(html,/const OFFICIAL_GROUP=/);
 });
+test('with the feature off, old opening records are neither read nor shown',async()=>{
+ const reads=[];
+ const ctx=vm.createContext({isDemo:false,features:{officialGroup:false},storeFns:{collection:()=>reads.push('collection'),query:()=>reads.push('query'),where:()=>({}),limit:()=>({})},db:{},console});
+ const groupData=vm.runInContext(from('async function groupData(','const stamp=')+';groupData',ctx);
+ const data=await groupData({uid:'t1',role:'tester'},async()=>{reads.push('read');return {docs:[]}});
+ assert.equal(JSON.stringify(data),'{"openings":[],"joinRequests":[]}');
+ assert.equal(reads.length,0);
+ // Even if old cards were already loaded, the tester sees nothing and the developer sees no group controls.
+ const ui=vm.createContext({features:{officialGroup:false},user:{uid:'t1'},dashboard:{assignments:[],openings:[{id:'p1',status:'open',ownerUid:'d1',name:'App'}],joinRequests:[]}});
+ const card=vm.runInContext(from('function officialGroupCard(','function projectDetails(')+';officialGroupCard',ui);
+ assert.equal(card(),'');
+ const mode=vm.runInContext(from('function testModeSection(','function officialGroupCard(')+';testModeSection',ui);
+ assert.equal(mode({id:'p1',status:'recruiting',testMode:'group'}),'');
+});
+test('with the feature off, the app refuses to send a request or change the test mode',()=>{
+ assert.match(from('async function requestToJoin(','async function cancelJoinRequest('),/if\(!features\.officialGroup\)throw Error/);
+ assert.match(from('async function setProjectTestMode(','async function requestToJoin('),/if\(!features\.officialGroup\)throw Error/);
+});
