@@ -270,5 +270,6 @@ test('Firestore: a commit whose answer was lost shows the saved report, not an e
 test('Firestore: the client refuses another tester\'s assignment before writing',async({page})=>{
  await openWithFirestoreDoubles(page);
  await expect(page.evaluate(()=>api.submitDailyReport('p1_t2',{outcome:'ok',notes:'تقرير على حساب شخص ثاني'}))).rejects.toThrow(/غير متاح/);
- expect(await page.evaluate(()=>window.fs.writes.length)).toBe(0);
+ // Activity stamps (presence, seen) are not report writes.
+ expect(await page.evaluate(()=>window.fs.writes.filter(w=>!w.path.startsWith('presence/')&&!(w.value&&'testerSeenAt' in w.value)).length)).toBe(0);
 });

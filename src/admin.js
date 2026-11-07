@@ -1,7 +1,7 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,getIdTokenResult} from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js';
 import * as firestore from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
-const {getFirestore,doc,getDoc,collection,query,where,orderBy,documentId,limit,startAfter,getDocs,getCountFromServer,writeBatch,serverTimestamp,deleteField,addDoc}=firestore;
+const {getFirestore,doc,getDoc,collection,query,where,orderBy,documentId,limit,startAfter,getDocs,getCountFromServer,writeBatch,serverTimestamp,deleteField,addDoc,Timestamp}=firestore;
 
 const $=id=>document.getElementById(id);
 const PAGE_SIZE=25;
@@ -26,6 +26,7 @@ const TABS={
  deletionRequests:{title:'طلبات حذف الحسابات',perm:'processDeletions',order:()=>'createdAt',desc:true},
  staffRoles:{title:'المشرفون',ownerOnly:true,order:()=>'grantedAt',desc:true},
  adminAuditLogs:{title:'سجل إجراءات الإدارة',perm:'viewAudit',order:()=>'createdAt',desc:true},
+ activity:{title:'مراقبة النشاط',perm:'viewUsers',note:'الحالة تقديرية وليست لحظية: «متصل الآن» = ظهر خلال آخر دقيقتين، «نشط اليوم» = خلال 24 ساعة. التطبيق يسجّل الظهور فقط وهو مفتوح على الشاشة ومتصل بالإنترنت. المستخدم الذي لم يفتح التطبيق بعد هذا التحديث يظهر غير نشط.'},
  features:{title:'الميزات قيد التجربة',ownerOnly:true,note:'كل ميزة هنا معطّلة افتراضياً. تفعيلها يظهرها لكل المستخدمين فوراً، وإيقافها يخفيها بدون حذف أي بيانات. كل تغيير ينحفظ بسجل الإدارة.'},
  announcements:{title:'مركز إشعارات الإدارة',perm:'sendAnnouncements',order:()=>'createdAt',desc:true}
 };
@@ -171,6 +172,41 @@ function detailLists(l){
   +sec('الرسائل',l.messages.slice().sort((a,b)=>timeOf(a)-timeOf(b)).map(m=>'<div class="line"><b>'+esc(person(m.senderUid))+'</b>: '+esc(m.text||'')+' <small>'+esc(stamped(m.createdAt))+'</small></div>'));
 }
 /* Support: one private thread per user. */
+// Activity: counts are aggregation queries (one read per thousand records); the list reads one page.
+const ACTIVITY_PAGE=50;
+async function loadActivity(){
+ const now=Date.now(),since=ms=>Timestamp.fromMillis(now-ms),ref=collection(state.db,'presence');
+ const count=q=>getCountFromServer(q).then(x=>x.data().count).catch(()=>null);
+ const [total,online,day,week,testers,devs]=await Promise.all([
+  count(collection(state.db,'users')),
+  count(query(ref,where('lastSeenAt','>=',since(2*60000)))),
+  count(query(ref,where('lastSeenAt','>=',since(86400000)))),
+  count(query(ref,where('lastSeenAt','>=',since(7*86400000)))),
+  count(query(ref,where('role','==','tester'),where('lastSeenAt','>=',since(86400000)))),
+  count(query(ref,where('role','==','developer'),where('lastSeenAt','>=',since(86400000))))
+ ]);
+ state.activity={now,total,online,day,week,testers,devs,inactive:total===null||day===null?null:Math.max(0,total-day)};
+ const snap=await getDocs(query(ref,orderBy('lastSeenAt','desc'),limit(ACTIVITY_PAGE)));
+ state.rows=snap.docs.map(x=>({id:x.id,...x.data()}));
+ await nameUsers(state.rows.map(r=>r.id));
+ const side=r=>r.role==='developer'?'ownerUid':'testerUid';
+ await Promise.all(state.rows.map(async r=>{
+  const [a,rep]=await Promise.all([count(query(collection(state.db,'assignments'),where(side(r),'==',r.id))),count(query(collection(state.db,'reports'),where(side(r),'==',r.id)))]);
+  r.assignments=a;r.reports=rep;
+ }));
+ state.hasMore=false;renderList();
+}
+function activityLabel(ms,now){if(!ms)return ['لم يظهر بعد',''];const age=now-ms;return age<=2*60000?['متصل الآن','ok']:age<=86400000?['نشط اليوم','ok']:['غير نشط','warn']}
+function renderActivity(){
+ const s=state.activity||{},n=v=>v===null||v===undefined?'—':number(v);
+ const tiles=[['إجمالي المستخدمين',s.total],['متصلون الآن (تقديري)',s.online],['نشطون خلال 24 ساعة',s.day],['نشطون خلال 7 أيام',s.week],['غير نشطين (24 ساعة+)',s.inactive],['مختبرون نشطون اليوم',s.testers],['مطورون نشطون اليوم',s.devs]];
+ const head='<div class="activity-grid">'+tiles.map(([l,v])=>'<div class="metric"><small>'+esc(l)+'</small><strong>'+n(v)+'</strong></div>').join('')+'</div>';
+ if(!state.rows.length)return head+'<p class="none">ما ظهر أي مستخدم بعد تفعيل هذا التحديث.</p>';
+ return head+state.rows.map(r=>{
+  const seen=r.lastSeenAt?.toMillis?.(),[label,tone]=activityLabel(seen,s.now||Date.now());
+  return '<article class="item"><div class="info"><strong>'+esc(person(r.id))+'</strong><small>'+(r.role==='developer'?'مطور':'مختبر')+' · آخر ظهور: '+esc(stamped(r.lastSeenAt))+' · آخر تفاعل: '+esc(stamped(r.lastActionAt))+'</small><small>'+(r.role==='developer'?'مشاركات بتطبيقاته':'مشاركات')+': '+n(r.assignments)+' · تقارير: '+n(r.reports)+'</small></div><div class="actions"><span class="pill '+tone+'">'+label+'</span></div></article>';
+ }).join('');
+}
 async function loadFeatures(){
  const snap=await getDoc(doc(state.db,'appConfig','features'));
  state.featureFlags={officialGroup:snap.exists()&&snap.data().officialGroup===true};
@@ -303,13 +339,14 @@ function renderList(){
  // App names filter as you type; only the email lookup needs a button.
  $('searchButton').hidden=type!=='users';
  $('composer').hidden=type!=='announcements';
- $('items').innerHTML=type==='features'?renderFeatures():type==='support'?renderSupport():rows.length?rows.map(ROWS[type]).join(''):'<p class="none">'+(type==='announcements'?'ما انرسل أي إعلان بعد.':'لا توجد سجلات هنا.')+'</p>';
+ $('items').innerHTML=type==='activity'?renderActivity():type==='features'?renderFeatures():type==='support'?renderSupport():rows.length?rows.map(ROWS[type]).join(''):'<p class="none">'+(type==='announcements'?'ما انرسل أي إعلان بعد.':'لا توجد سجلات هنا.')+'</p>';
  $('more').hidden=!state.hasMore;
  for(const b of document.querySelectorAll('[data-tab]'))b.classList.toggle('active',b.dataset.tab===type);
 }
 async function page(reset=false){
  if(state.tab==='support')return loadSupport();
  if(state.tab==='features')return loadFeatures();
+ if(state.tab==='activity')return loadActivity();
  const source=TABS[state.tab];
  if(reset){state.rows=[];state.cursor=null;state.hasMore=false;state.details={}}
  const parts=[collection(state.db,source.collection||state.tab)];

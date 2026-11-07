@@ -2,7 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 // The production deploy workflow: manual, main only, tested first, rules before the site, nothing deleted.
-const wf=readFileSync(new URL('../.github/workflows/deploy-firebase.yml',import.meta.url),'utf8');
+// Git on Windows may check the workflow out with CRLF; compare its text with plain line endings.
+const wf=readFileSync(new URL('../.github/workflows/deploy-firebase.yml',import.meta.url),'utf8').replace(/\r\n/g,'\n');
 const firebase=JSON.parse(readFileSync(new URL('../firebase.json',import.meta.url),'utf8'));
 const rc=JSON.parse(readFileSync(new URL('../.firebaserc',import.meta.url),'utf8'));
 const at=s=>{const i=wf.indexOf(s);assert.ok(i>=0,'missing: '+s);return i};

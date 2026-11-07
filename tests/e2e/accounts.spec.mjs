@@ -19,7 +19,7 @@ async function setup(page,{profile=null,loggedIn=false}={}) {
  const snap=ref=>{const data=ref?.c==='messages'?window.fixture.messages?.[ref.id]:ref?.c==='assignments'?window.fixture.assignment:window.fixture.profile;return {exists:()=>!!data,data:()=>data}};
  export const getDocFromServer=async ref=>{if(ref?.c==='messages'&&window.fixture.failMessageReadOnce){window.fixture.failMessageReadOnce=false;throw Error('network unavailable')}return snap(ref)};
  export const getDoc=async ref=>snap(ref);
- export const setDoc=async(ref,data)=>{window.fixture.messages??={};if(window.fixture.messages[ref.id])throw Object.assign(Error(),{code:'permission-denied'});window.fixture.messages[ref.id]=data;window.fixture.messageWriteCount=(window.fixture.messageWriteCount||0)+1;if(window.fixture.loseMessageAckOnce){window.fixture.loseMessageAckOnce=false;throw Error('network unavailable')}};
+ export const setDoc=async(ref,data)=>{if(ref?.c==='presence'){(window.fixture.presence??=[]).push(data);return}window.fixture.messages??={};if(window.fixture.messages[ref.id])throw Object.assign(Error(),{code:'permission-denied'});window.fixture.messages[ref.id]=data;window.fixture.messageWriteCount=(window.fixture.messageWriteCount||0)+1;if(window.fixture.loseMessageAckOnce){window.fixture.loseMessageAckOnce=false;throw Error('network unavailable')}};
  export const runTransaction=async(_,fn)=>fn({get:async()=>snap(),set:(_,value)=>{if(window.fixture.failSave)throw Object.assign(Error(),{code:'permission-denied'});window.fixture.profile=value}});
  export const serverTimestamp=()=>1;
  export const updateDoc=async(_,v)=>{if(window.fixture.failSave)throw Object.assign(Error(),{code:'permission-denied'});Object.assign(window.fixture.profile,v)};
