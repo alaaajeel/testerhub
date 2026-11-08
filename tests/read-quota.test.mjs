@@ -12,7 +12,7 @@ test('a live change uses the listener data and never reloads the dashboard',asyn
  let xpLoads=0,rendered=0;
  const ctx=vm.createContext({console,user:{uid:'u1',role:'tester'},dashboard:{assignments:[{id:'old'}],reports:[],messages:[],support:[],xp:null,testers:['kept']},
   liveSyncTimer:null,liveFetchInProgress:false,liveSyncDeferred:true,canRerenderLive:()=>true,render:()=>{rendered++},
-  api:{loadTesterXp:async()=>{xpLoads++;return {totals:{xp:5}}}}});
+  api:{loadTesterXp:async()=>{xpLoads++;return {totals:{xp:5}}}},userScrolling:()=>false,tab:'home',document:{getElementById:()=>null}});
  vm.runInContext(from('let liveSubscriptions=','function stopLiveSync(').replace(/^let /,'var ')+from('async function flushLiveSync(','let leagueNameChecked='),ctx);
  vm.runInContext("livePending={assignments:[{id:'a1'}],messages:[{id:'m1'}]}",ctx);
  await vm.runInContext('flushLiveSync()',ctx);
@@ -29,7 +29,8 @@ test('a live change uses the listener data and never reloads the dashboard',asyn
 });
 test('every listener feeds the pending lists with the same shape as the dashboard',()=>{
  const sync=from('function startLiveSync(','function canRerenderLive(');
- assert.match(sync,/livePending\[collectionName\]=snap\.docs\.map\(tidy\)/);
+ assert.match(sync,/const list=snap\.docs\.map\(tidy\);/);
+ assert.match(sync,/livePending\[collectionName\]=list/);
  assert.match(html,/LIVE_KEYS=\{projects:'projects',assignments:'assignments',reports:'reports',messages:'messages',supportMessages:'support'\}/);
 });
 test('the tester directory is read at most every 15 minutes unless fresh data is asked for',async()=>{
@@ -45,4 +46,55 @@ test('the tester directory is read at most every 15 minutes unless fresh data is
 });
 test('coming back to the app reloads everything at most every 30 minutes',()=>{
  assert.match(html,/Date\.now\(\)-lastFullRefresh>1800000/);
+});
+test('the dashboard takes the listened collections from the live listeners instead of reading them again',()=>{
+ const dash=from('async function getDashboard(','async function supportThread(');
+ for(const name of ['projects','assignments','reports','messages'])assert.ok(dash.includes("from('"+name+"',query"),name);
+ assert.doesNotMatch(dash,/ read\(query\(collection\(db,'(projects|assignments|reports|messages)'\)/);
+ assert.match(dash,/support:liveList\(user,'supportMessages',fromServer\)\?\?await supportThread/);
+ // Start and refresh connect the listeners first and wait for them, briefly.
+ assert.match(html,/if\(user\)\{startLiveSync\(\);await waitLive\(\);dashboard=await api\.getDashboard\(\)\}/);
+ assert.match(html,/startLiveSync\(\);await waitLive\(\);const \[fresh\]=await Promise\.all\(\[api\.getDashboard\(\)/);
+});
+test('live data is used only for the same account and view, and never when fresh data is asked for',()=>{
+ const ctx=vm.createContext({liveCache:{key:'u1|tester',ready:new Set(['assignments']),data:{assignments:[{id:'a'}]}}});
+ const liveList=vm.runInContext(from('function liveList(','const liveSnap=')+';liveList',ctx);
+ assert.equal(liveList({uid:'u1',role:'tester'},'assignments',false).length,1);
+ assert.equal(liveList({uid:'u1',role:'developer'},'assignments',false),null);
+ assert.equal(liveList({uid:'u2',role:'tester'},'assignments',false),null);
+ assert.equal(liveList({uid:'u1',role:'tester'},'reports',false),null);
+ assert.equal(liveList({uid:'u1',role:'tester'},'assignments',true),null);
+});
+test('waiting for the listeners never blocks: it ends when all answered, when none run, or after a short time',async()=>{
+ const ctx=vm.createContext({setTimeout,clearTimeout,Promise});
+ vm.runInContext(from('var liveCache=','function stopLiveSync(').replace(/^var /,'var '),ctx);
+ await vm.runInContext('waitLive(50)',ctx);
+ vm.runInContext("liveCache={key:'u|t',data:{},ready:new Set(),expected:2,waiters:[]}",ctx);
+ const t0=Date.now();await vm.runInContext('waitLive(120)',ctx);assert.ok(Date.now()-t0>=100);
+ const p=vm.runInContext('waitLive(5000)',ctx);
+ vm.runInContext("liveCache.ready.add('a');liveCache.ready.add('b');liveSettled()",ctx);
+ const t1=Date.now();await p;assert.ok(Date.now()-t1<100);
+});
+test('a running action shows progress and is released if it never answers',()=>{
+ const p=from('let pressedControl=','function canRerenderLive(')||html.slice(html.indexOf('let pressedControl='),html.indexOf('async function pending(')+1600);
+ assert.match(html,/const ACTION_PATIENCE=25000;/);
+ const pend=html.slice(html.indexOf('async function pending('),html.indexOf('async function pending(')+1400);
+ assert.match(pend,/busyBar\(true\)/);assert.match(pend,/classList\.add\('is-loading'\)/);
+ assert.match(pend,/Promise\.race\(\[run\.then\(\(\)=>false\),new Promise\(done=>\{timer=setTimeout\(\(\)=>done\(true\),ACTION_PATIENCE\)\}\)\]\)/);
+ assert.match(pend,/finally\{clearTimeout\(timer\);busy=false;busyBar\(false\)/);
+ assert.match(html,/#busy-bar\{display:none;position:fixed;top:0/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+ assert.ok(p.length>0);
+});
+test('a live redraw waits while the finger moves and keeps the scroll position',()=>{
+ const flush=from('async function flushLiveSync(','let leagueNameChecked=');
+ assert.match(flush,/if\(liveSyncDeferred&&user&&userScrolling\(\)\)\{liveSyncTimer=setTimeout\(flushLiveSync,800\);return\}/);
+ assert.match(flush,/y=page\?\.scrollTop\|\|0/);
+ assert.match(flush,/if\(again&&tab===was\)again\.scrollTop=y/);
+ assert.match(html,/const userScrolling=\(\)=>touchActive\|\|Date\.now\(\)-lastScrollAt<700;/);
+});
+test('the keyboard check runs again after every redraw, so the bottom bar never stays hidden',()=>{
+ assert.match(html,/window\.dispatchEvent\(new Event\('app-rendered'\)\)/);
+ assert.match(html,/window\.addEventListener\('app-rendered',\(\)=>setTimeout\(update,80\)\)/);
+ assert.match(html,/const typing=el=>!!el&&el\.isConnected&&/);
 });
