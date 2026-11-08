@@ -65,6 +65,8 @@ test('profile writes confirm success only after accepted save; logout removes pr
 test('add-app form shows no tester names or emails and copies the whole eligible list',async({page})=>{
  await setup(page,{loggedIn:true,profile:{name:'Developer',role:'developer',available:false}});
  await page.evaluate(()=>window.fixture.verified=true);await page.locator('[data-action="check-verification"]').click();
+ // Let the sign-in refresh finish first, or it would replace the testers placed below.
+ await page.waitForFunction(()=>!busy&&!!user?.emailVerified,null,{timeout:15000});
  await page.evaluate(()=>{dashboard.testers=[{uid:'t1',name:'Tester One',email:'one@example.com',available:true,role:'tester'},{uid:'t2',name:'Tester Two',email:'two@example.com',available:true,role:'tester'}];tab='new';render()});
  await expect(page.locator('#project-form [name="testerUid"]')).toHaveCount(0);
  await expect(page.locator('#project-form')).not.toContainText('one@example.com');

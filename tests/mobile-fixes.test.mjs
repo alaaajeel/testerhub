@@ -16,7 +16,7 @@ test('the back button is handled inside the app with a two-press exit',()=>{
  assert.match(html,/window\.addEventListener\('popstate',handleBack\)/);
  assert.match(html,/toast\('اضغط رجوع مرة ثانية للخروج'\)/);
  assert.match(html,/backNav\.exitUntil=Date\.now\(\)\+2000/);
- assert.match(html,/function render\(\)\{renderView\(\);trackScreen\(\)(;syncHelpHash\(\))?\}/);
+ assert.match(html,/function render\(\)\{renderView\(\);trackScreen\(\)(;syncHelpHash\(\))?(;window\.dispatchEvent\(new Event\('app-rendered'\)\))?\}/);
 });
 test('«اختباراتي» keeps accepted or started tests only',()=>{
  assert.equal(approvedTest({invitationStatus:'pending'}),false);
