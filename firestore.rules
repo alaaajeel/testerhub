@@ -790,7 +790,7 @@ service cloud.firestore {
       match /days/{day}/checkins/{uid} {
         allow get, list: if exchangeMember(gid);
         allow create: if exchangeMember(gid) && request.auth.uid == uid
-          && exchangeDoc(gid).data.status == 'active'
+          && exchangeDoc(gid).data.get('startedAt', null) is timestamp
           && currentUtcDay(day)
           && request.resource.data.keys().hasOnly(['uid','day','testedUids','updatedAt'])
           && request.resource.data.uid == uid && request.resource.data.day == day
@@ -801,7 +801,7 @@ service cloud.firestore {
           && request.resource.data.testedUids.hasOnly(exchangeDoc(gid).data.memberUids)
           && !(uid in request.resource.data.testedUids);
         allow update: if exchangeMember(gid) && request.auth.uid == uid
-          && exchangeDoc(gid).data.status == 'active'
+          && exchangeDoc(gid).data.get('startedAt', null) is timestamp
           && currentUtcDay(day)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['testedUids','updatedAt'])
           && request.resource.data.uid == uid && request.resource.data.day == day
@@ -817,7 +817,7 @@ service cloud.firestore {
       match /reminders/{reminderId} {
         allow get, list: if exchangeMember(gid);
         allow create: if exchangeMember(gid)
-          && exchangeDoc(gid).data.status == 'active'
+          && exchangeDoc(gid).data.get('startedAt', null) is timestamp
           && request.resource.data.keys().hasOnly(['fromUid','toUid','day','createdAt'])
           && request.resource.data.fromUid == request.auth.uid
           && request.resource.data.toUid is string
@@ -832,7 +832,7 @@ service cloud.firestore {
         allow get, list: if exchangeMember(gid);
         allow create: if exchangeMember(gid)
           && exchangeDoc(gid).data.ownerUid == request.auth.uid
-          && exchangeDoc(gid).data.status == 'active'
+          && exchangeDoc(gid).data.get('startedAt', null) is timestamp
           && request.resource.data.keys().hasOnly(['uid','day','byUid','createdAt'])
           && request.resource.data.uid is string
           && request.resource.data.uid in exchangeDoc(gid).data.memberUids
