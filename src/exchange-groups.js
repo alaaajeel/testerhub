@@ -22,8 +22,8 @@ const playUrl=x=>{try{const u=new URL(x);return u.protocol==='https:'&&u.hostnam
 const validateApp=(name,url)=>{if(name.length<2||name.length>100)throw Error('اسم التطبيق يجب أن يكون بين 2 و100 حرف');if(!playUrl(url))throw Error('استخدم رابط تطبيق أو اختبار من play.google.com فقط')};
 function relativeDay(when){if(!when?.toDate)return '—';const d=when.toDate();return d.toLocaleString('ar-IQ')}
 function groupCard(g){
- const mine=g.memberUids.includes(user.uid),open=g.status==='open';
- return '<article class="panel"><div class="row"><strong>'+esc(g.title)+'</strong><span class="tag">'+g.memberUids.length+'/'+CAPACITY+'</span></div><p class="muted">'+(open?'مفتوحة لاستقبال الأعضاء':'مكتملة — تبادل نشط')+'</p><div class="progress"><span style="width:'+(g.memberUids.length/CAPACITY*100)+'%"></span></div><div class="actions">'+
+ const mine=g.memberUids.includes(user.uid),open=g.status==='open',running=!!g.startedAt;
+ return '<article class="panel"><div class="row"><strong>'+esc(g.title)+'</strong><span class="tag">'+g.memberUids.length+'/'+CAPACITY+'</span></div><p class="muted">'+(open?(running?'مقعد بديل متاح — الاختبارات مستمرة':'مفتوحة لاستقبال الأعضاء'):'مكتملة — تبادل نشط')+'</p><div class="progress"><span style="width:'+(g.memberUids.length/CAPACITY*100)+'%"></span></div><div class="actions">'+
  (mine?'<button data-open="'+esc(g.id)+'">إدارة مجموعتي</button>':open?'<button data-join="'+esc(g.id)+'">الانضمام</button>':'<span class="muted">المجموعة مكتملة</span>')+'</div></article>';
 }
 const userFields=()=>{
@@ -103,7 +103,7 @@ function participantRow(m,members,checks,ownUid,active,warnings,reminders){
 }
 function groupDetails(){
  const {group:g,members,checks,reminders,warnings}=detail;
- const active=g.status==='active',mine=members.some(x=>x.uid===user.uid);
+ const active=!!g.startedAt,mine=members.some(x=>x.uid===user.uid);
  if(!mine){groupList();return}
  const list=members.map(m=>m.email).join('\n');
  const checkedMine=checks.find(x=>x.uid===user.uid);
@@ -112,7 +112,7 @@ function groupDetails(){
  const myReminders=reminders.filter(x=>x.toUid===user.uid);
  const yesterday=YESTERDAY();
  $('#content').innerHTML='<div class="panel"><div class="row"><h2>'+esc(g.title)+'</h2><button class="ghost" id="back-groups">المجموعات</button></div>'+
- '<div class="row"><strong>'+members.length+'/'+CAPACITY+' عضواً</strong><span class="tag">'+(active?'مكتملة — التبادل نشط':'قيد التجميع')+'</span></div>'+
+ '<div class="row"><strong>'+members.length+'/'+CAPACITY+' عضواً</strong><span class="tag">'+(active?(g.status==='open'?'جارية — مقعد بديل متاح':'مكتملة — التبادل نشط'):'قيد التجميع')+'</span></div>'+
  '<p class="muted">آخر تحديث: '+esc(TODAY())+' (UTC). الإقرارات شخصية ولا تثبت فتح تطبيق خارجي.</p>'+
  '<div class="actions"><button id="copy-emails">نسخ إيميلات أعضاء المجموعة ('+members.length+')</button><button class="ghost" id="reload-group">تحديث الحالات</button></div>'+
  (active?'<p class="muted">أكّدت اليوم اختبار '+testingCount+' من '+(members.length-1)+' تطبيقاً. وأكّد '+checkingMe+' من '+(members.length-1)+' أعضاء اختبار تطبيقك اليوم.</p>':'<p class="warn">تبدأ المتابعة اليومية بعد اكتمال 15 عضواً. لا يتم احتساب أي اختبار قبل اكتمال المجموعة.</p>')+
@@ -136,7 +136,7 @@ async function openGroup(id){
  if(!group.memberUids.includes(user.uid))throw Error('هذه المجموعة مخصصة لأعضائها');
  const [m,c,r,w,p]=await Promise.all([
  getDocs(membersRef(id)),
- group.status==='active'?getDocs(collection(db,'exchangeGroups',id,'days',TODAY(),'checkins')):Promise.resolve({docs:[]}),
+ group.startedAt?getDocs(collection(db,'exchangeGroups',id,'days',TODAY(),'checkins')):Promise.resolve({docs:[]}),
  getDocs(remindersRef(id)),
  getDocs(warningsRef(id)),
  group.status==='active'?getDocs(collection(db,'exchangeGroups',id,'days',YESTERDAY(),'checkins')):Promise.resolve({docs:[]})
@@ -146,7 +146,7 @@ async function openGroup(id){
 }
 async function confirmTest(target){
  const id=selectedId,g=detail.group;
- if(g.status!=='active'||!g.memberUids.includes(target)||target===user.uid)throw Error('التأكيد متاح للأعضاء الآخرين بعد اكتمال المجموعة');
+ if(!g.startedAt||!g.memberUids.includes(target)||target===user.uid)throw Error('التأكيد متاح للأعضاء الآخرين بعد اكتمال المجموعة');
  const ref=checkRef(id,TODAY(),user.uid);
  await runTransaction(db,async tx=>{
   const old=await tx.get(ref);
