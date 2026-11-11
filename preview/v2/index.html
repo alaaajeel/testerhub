@@ -190,7 +190,13 @@ header .inner{max-width:720px;padding:16px 16px 20px}
 .profile-setting>span:first-child{display:flex;align-items:center;gap:9px}
 .profile-setting svg{color:#1d78b4}
 .welcome{background:#fff}
-@media(max-width:370px){.demo{display:none}.balance-pill small{display:none}.balance-hero .wallet-cta{left:9px;padding:8px}}
+.balance-hero .wallet-cta{position:relative;left:auto;top:auto;margin-top:12px}
+.balance-hero{min-height:0}
+.balance-hero strong{font-size:22px}
+.profile-top .row{align-items:center}
+.wallet-grid svg,.wallet-metric svg{color:#0a9f85}
+.profile-setting:focus-visible,.avatar-edit:focus-visible,.balance-pill:focus-visible{outline:3px solid #6ccfc5;outline-offset:3px}
+@media(max-width:370px){.demo{display:none}.balance-pill small{display:none}.balance-hero{padding:16px}.balance-hero strong{font-size:20px}.section-head h2{font-size:21px}.app{gap:9px}.app-reward{font-size:10px}.app-reward b{font-size:12px}}
 </style>
 </head>
 <body>
