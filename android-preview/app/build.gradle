@@ -1,0 +1,35 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'iq.testerhub.preview'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'iq.testerhub.v2.preview'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0-preview'
+        buildConfigField "String", "AUTH_API_KEY", '"AIzaSyBZfouPz6Jim9eqI_rJTgeuQRyaW5_dYrU"'
+    }
+    buildFeatures { buildConfig true }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+}
