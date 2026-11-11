@@ -29,7 +29,7 @@ async function create(){
 async function seedFull(){
  await admin(async d=>{
   await setDoc(gref(d),group(ids.slice(0,15)));
-  for(const u of ids.slice(0,15))await setDoc(mem(d,u),member(u));
+  for(const u of ids.slice(0,15))await setDoc(mem(d,u),{...member(u),joinedAt:Timestamp.fromDate(new Date(Date.now()-7*86400000))});
  });
 }
 test('creator must atomically create own member and cannot create a phantom group',async()=>{
