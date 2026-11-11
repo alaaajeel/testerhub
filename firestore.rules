@@ -703,10 +703,6 @@ service cloud.firestore {
     function exchangeMemberAfter(id, uid) {
       return getAfter(/databases/$(database)/documents/exchangeGroups/$(id)/members/$(uid));
     }
-    function exchangeDay(day) {
-      return day is string && day.matches('\\d{4}-\\d{2}-\\d{2}')
-        && timestamp.date(int(day[0:4]), int(day[5:7]), int(day[8:10]));
-    }
     function exchangePastDay(day) {
       return day is string && day.matches('\\d{4}-\\d{2}-\\d{2}')
         && timestamp.date(int(day[0:4]), int(day[5:7]), int(day[8:10])) < request.time.date()
