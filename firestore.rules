@@ -690,6 +690,168 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time;
       allow update, delete: if false;
     }
+
+    // ---- Optional exchange groups: isolated from projects/assignments/XP ----
+    // The group directory contains UIDs, not email addresses. Email is readable only
+    // to accepted members and is explicitly consented to at enrolment.
+    function exchangeDoc(id) {
+      return get(/databases/$(database)/documents/exchangeGroups/$(id));
+    }
+    function exchangeMember(id) {
+      return verified() && request.auth.uid in exchangeDoc(id).data.memberUids;
+    }
+    function exchangeMemberAfter(id, uid) {
+      return getAfter(/databases/$(database)/documents/exchangeGroups/$(id)/members/$(uid));
+    }
+    function exchangeDay(day) {
+      return day is string && day.matches('\\d{4}-\\d{2}-\\d{2}')
+        && timestamp.date(int(day[0:4]), int(day[5:7]), int(day[8:10]));
+    }
+    function exchangePastDay(day) {
+      return day is string && day.matches('\\d{4}-\\d{2}-\\d{2}')
+        && timestamp.date(int(day[0:4]), int(day[5:7]), int(day[8:10])) < request.time.date()
+        && timestamp.date(int(day[0:4]), int(day[5:7]), int(day[8:10])) >= request.time - duration.value(22, 'd');
+    }
+    function threeExchangeWarnings(id, uid, days) {
+      return days is list && days.size() == 3 && days.toSet().size() == 3
+        && days[0] is string && days[1] is string && days[2] is string
+        && exists(/databases/$(database)/documents/exchangeGroups/$(id)/warnings/$(uid + '_' + days[0]))
+        && exists(/databases/$(database)/documents/exchangeGroups/$(id)/warnings/$(uid + '_' + days[1]))
+        && exists(/databases/$(database)/documents/exchangeGroups/$(id)/warnings/$(uid + '_' + days[2]));
+    }
+    match /exchangeGroups/{gid} {
+      allow get, list: if verified();
+      allow create: if verified()
+        && request.resource.data.keys().hasOnly(['title','ownerUid','createdAt','memberUids','removedUids','status'])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 3 && request.resource.data.title.size() <= 80
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.memberUids == [request.auth.uid]
+        && request.resource.data.removedUids == []
+        && request.resource.data.status == 'open'
+        && exchangeMemberAfter(gid, request.auth.uid).data.uid == request.auth.uid;
+      // Atomic, race-safe join: only add yourself, never change somebody else's seat.
+      // Refill is permitted after a recorded 3-warning removal.
+      allow update: if verified() && resource.data.status == 'open'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids','status','startedAt'])
+        && !(request.auth.uid in resource.data.memberUids)
+        && !(request.auth.uid in resource.data.removedUids)
+        && resource.data.memberUids.size() < 15
+        && request.resource.data.memberUids is list
+        && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+        && request.resource.data.memberUids.size() <= 15
+        && request.resource.data.memberUids.toSet().size() == request.resource.data.memberUids.size()
+        && request.resource.data.memberUids.hasAll(resource.data.memberUids)
+        && request.auth.uid in request.resource.data.memberUids
+        && request.resource.data.status == (request.resource.data.memberUids.size() == 15 ? 'active' : 'open')
+        && (request.resource.data.memberUids.size() != 15
+           ? !('startedAt' in request.resource.data) || resource.data.get('startedAt', null) == request.resource.data.startedAt
+           : (('startedAt' in resource.data && request.resource.data.startedAt == resource.data.startedAt)
+              || (!('startedAt' in resource.data) && request.resource.data.startedAt == request.time)))
+        && exchangeMemberAfter(gid, request.auth.uid).data.uid == request.auth.uid;
+      // Removal is not automatic: owner acts after 3 different server-checked missed days.
+      // Prior records and original membership documents remain intact.
+      allow update: if verified() && request.auth.uid == resource.data.ownerUid
+        && resource.data.status == 'active'
+        && resource.data.memberUids.size() == 15
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids','status','removedUids','lastRemoval'])
+        && request.resource.data.status == 'open'
+        && request.resource.data.memberUids is list
+        && request.resource.data.memberUids.size() == 14
+        && request.resource.data.memberUids.toSet().size() == 14
+        && resource.data.memberUids.hasAll(request.resource.data.memberUids)
+        && request.resource.data.lastRemoval is map
+        && request.resource.data.lastRemoval.keys().hasOnly(['uid','days','at'])
+        && request.resource.data.lastRemoval.uid != resource.data.ownerUid
+        && request.resource.data.lastRemoval.uid in resource.data.memberUids
+        && !(request.resource.data.lastRemoval.uid in request.resource.data.memberUids)
+        && request.resource.data.lastRemoval.at == request.time
+        && request.resource.data.removedUids is list
+        && request.resource.data.removedUids.size() == resource.data.removedUids.size() + 1
+        && request.resource.data.removedUids.toSet().size() == request.resource.data.removedUids.size()
+        && request.resource.data.removedUids.hasAll(resource.data.removedUids)
+        && request.resource.data.lastRemoval.uid in request.resource.data.removedUids
+        && threeExchangeWarnings(gid, request.resource.data.lastRemoval.uid, request.resource.data.lastRemoval.days);
+      allow delete: if false;
+      match /members/{uid} {
+        allow get, list: if exchangeMember(gid);
+        allow create: if verified() && request.auth.uid == uid
+          && uid in getAfter(/databases/$(database)/documents/exchangeGroups/$(gid)).data.memberUids
+          && request.resource.data.keys().hasOnly(['uid','name','email','appName','appUrl','joinedAt'])
+          && request.resource.data.uid == uid
+          && request.resource.data.email == request.auth.token.email
+          && request.resource.data.name is string
+          && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 80
+          && request.resource.data.appName is string
+          && request.resource.data.appName.size() >= 2 && request.resource.data.appName.size() <= 100
+          && request.resource.data.appUrl is string
+          && request.resource.data.appUrl.size() <= 500
+          && request.resource.data.appUrl.matches('https://play\\.google\\.com/[^\\s<>"]+')
+          && request.resource.data.joinedAt == request.time;
+        allow update, delete: if false;
+      }
+      match /days/{day}/checkins/{uid} {
+        allow get, list: if exchangeMember(gid);
+        allow create: if exchangeMember(gid) && request.auth.uid == uid
+          && exchangeDoc(gid).data.status == 'active'
+          && currentUtcDay(day)
+          && request.resource.data.keys().hasOnly(['uid','day','testedUids','updatedAt'])
+          && request.resource.data.uid == uid && request.resource.data.day == day
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.testedUids is list
+          && request.resource.data.testedUids.size() >= 1 && request.resource.data.testedUids.size() <= 14
+          && request.resource.data.testedUids.toSet().size() == request.resource.data.testedUids.size()
+          && request.resource.data.testedUids.hasOnly(exchangeDoc(gid).data.memberUids)
+          && !(uid in request.resource.data.testedUids);
+        allow update: if exchangeMember(gid) && request.auth.uid == uid
+          && exchangeDoc(gid).data.status == 'active'
+          && currentUtcDay(day)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['testedUids','updatedAt'])
+          && request.resource.data.uid == uid && request.resource.data.day == day
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.testedUids is list
+          && request.resource.data.testedUids.size() <= 14
+          && request.resource.data.testedUids.toSet().size() == request.resource.data.testedUids.size()
+          && request.resource.data.testedUids.hasOnly(exchangeDoc(gid).data.memberUids)
+          && request.resource.data.testedUids.hasAll(resource.data.testedUids)
+          && !(uid in request.resource.data.testedUids);
+        allow delete: if false;
+      }
+      match /reminders/{reminderId} {
+        allow get, list: if exchangeMember(gid);
+        allow create: if exchangeMember(gid)
+          && exchangeDoc(gid).data.status == 'active'
+          && request.resource.data.keys().hasOnly(['fromUid','toUid','day','createdAt'])
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.toUid is string
+          && request.resource.data.toUid in exchangeDoc(gid).data.memberUids
+          && request.resource.data.toUid != request.auth.uid
+          && currentUtcDay(request.resource.data.day)
+          && reminderId == request.auth.uid + '_' + request.resource.data.toUid + '_' + request.resource.data.day
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+      match /warnings/{warningId} {
+        allow get, list: if exchangeMember(gid);
+        allow create: if exchangeMember(gid)
+          && exchangeDoc(gid).data.ownerUid == request.auth.uid
+          && exchangeDoc(gid).data.status == 'active'
+          && request.resource.data.keys().hasOnly(['uid','day','byUid','createdAt'])
+          && request.resource.data.uid is string
+          && request.resource.data.uid in exchangeDoc(gid).data.memberUids
+          && request.resource.data.uid != request.auth.uid
+          && request.resource.data.byUid == request.auth.uid
+          && exchangePastDay(request.resource.data.day)
+          && warningId == request.resource.data.uid + '_' + request.resource.data.day
+          && exchangeDoc(gid).data.startedAt < timestamp.date(int(request.resource.data.day[0:4]), int(request.resource.data.day[5:7]), int(request.resource.data.day[8:10])) + duration.value(1, 'd')
+          && (!exists(/databases/$(database)/documents/exchangeGroups/$(gid)/days/$(request.resource.data.day)/checkins/$(request.resource.data.uid))
+            || get(/databases/$(database)/documents/exchangeGroups/$(gid)/days/$(request.resource.data.day)/checkins/$(request.resource.data.uid)).data.testedUids.size() < exchangeDoc(gid).data.memberUids.size() - 1)
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+
     match /messages/{messageId} {
       allow get, list: if adminAllowed() || staff('deleteProjects') || (signedIn()
         && (resource.data.testerUid == request.auth.uid || resource.data.ownerUid == request.auth.uid));
