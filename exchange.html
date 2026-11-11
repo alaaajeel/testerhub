@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#092e73"><title>مجموعات التبادل | TesterHub IQ</title>
+<link rel="icon" href="./assets/icon-192.png"><script src="./firebase-config.js"></script>
+<style>
+:root{font-family:"Segoe UI",Tahoma,Arial,sans-serif;color:#173054;background:#edf3fa}
+*{box-sizing:border-box}body{margin:0;min-height:100vh}main{max-width:980px;margin:auto;padding:16px}
+header{background:linear-gradient(110deg,#0d3979,#1769b4);padding:22px;color:white}
+header>div{max-width:980px;margin:auto}a{color:#1559a9}header a{color:#eaf6ff}
+h1{font-size:25px;margin:8px 0}h2{font-size:19px}p{line-height:1.8}
+.panel{background:white;border:1px solid #dce5f0;box-shadow:0 5px 18px #1b497315;border-radius:17px;padding:17px;margin:13px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:12px}
+label{display:block;margin:12px 0 6px;font-weight:700;font-size:14px}
+input{width:100%;padding:12px;border:1px solid #b9c9de;border-radius:10px;font:inherit}
+input[type=checkbox]{width:auto;margin-left:7px}
+button,.button{font:inherit;font-weight:700;border:0;border-radius:10px;background:#145cac;color:white;padding:11px 15px;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}.ghost{background:#eaf1fb;color:#164f91}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+small,.muted{color:#5a6b80}.tag{background:#e3f6ee;color:#08754d;border-radius:99px;padding:4px 9px;font-size:12px;font-weight:700}
+.warn{background:#fff5dd;border-radius:12px;padding:10px;color:#7a5211}
+.item{padding:12px 0;border-top:1px solid #edf1f6}.item:first-child{border-top:0}
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+#status{padding:10px;font-size:14px;color:#20466f}#status.error{color:#9a2c33}
+code{direction:ltr;unicode-bidi:plaintext;word-break:break-all} .ltr{direction:ltr;unicode-bidi:plaintext}
+.progress{height:8px;background:#e3ecf7;border-radius:8px;overflow:hidden}.progress span{display:block;height:100%;background:#10a779}
+@media(max-width:540px){main{padding:10px}header{padding:18px}.panel{padding:14px}}
+</style>
+</head>
+<body>
+<header><div><a href="./index.html">‹ العودة إلى TesterHub IQ</a><h1>مجموعات التبادل</h1><div>قسم اختياري منفصل — 15 عضواً في كل مجموعة، ولكل عضو تطبيق واحد.</div></div></header>
+<main>
+<div class="panel warn">الانضمام للمجموعة ومتابعة المهام إقرارات من الأعضاء، وليست دليلاً تقنياً على فتح التطبيقات، ولا تعني تلقائياً الانضمام لاختبار Google Play. تأكد من حالة مختبريك في Play Console. الإيميلات تظهر فقط للأعضاء داخل المجموعة، وبموافقتهم.</div>
+<div id="status" role="status">جارٍ التحقق من تسجيل الدخول…</div>
+<section id="content" aria-live="polite"></section>
+</main>
+<script type="module" src="./src/exchange-groups.js"></script>
+</body></html>
