@@ -213,6 +213,52 @@ header .inner{max-width:720px;padding:16px 16px 20px}
 .group-app-top .app-icon{width:85px;height:85px}
 @media(max-width:380px){.group-fee-card{padding:14px;gap:8px}.fee-price{font-size:20px;padding:9px}.join-fee{font-size:11px;padding:5px}.group-app-top .app-icon{width:65px;height:65px}}
 </style>
+<style>
+/* Packs V2 — richer membership cards with distinct browsing / owned group states. */
+.pack-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px;border-radius:17px;background:#e8f0fb;margin:14px 0 18px}
+.pack-tabs button{border:0;background:transparent;color:#58729b;padding:12px 7px;border-radius:12px;font-size:13px;font-weight:800;cursor:pointer;min-height:46px}
+.pack-tabs button.chosen{color:#124c9a;background:#fff;box-shadow:0 4px 12px #2b5a9720}
+.tab-count{font-size:11px;background:#e2f2ea;color:#008961;border-radius:14px;padding:2px 7px;margin-inline-start:3px}
+.packs-lead{display:flex;align-items:flex-start;gap:9px;padding:12px 14px;border:1px solid #d6e5f8;background:#fff;border-radius:15px;color:#45688f;font-size:12px;line-height:1.8;margin-bottom:14px}
+.packs-lead svg{color:#158a9f;flex:none;margin-top:3px}
+.packs-list{display:grid;gap:18px}
+.pack-card{position:relative;overflow:hidden;border-radius:25px;padding:21px 17px 17px;color:#fff;background:linear-gradient(135deg,#124a9d 0%,#286bd4 45%,#1b9eb1 100%);box-shadow:0 14px 32px #154f9b2c}
+.pack-card:before{content:"";position:absolute;inset:-55px -60px auto auto;width:215px;height:215px;border:1px solid #ffffff37;border-radius:50%;box-shadow:0 0 0 20px #ffffff0b,0 0 0 46px #ffffff0b;pointer-events:none}
+.pack-card:after{content:"";position:absolute;bottom:-78px;left:-30px;width:230px;height:230px;border-radius:50%;background:#ffffff09;pointer-events:none}
+.pack-card>*{position:relative;z-index:1}
+.pack-ocean{background:linear-gradient(135deg,#0e5b8c 0%,#0c83b7 54%,#08a98b 100%)}
+.pack-topline{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pack-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:#dcffe9;background:#ffffff21;border:1px solid #ffffff30;border-radius:99px;padding:5px 10px}
+.status-dot{width:8px;height:8px;background:#4df19d;border-radius:50%;box-shadow:0 0 0 3px #31d69b38}
+.pack-mini-label{font-size:9px;letter-spacing:1.4px;font-weight:800;color:#d5edff}
+.pack-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:16px 0 13px}
+.pack-heading h3{color:#fff;margin:3px 0 0;font-size:23px;line-height:1.3;letter-spacing:-.4px}
+.pack-subtitle{font-size:11px;color:#d3ecff}
+.pack-number{text-align:left;flex:none;display:grid;gap:1px}
+.pack-number strong{font-size:28px;line-height:1.2;color:#fff}
+.pack-number small{font-size:11px;color:#dcf2ff}
+.pack-icons-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;margin:18px 0 17px}
+.pack-tile{display:grid;place-items:center;aspect-ratio:1;min-width:0;border-radius:12px;border:1px solid #ffffff55;color:white;background:#ffffff15;overflow:hidden}
+.demo-tile{background:linear-gradient(135deg,hsl(var(--pack-hue) 77% 57%),hsl(var(--pack-hue) 77% 37%));border:1px solid #ffffff41;box-shadow:0 4px 9px #12355b32}
+.demo-tile svg{max-width:64%;height:auto}
+.empty-tile{border:1.5px dashed #ffffff67;background:#ffffff0e;color:#d1e9ff}
+.user-tile{border:2px solid #ffdc7b;padding:2px;background:#ffedb037;cursor:pointer;box-shadow:0 0 0 3px #ffffff17}
+.user-tile .app-icon{width:100%;height:100%;border-radius:8px;box-shadow:none}
+.pack-progress{height:8px;background:#ffffff34;border-radius:9px;overflow:hidden}
+.pack-progress span{display:block;height:100%;background:linear-gradient(90deg,#74fbcb,#f9e699);border-radius:9px}
+.pack-footer-meta{display:flex;justify-content:space-between;font-size:11px;color:#e8f7ff;margin-top:7px;gap:6px}
+.pack-action{margin-top:17px;width:100%;border:0;border-radius:14px;padding:13px 14px;min-height:53px;background:linear-gradient(100deg,#ffd16c,#ff914d);color:#583312;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 6px 18px #1542773d}
+.pack-action-coin{font-size:12px;background:#ffffff73;padding:5px 9px;border-radius:99px;display:inline-flex;align-items:center;gap:5px}
+.pack-manage{background:#ffffffea;color:#124c98}
+.pack-disabled{background:#ffffff26;color:#e2edfa;box-shadow:none}
+.packs-policy{margin-top:17px;background:#fff;border:1px solid #dae8fa;border-radius:18px;padding:14px;display:flex;gap:12px;align-items:flex-start}
+.packs-policy-icon{width:40px;height:40px;flex:none;border-radius:12px;color:#078e67;background:#def8ee;display:grid;place-items:center}
+.packs-policy strong{font-size:13px;color:#193e75}
+.packs-policy p{font-size:12px;color:#6b81a2;line-height:1.8;margin:4px 0 0}
+.pack-card .app-icon{color:#fff}
+@media(max-width:440px){.pack-icons-grid{grid-template-columns:repeat(8,minmax(0,1fr));gap:5px}.pack-tile{border-radius:8px}.pack-card{padding:19px 13px 14px}.pack-heading h3{font-size:20px}.pack-number strong{font-size:24px}.pack-status{font-size:10px;padding:5px 7px}}
+@media(max-width:350px){.pack-icons-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.pack-tile{border-radius:11px}.pack-heading h3{font-size:18px}.pack-mini-label{font-size:8px}}
+</style>
 </head>
 <body>
 <header><div class="inner"><div><div class="eyebrow">المنصة المطوّرة</div><h1 style="display:flex;align-items:center;gap:9px"><img src="https://raw.githubusercontent.com/alaaajeel/testerhub/main/assets/icon-192.png" width="34" height="34" alt="" style="width:34px;height:34px;border-radius:9px;background:white">TesterHub <span style="color:#60e2c2">V2</span></h1></div><div class="header-actions"><button class="balance-pill" id="balance-pill" aria-label="فتح محفظة هب كوين">رصيدك</button><span class="demo">معاينة</span></div></div></header>
@@ -286,7 +332,7 @@ const starters=[
 {id:"demo-3",name:"حاسبة الميزانية",developer:"Prototype Labs",desc:"نموذج لإدارة المصروفات والدخل واحتساب إجماليات شهرية.",tasks:"أضف مصروفاً ودخلاً، راجع الإجمالي، ثم اكتب تقريراً بما لاحظته.",play:"https://play.google.com/store",group:"",reward:25,icon:"◎",tone:"gold"}
 ];
 function initial(){try{const v=JSON.parse(localStorage.getItem(KEY)||"{}");return {joined:!!v.joined,apps:Array.isArray(v.apps)?v.apps:[],tests:Array.isArray(v.tests)?v.tests:[],reports:v.reports&&typeof v.reports==="object"?v.reports:{},profile:v.profile&&typeof v.profile==="object"?{name:String(v.profile.name||"مستخدم تجريبي").slice(0,80),image:String(v.profile.image||"").startsWith("data:image/")?v.profile.image:""}:{name:"مستخدم تجريبي",image:""},wallet:walletFromSaved(v.wallet),groupMember:v.groupMember&&typeof v.groupMember==="object"?v.groupMember:null}}catch{return {joined:false,apps:[],tests:[],reports:{},profile:{name:"مستخدم تجريبي",image:""},wallet:newWallet(),groupMember:null}}}
-const state={...initial(),tab:"apps",view:"",focusId:"",search:"",visitedOptin:false,returnTab:"apps"};
+const state={...initial(),tab:"apps",view:"",focusId:"",search:"",visitedOptin:false,returnTab:"apps",groupPane:"available",activePackId:"pack-a"};
 const $=q=>document.querySelector(q);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const apps=()=>[...state.apps,...starters];
@@ -310,51 +356,103 @@ function renderApps(){
 }
 
 
-function renderGroups(){
- const member=state.groupMember,capacity=15,filled=member?1:0;
- const slots=Array.from({length:capacity},(_,i)=>{
-  if(i===0&&member)return '<button class="group-slot filled group-slot-button" id="my-group-app" aria-label="عرض تفاصيل تطبيقك داخل مجموعة التبادل">'+iconHTML(member)+'</button>';
-  return '<div class="group-slot" aria-label="مقعد شاغر" title="مقعد شاغر">'+ico("plus",20)+'</div>';
+
+/* Isolated demonstration only. Counts are illustrative fixtures, not real user data. */
+const DEMO_PACKS=[
+ {id:"pack-a",title:"مجموعة الرافدين",subtitle:"دفعة الاختبار الأولى",filled:15,capacity:16,tone:"royal"},
+ {id:"pack-b",title:"مجموعة بغداد",subtitle:"دفعة الاختبار الثانية",filled:3,capacity:16,tone:"ocean"}
+];
+const DEMO_ICONS=["phone","chart","book","target","zap","shield","rocket","check","list","camera","gift","award","bell","grid","sparkles"];
+const getPack=id=>DEMO_PACKS.find(p=>p.id===id)||DEMO_PACKS[0];
+const myPackId=()=>state.groupMember?(state.groupMember.packId||"pack-a"):null;
+const packFill=p=>Math.min(p.capacity,p.filled+(myPackId()===p.id?1:0));
+const packFull=p=>packFill(p)>=p.capacity;
+function packAppSlots(p){
+ const mine=myPackId()===p.id?state.groupMember:null;
+ const filled=packFill(p);
+ return Array.from({length:p.capacity},(_,i)=>{
+  if(mine&&i===p.filled)return '<button class="pack-tile user-tile" data-my-pack-app="'+esc(p.id)+'" aria-label="تطبيقك في '+esc(p.title)+'" title="'+esc(mine.name)+'">'+iconHTML(mine)+'</button>';
+  if(i<p.filled){
+   const name=DEMO_ICONS[i%DEMO_ICONS.length],hue=(i*43+197)%360;
+   return '<span class="pack-tile demo-tile" style="--pack-hue:'+hue+'" aria-label="تطبيق توضيحي">'+ico(name,26)+'</span>';
+  }
+  return '<span class="pack-tile empty-tile" aria-label="مقعد شاغر">'+ico("plus",19)+'</span>';
  }).join("");
- return '<div class="section-head"><div><h2>مجموعات التبادل</h2><div class="muted small">مساحات مستقلة عن قائمة التطبيقات العامة</div></div><span class="badge">'+ico("shield",15)+' معاينة</span></div>'+
- '<div class="group-hero"><div class="group-meta"><div><div class="badge" style="margin-bottom:10px">'+ico("circleCheck",14)+' مفتوحة للانضمام</div><div class="group-title">مجموعة التبادل الأولى</div><div class="group-hint">كل عضو يضيف تطبيقاً خاصاً بالمجموعة ويتبادل الاختبار مع بقية الأعضاء.</div></div><div style="text-align:left"><div class="group-count">'+filled+'/'+capacity+'</div><small class="muted">مقاعد مشغولة محلياً</small></div></div>'+
- '<div class="group-apps">'+slots+'</div>'+
- '<div class="group-hint">'+(member?'تم تسجيل تطبيقك في المجموعة التجريبية. اضغط على أيقونته حتى تشوف بياناته.':'15 مقعداً مستقلاً. بعد انضمامك ودفع رسوم المقعد، تظهر أيقونة تطبيقك في أول خانة.')+'</div>'+
- '<div class="progress" style="margin:15px 0 14px"><span style="width:'+(filled/capacity*100)+'%"></span></div>'+
- (member?'<div class="group-joined"><span>'+ico("circleCheck",20)+' أنت منضم إلى المجموعة</span><button class="outline" id="my-group-app-details">تفاصيل تطبيقي '+ico("arrow",15)+'</button></div>':
- '<button class="primary full" id="join-exchange">'+ico("group",19)+' انضم للمجموعة <span class="join-fee">'+ico("coins",16)+' '+ECONOMY.groupJoin+' هب كوين</span></button><div class="group-hint" style="margin-top:10px">الرصيد الحالي: '+state.wallet.balance+' عملة · تُخصم مرة واحدة بعد حفظ طلب الانضمام، وليس عند فتح النموذج.</div>')+
- '</div>'+
- '<div class="panel"><div class="row" style="align-items:start"><div><h3>شلون تعمل المجموعة؟</h3><p class="small muted" style="margin:3px 0 0">الانضمام يخص المجموعة فقط ولا ينشر تطبيقك بقائمة التطبيقات الرئيسية.</p></div>'+ico("info",23)+'</div><div class="journey-list">'+
- '<div class="journey-step"><span class="journey-symbol">'+ico("coins",20)+'</span><div class="journey-body"><strong>1. احجز مقعدك</strong><p>تدخل بيانات تطبيقك، وتدفع '+ECONOMY.groupJoin+' هب كوين عند تأكيد الطلب. لا تُخصم عند التراجع.</p></div></div>'+
- '<div class="journey-step"><span class="journey-symbol">'+ico("phone",20)+'</span><div class="journey-body"><strong>2. يظهر تطبيقك هنا</strong><p>أيقونة واسم ووصف ومهام اختبار داخل المجموعة فقط، بعيداً عن الصفحة الرئيسية.</p></div></div>'+
- '<div class="journey-step"><span class="journey-symbol">'+ico("group",20)+'</span><div class="journey-body"><strong>3. يبدأ التبادل</strong><p>من تكتمل 15 مشاركة، يتبادل الأعضاء اختبار تطبيقات بعض مع تأكيدات يومية.</p></div></div>'+
- '<div class="journey-step"><span class="journey-symbol">'+ico("check",20)+'</span><div class="journey-body"><strong>4. متابعة الالتزام</strong><p>تذكيرات وتقارير وإنذارات موثقة. مدة المتابعة 14 يوماً داخل نظام المجموعة.</p></div></div></div></div>'+
- '<div class="panel"><h3>شروط التبادل</h3><div class="rule-box">'+
- '<div class="rule-row"><span class="rule-icon">'+ico("target",20)+'</span><span>كل عضو لديه مقعد واحد وتطبيق مستقل في المجموعة.</span></div>'+
- '<div class="rule-row"><span class="rule-icon">'+ico("circleCheck",20)+'</span><span>المشاركة تقتضي اختبار التطبيقات فعلياً والإقرار بكل اختبار يومياً.</span></div>'+
- '<div class="rule-row"><span class="rule-icon">'+ico("warning",20)+'</span><span>بعد 3 إنذارات موثقة لأيام مختلفة، يستطيع المشرف استبعاد المقصر وفق سياسة المجموعة.</span></div>'+
- '<div class="rule-row"><span class="rule-icon">'+ico("shield",20)+'</span><span>تأكيد المنصة لا يثبت الاشتراك تلقائياً في اختبار Google Play؛ لكل تطبيق رابط اشتراك منفصل.</span></div></div></div>'+
- '<div class="pane-note">'+ico("info",18)+' هذه المجموعة تعرض عضويتك التجريبية المحلية فقط. عدد الأعضاء الحقيقيين وصور تطبيقاتهم سيظهران بعد ربط V2 بـ Firebase. لا توجد مدفوعات أو اقتطاعات حقيقية.</div>';
 }
+function renderPackCard(p){
+ const mine=myPackId()===p.id,filled=packFill(p),full=packFull(p);
+ const canJoin=!mine&&!myPackId()&&!full;
+ const status=full?"جولة اختبار نشطة":mine?"بانتظار اكتمال المجموعة":"مقاعد متاحة";
+ return '<article class="pack-card pack-'+esc(p.tone)+'">'+
+ '<div class="pack-topline"><span class="pack-status"><span class="status-dot"></span>'+status+'</span><span class="pack-mini-label">TESTERHUB PACK</span></div>'+
+ '<div class="pack-heading"><div><div class="pack-subtitle">'+esc(p.subtitle)+'</div><h3>'+esc(p.title)+'</h3></div><div class="pack-number"><strong>'+filled+'/'+p.capacity+'</strong><small>مطوّر مشارك</small></div></div>'+
+ '<div class="pack-icons-grid">'+packAppSlots(p)+'</div>'+
+ '<div class="pack-footer"><div class="pack-progress"><span style="width:'+(filled/p.capacity*100)+'%"></span></div><div class="pack-footer-meta"><span>'+filled+' من '+p.capacity+' مقعد</span><span>'+(full?"اكتملت المجموعة":(p.capacity-filled)+" مقعد متبقّي")+'</span></div></div>'+
+ (mine?'<button class="pack-action pack-manage" data-pack-details="'+esc(p.id)+'">'+ico("check",19)+' إدارة مجموعتي '+ico("arrow",18)+'</button>':
+ canJoin?'<button class="pack-action" data-join-pack="'+esc(p.id)+'">انضم للمجموعة '+ico("arrow",19)+'<span class="pack-action-coin">'+ico("coins",17)+' '+ECONOMY.groupJoin+'</span></button>':
+ '<button class="pack-action pack-disabled" disabled>'+(full?'المجموعة مكتملة':'أنت منضم لمجموعة أخرى')+'</button>')+
+ '</article>';
+}
+function renderGroupTabs(){
+ return '<div class="pack-tabs" role="tablist" aria-label="أقسام مجموعات التبادل">'+
+ '<button class="'+(state.groupPane==="available"?"chosen":"")+'" data-group-pane="available" role="tab" aria-selected="'+(state.groupPane==="available")+'">متاحة للانضمام</button>'+
+ '<button class="'+(state.groupPane==="mine"?"chosen":"")+'" data-group-pane="mine" role="tab" aria-selected="'+(state.groupPane==="mine")+'">مجموعاتي '+(myPackId()?'<span class="tab-count">1</span>':'')+'</button></div>';
+}
+function renderGroups(){
+ const mine=DEMO_PACKS.filter(p=>myPackId()===p.id);
+ const available=DEMO_PACKS.filter(p=>!packFull(p)&&myPackId()!==p.id);
+ const showingMine=state.groupPane==="mine";
+ const list=showingMine?mine:available;
+ return '<div class="section-head"><div><h2>مجموعات التبادل</h2><div class="muted small">تبادل منظم بين المطورين · 16 مقعداً لكل مجموعة</div></div><span class="badge">'+ico("group",15)+' Packs</span></div>'+
+ renderGroupTabs()+
+ '<div class="packs-lead">'+ico("sparkles",19)+' <span>'+(showingMine?"مجموعاتك المسجلة تظهر هنا، والمكتملة تبدأ منها متابعة الاختبارات.":"إذا اقتربت مجموعة من الاكتمال وكان هناك إقبال، نفتح مجموعة ثانية حتى ما يتوقف استقبال المطورين.")+'</span></div>'+
+ '<div class="packs-list">'+(list.length?list.map(renderPackCard).join(""):(showingMine?
+ '<div class="empty">'+ico("group",30)+'<p>ما منضم لأي مجموعة بعد</p><span>من تبويب «متاحة» تگدر تحجز مقعدك مقابل 100 هب كوين.</span></div>':
+ '<div class="empty">'+ico("circleCheck",30)+'<p>ماكو مجموعات متاحة حالياً</p><span>المجموعات المكتملة تنتقل إلى «مجموعاتي» لأعضائها فقط.</span></div>'))+'</div>'+
+ '<div class="packs-policy"><div class="packs-policy-icon">'+ico("shield",21)+'</div><div><strong>التبادل مستقل عن التطبيقات العامة</strong><p>معلومات تطبيقك وصورته هنا تخص المجموعة فقط. إضافة تطبيق للصفحة الرئيسية تبقى خدمة مختلفة، ومجتمع المختبرين العام مجاني.</p></div></div>'+
+ '<div class="pane-note" style="margin-top:13px">'+ico("info",18)+' الأعداد والأيقونات الملونة بهذه المعاينة أمثلة تصميم، وليست بيانات مستخدمين. أول مجموعة نموذجية تحتوي 15/16، والثانية 3/16 حتى نجرب الإقبال والاكتمال.</div>';
+}
+function renderPackDetails(){
+ const p=getPack(state.activePackId||myPackId()),mine=myPackId()===p.id,full=packFull(p);
+ return '<button class="back" id="back-groups">'+ico("arrow",16)+' رجوع للمجموعات</button>'+
+ renderPackCard(p)+
+ '<div class="panel"><div class="row" style="align-items:start"><div><h3>رحلة التبادل</h3><div class="muted small">الخطوات الأساسية لإكمال الاختبار</div></div>'+ico("target",22)+'</div>'+
+ '<div class="journey-list">'+
+ '<div class="journey-step"><span class="journey-symbol">'+ico("group",21)+'</span><div class="journey-body"><strong>1. اكتمال 16 مطوّراً</strong><p>كل مطور يدرج تطبيقاً واحداً للمجموعة. عند اكتمال المقاعد يبدأ تبادل الاختبار.</p></div></div>'+
+ '<div class="journey-step"><span class="journey-symbol">'+ico("phone",21)+'</span><div class="journey-body"><strong>2. تسجيل اختبارات Google Play</strong><p>تضيف حسابات المختبرين المؤهلين في Play Console ويفتح كل عضو رابط الانضمام للاختبار الخاص بكل تطبيق.</p></div></div>'+
+ '<div class="journey-step"><span class="journey-symbol">'+ico("check",21)+'</span><div class="journey-body"><strong>3. الاختبار اليومي</strong><p>تجربة التطبيقات الـ15 الأخرى، توثيق المهام والتقارير والتذكيرات طوال 14 يوماً.</p></div></div>'+
+ '<div class="journey-step"><span class="journey-symbol">'+ico("award",21)+'</span><div class="journey-body"><strong>4. إنهاء الجولة</strong><p>المشرف يتابع الالتزام والتقصير؛ حساب 14 يوماً في Google Play يبقى مستقلاً عن إقرارات المنصة.</p></div></div></div></div>'+
+ '<div class="panel"><h3>قواعد المجموعة</h3><div class="rule-box">'+
+ '<div class="rule-row"><span class="rule-icon">'+ico("circleCheck",20)+'</span><span>100 هب كوين لحجز المقعد، تُخصم مرة واحدة بعد تأكيد الانضمام.</span></div>'+
+ '<div class="rule-row"><span class="rule-icon">'+ico("bell",20)+'</span><span>تذكيرات للمقصرين، وإنذارات موثّقة. بعد ثلاثة إنذارات لأيام مختلفة يمكن للمشرف الاستبعاد.</span></div>'+
+ '<div class="rule-row"><span class="rule-icon">'+ico("shield",20)+'</span><span>بريد المختبر يظهر فقط للأعضاء المصرّح لهم وبموافقته. تأكيد المنصة لا يثبت اختبار Google Play.</span></div></div></div>'+
+ (mine?'<button class="primary full" id="my-group-app-details">'+ico("phone",19)+' عرض تطبيقي داخل المجموعة</button>':'')+
+ '<div class="pane-note" style="margin-top:13px">'+ico("info",17)+' '+(full?"هذه الجولة تظهر في «مجموعاتي» للعضو، وليست مفتوحة للمستخدمين الجدد.":"المجموعة قيد جمع الأعضاء، وتبدأ المهام بعد الاكتمال.")+' هذا تمثيل تجريبي ببيانات محلية.</div>';
+}
+
+
 function renderGroupJoin(){
- return '<button class="back" id="back-groups">'+ico("arrow",16)+' رجوع إلى المجموعة</button>'+
- '<div class="group-fee-card"><div><div class="eyebrow">طلب انضمام جديد</div><h2 style="margin:3px 0;color:#fff">احجز مقعدك في مجموعة التبادل</h2><p style="margin:2px 0;font-size:12px;color:#e0eeff">رسوم المقعد تُخصم بعد تأكيد البيانات فقط.</p></div><div class="fee-price">'+ico("coins",24)+' '+ECONOMY.groupJoin+'<small> هب كوين</small></div></div>'+
- '<div class="panel"><div class="row"><span class="muted">رصيدك المتاح</span><strong>'+state.wallet.balance+' هب كوين</strong></div><div class="line"></div><div class="row"><span class="muted">العدد بعد الانضمام</span><strong>1 / 15 (عرض محلي)</strong></div></div>'+
- '<form id="group-join-form"><div class="field"><label for="group-icon">أيقونة تطبيق المجموعة (اختيارية بالمعاينة)</label><input class="upload" id="group-icon" type="file" accept="image/png,image/jpeg,image/webp"></div>'+
- '<div class="field"><label for="group-name">اسم التطبيق *</label><input id="group-name" maxlength="100" minlength="2" required placeholder="اسم التطبيق داخل المجموعة"></div>'+
+ const p=getPack(state.activePackId);
+ const filled=packFill(p);
+ return '<button class="back" id="back-groups">'+ico("arrow",16)+' رجوع للمجموعات</button>'+
+ '<div class="group-fee-card"><div><div class="eyebrow">طلب انضمام جديد</div><h2 style="margin:3px 0;color:#fff">'+esc(p.title)+'</h2><p style="margin:2px 0;font-size:12px;color:#e0eeff">باقي '+(p.capacity-filled)+' مقاعد. تُخصم رسوم حجز المقعد فقط بعد تأكيد البيانات.</p></div><div class="fee-price">'+ico("coins",24)+' '+ECONOMY.groupJoin+'<small> هب كوين</small></div></div>'+
+ '<div class="panel"><div class="row"><span class="muted">رصيدك المتاح</span><strong>'+state.wallet.balance+' هب كوين</strong></div><div class="line"></div><div class="row"><span class="muted">بعد انضمامك</span><strong>'+(filled+1)+' / '+p.capacity+' (معاينة)</strong></div></div>'+
+ '<form id="group-join-form"><div class="field"><label for="group-icon">أيقونة تطبيقك</label><input class="upload" id="group-icon" type="file" accept="image/png,image/jpeg,image/webp"></div>'+
+ '<div class="field"><label for="group-name">اسم التطبيق *</label><input id="group-name" maxlength="100" minlength="2" required placeholder="اسم تطبيقك"></div>'+
  '<div class="field"><label for="group-developer">اسم المطور *</label><input id="group-developer" maxlength="100" minlength="2" required value="'+esc(state.profile?.name==="مستخدم تجريبي"?"":state.profile?.name||"")+'" placeholder="اسم المطور"></div>'+
  '<div class="field"><label for="group-play">رابط Google Play للاختبار *</label><input id="group-play" type="url" required maxlength="500" placeholder="https://play.google.com/apps/testing/..."></div>'+
- '<div class="field"><label for="group-desc">شرح التطبيق *</label><textarea id="group-desc" required maxlength="1000" placeholder="اشرح فكرة التطبيق للمختبرين"></textarea></div>'+
+ '<div class="field"><label for="group-desc">شرح التطبيق *</label><textarea id="group-desc" required maxlength="1000" placeholder="فكرة التطبيق وفائدته"></textarea></div>'+
  '<div class="field"><label for="group-tasks">المهام المطلوبة من المختبرين *</label><textarea id="group-tasks" required maxlength="1200" placeholder="شنو تريد الأعضاء يجربون داخل التطبيق؟"></textarea></div>'+
- '<label class="check"><input type="checkbox" id="group-confirm" required><span>أوافق على المشاركة باختبار تطبيقات أعضاء المجموعة، وعلى خصم '+ECONOMY.groupJoin+' عملة مرة واحدة عند تأكيد انضمامي.</span></label>'+
+ '<label class="check"><input type="checkbox" id="group-confirm" required><span>أوافق على اختبار تطبيقات بقية الأعضاء وعلى خصم '+ECONOMY.groupJoin+' عملة مرة واحدة عند تأكيد انضمامي إلى '+esc(p.title)+'.</span></label>'+
  '<button type="submit" class="primary full" '+(state.wallet.balance<ECONOMY.groupJoin?'disabled':'')+'>'+ico("shield",18)+' تأكيد الانضمام وخصم '+ECONOMY.groupJoin+' عملة</button></form>'+
- (state.wallet.balance<ECONOMY.groupJoin?'<div class="pane-note" style="margin-top:14px">رصيدك غير كافٍ. افتح «اختباراتي» وقدّم تقارير مقبولة لكسب العملات.</div>':'')+
- '<p class="small muted">المعاينة تحفظ بيانات التطبيق ورصيد العملات داخل متصفحك فقط، ولا ترسل طلباً إلى المجموعة الحقيقية.</p>';
+ (state.wallet.balance<ECONOMY.groupJoin?'<div class="pane-note" style="margin-top:14px">رصيدك غير كافٍ. تقدر تختبر التطبيقات العامة وتحصل على عملات من تقارير مقبولة.</div>':'')+
+ '<p class="small muted">البيانات والرصيد تجريبيان، ويبقيان في متصفحك فقط.</p>';
 }
+
 function renderGroupApp(){
  const a=state.groupMember;if(!a)return '<div class="empty">أنت مو منضم لهذه المجموعة بعد.</div>';
  return '<button class="back" id="back-groups">'+ico("arrow",16)+' رجوع إلى المجموعة</button>'+
- '<div class="group-app-top">'+iconHTML(a)+'<div><div class="small muted">تطبيقك داخل مجموعة التبادل</div><h2 style="margin:5px 0">'+esc(a.name)+'</h2><div class="muted small">'+esc(a.developer)+'</div><span class="badge" style="margin-top:7px">'+ico("circleCheck",14)+' مقعد مؤكد تجريبياً</span></div></div>'+
+ '<div class="group-app-top">'+iconHTML(a)+'<div><div class="small muted">تطبيقك في '+esc(getPack(myPackId()).title)+'</div><h2 style="margin:5px 0">'+esc(a.name)+'</h2><div class="muted small">'+esc(a.developer)+'</div><span class="badge" style="margin-top:7px">'+ico("circleCheck",14)+' مقعد مؤكد تجريبياً</span></div></div>'+
  '<div class="panel"><h3>عن التطبيق</h3><p>'+esc(a.desc)+'</p><div class="line"></div><h3>مهام الاختبار</h3><div class="task">'+esc(a.tasks).replace(/\n/g,"<br>")+'</div></div>'+
  '<div class="panel"><h3>رابط الاشتراك</h3><p class="small muted">يحتاج الأعضاء إلى أهلية مناسبة في Google Play Console ثم فتح رابط الاشتراك الخاص بهذا التطبيق.</p><button class="primary full" id="open-group-play">'+ico("phone",18)+' فتح رابط الاختبار</button></div>'+
  '<div class="pane-note">هذا التطبيق محفوظ في المجموعة المحلية فقط، ولن يظهر في قائمة التطبيقات الرئيسية أو يُنشر للآخرين في هذه المعاينة.</div>';
@@ -400,15 +498,15 @@ function renderWallet(){
  '<div class="wallet-grid"><div class="wallet-metric">'+ico("gift",20)+'<strong>100</strong><small>ترحيب لأول مرة</small></div><div class="wallet-metric">'+ico("circleCheck",20)+'<strong>+25</strong><small>عن تقرير مقبول</small></div><div class="wallet-metric">'+ico("award",20)+'<strong>'+state.wallet.slots+'</strong><small>مساحات تطبيقاتي</small></div></div>'+
  '<div class="panel coin-offer"><div class="row" style="align-items:start"><div><div class="eyebrow">الميزة القادمة</div><h3>إضافة تطبيق ثانٍ</h3><p class="muted small">أول تطبيق مجاني دائماً. تقدر تفتح مساحة لتطبيق إضافي بالعملات المكتسبة.</p></div><span class="coin-price">'+ico("coins",18)+' '+ECONOMY.secondSlot+'</span></div>'+
  (state.wallet.slots>=2?'<div class="badge">'+ico("circleCheck",15)+' المساحة الثانية مفتوحة</div>': '<div class="wallet-progress"><span style="width:'+Math.min(100,state.wallet.balance/ECONOMY.secondSlot*100)+'%"></span></div><div class="row small muted" style="margin-bottom:13px"><span>رصيدك '+state.wallet.balance+'</span><span>متبقي '+remaining+'</span></div><button class="primary full" id="unlock-slot" '+(remaining?'disabled':'')+'>'+ico("lock",17)+' '+(remaining?'اجمع '+remaining+' عملة للفتح':'فتح مساحة تطبيق إضافي')+'</button>')+
- '</div><div class="panel"><h3>شلون تحصل على العملات؟</h3><div class="coin-earn"><span class="earn-icon">'+ico("check",20)+'</span><div><strong>تقرير اختبار مفيد ومقبول</strong><p>+25 هب كوين بعد قبول التقرير مرة واحدة لكل تطبيق باليوم، ولحد 5 تقارير يومياً.</p></div></div><div class="coin-earn"><span class="earn-icon">'+ico("shield",20)+'</span><div><strong>المصداقية أولاً</strong><p>ماكو عملات لمجرد فتح الرابط أو الانضمام، ولا مقابل تقييمات Google Play. الاختبار والمجموعات يبقون مجاناً.</p></div></div><div class="pane-note">بالمعاينة تگدر تحاكي قبول تقرير من «اختباراتي» حتى تشوف تغيّر الرصيد. النظام الحقيقي يحتاج اعتماد Firestore rules ومعاملات خادم موثوقة.</div></div>'+
+ '</div><div class="panel"><h3>شلون تحصل على العملات؟</h3><div class="coin-earn"><span class="earn-icon">'+ico("check",20)+'</span><div><strong>تقرير اختبار مفيد ومقبول</strong><p>+25 هب كوين بعد قبول التقرير مرة واحدة لكل تطبيق باليوم، ولحد 5 تقارير يومياً.</p></div></div><div class="coin-earn"><span class="earn-icon">'+ico("shield",20)+'</span><div><strong>المصداقية أولاً</strong><p>ماكو عملات لمجرد فتح الرابط أو الانضمام، ولا مقابل تقييمات Google Play. الاختبار والمجتمع العام مجانيان؛ لمجموعات التبادل رسوم مقعد.</p></div></div><div class="pane-note">بالمعاينة تگدر تحاكي قبول تقرير من «اختباراتي» حتى تشوف تغيّر الرصيد. النظام الحقيقي يحتاج اعتماد Firestore rules ومعاملات خادم موثوقة.</div></div>'+
  '<div class="panel"><h3>سجل الرصيد</h3>'+state.wallet.ledger.slice(0,8).map(x=>'<div class="profile-row"><span>'+ico(x.type==="report"?"check":"gift",18)+' '+esc(x.title)+'</span><strong class="'+(x.amount>0?'credit-in':'')+'">'+(x.amount>0?'+':'')+x.amount+'</strong></div>').join("")+'</div>';
 }
 
 function renderReport(a){return '<button class="back" id="back-tests">→ رجوع إلى اختباراتي</button><h2>تقرير اختبار: '+esc(a.name)+'</h2><div class="pane-note">هذا تقرير تجريبي محلي. بعد حفظه ارجع إلى «اختباراتي» وجرب محاكاة قبول التقرير حتى تشوف مكافأة هب كوين. بالنظام الحقيقي المكافآت تحتاج اعتماد ومراجعة موثوقة.</div><form id="report-form"><div class="field"><label for="report-text">شنو جرّبت؟ وشنو النتيجة؟ *</label><textarea id="report-text" minlength="15" maxlength="2000" required placeholder="اشرح الميزة اللي جرّبتها، النتيجة، وأي مشكلة واجهتك...">'+esc(state.reports[a.id]||"")+'</textarea></div><button class="primary full" type="submit">حفظ التقرير التجريبي</button></form>'}
-function render(){const root=$("#app");if(state.view==="wallet")root.innerHTML=renderWallet();else if(state.view==="groupJoin")root.innerHTML=renderGroupJoin();else if(state.view==="groupApp")root.innerHTML=renderGroupApp();else if(state.view==="add")root.innerHTML=renderAdd();else if(state.view==="detail")root.innerHTML=renderDetail(lookup(state.focusId));else if(state.view==="report")root.innerHTML=renderReport(lookup(state.focusId));else root.innerHTML=({apps:renderApps,groups:renderGroups,tests:renderTests,account:renderAccount}[state.tab]||renderApps)();document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===state.tab));renderGate();syncHeader()}
+function render(){const root=$("#app");if(state.view==="wallet")root.innerHTML=renderWallet();else if(state.view==="groupJoin")root.innerHTML=renderGroupJoin();else if(state.view==="packDetails")root.innerHTML=renderPackDetails();else if(state.view==="groupApp")root.innerHTML=renderGroupApp();else if(state.view==="add")root.innerHTML=renderAdd();else if(state.view==="detail")root.innerHTML=renderDetail(lookup(state.focusId));else if(state.view==="report")root.innerHTML=renderReport(lookup(state.focusId));else root.innerHTML=({apps:renderApps,groups:renderGroups,tests:renderTests,account:renderAccount}[state.tab]||renderApps)();document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===state.tab));renderGate();syncHeader()}
 function renderGate(){if(state.joined){$("#gate").innerHTML="";return}$("#gate").innerHTML='<div class="overlay"><div class="welcome"><div class="brand-mark">'+ico("group",30)+'</div><div class="eyebrow">الخطوة الأولى بعد إنشاء الحساب</div><h2>انضم إلى مجتمع المختبرين</h2><p>قبل ما تستخدم TesterHub، مطلوب الانضمام لمجموعة المختبرين. بعدين تقدر تستعرض كل التطبيقات، ولكل تطبيق رابط اشتراك Google Play خاص بيه.</p><div class="pane-note">هذه معاينة مستقلة: العضوية والإقرارات محلية ولا تربط حساب Google أو Firebase الحقيقي.</div><p><a href="'+COMMUNITY+'" target="_blank" rel="noopener noreferrer" id="open-community">فتح مجموعة المختبرين ↗</a></p><label class="check"><input id="join-check" type="checkbox"><span>أقر بأني طلبت الانضمام للمجموعة، وأفهم أن كل تطبيق يتطلب اشتراكاً مستقلاً في اختباره المغلق.</span></label><button class="primary full" id="finish-join" disabled>إكمال الخطوة ودخول المعاينة</button></div></div>'}
 async function resizedIcon(file){if(!file)return "";if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>2*1024*1024)throw Error("اختار PNG أو JPG أو WEBP بحجم لا يتجاوز 2MB");return new Promise((resolve,reject)=>{const img=new Image();const u=URL.createObjectURL(file);img.onload=()=>{try{const canvas=document.createElement("canvas");canvas.width=128;canvas.height=128;const ctx=canvas.getContext("2d");ctx.fillStyle="#253642";ctx.fillRect(0,0,128,128);let r=Math.min(128/img.width,128/img.height),w=img.width*r,h=img.height*r;ctx.drawImage(img,(128-w)/2,(128-h)/2,w,h);URL.revokeObjectURL(u);resolve(canvas.toDataURL("image/jpeg",.78))}catch(e){URL.revokeObjectURL(u);reject(e)}};img.onerror=()=>{URL.revokeObjectURL(u);reject(Error("تعذّر قراءة الأيقونة"))};img.src=u})}
-document.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;if(b.dataset.tab){state.tab=b.dataset.tab;state.view="";state.search="";render();scrollTo(0,0);return}if(b.dataset.open){state.returnTab=state.tab;state.focusId=b.dataset.open;state.view="detail";state.visitedOptin=false;render();scrollTo(0,0);return}if(b.id==="add-app"){state.returnTab="apps";state.view=state.apps.length>=state.wallet.slots?"wallet":"add";render();return}if(b.id==="back"){state.view="";state.tab=state.returnTab||"apps";render();return}if(b.id==="back-tests"){state.view="";state.tab="tests";render();return}if(b.id==="join-exchange"){if(state.groupMember){notify("عندك مقعد في هذه المجموعة");return}if(state.wallet.balance<ECONOMY.groupJoin){state.view="wallet";render();notify("رصيدك ما يكفي للانضمام");return}state.tab="groups";state.view="groupJoin";render();scrollTo(0,0);return}if(b.id==="back-groups"){state.view="";state.tab="groups";render();return}if(b.id==="my-group-app"||b.id==="my-group-app-details"){state.view="groupApp";state.tab="groups";render();return}if(b.id==="open-group-play"){const a=state.groupMember;if(a&&validUrl(a.play,["play.google.com"]))window.open(a.play,"_blank","noopener,noreferrer");else notify("رابط الاختبار غير صالح");return}if(b.id==="back-wallet"){state.view="";render();return}if(b.id==="balance-pill"||b.id==="balance-pill-apps"||b.id==="open-wallet"){state.view="wallet";render();return}if(b.id==="avatar-trigger"){document.getElementById("profile-photo")?.click();return}if(b.id==="unlock-slot"){if(state.wallet.slots>=2||state.wallet.balance<ECONOMY.secondSlot){notify("رصيد العملات غير كافٍ");return}state.wallet.balance-=ECONOMY.secondSlot;state.wallet.slots=2;state.wallet.ledger.unshift({id:"second-slot",type:"redeem",amount:-ECONOMY.secondSlot,day:DAY(),title:"فتح مساحة تطبيق إضافي"});persist();state.view="add";render();notify("فتحت مساحة ثانية بتجربة محلية");return}if(b.dataset.approve){approveDemoReport(b.dataset.approve);return}if(b.id==="finish-join"){if($("#join-check")?.checked){state.joined=true;persist();render();notify("تم الدخول إلى المعاينة، بدون تحقق فعلي من عضوية Google")};return}if(b.id==="open-play"){const a=lookup(state.focusId);if(validUrl(a?.play,["play.google.com"])){window.open(a.play,"_blank","noopener,noreferrer");state.visitedOptin=true}else notify("رابط Google Play غير صالح");return}if(b.id==="join-test"){if(!state.visitedOptin){notify("افتح رابط Google Play أولاً، ثم ارجع لتأكيد إقرارك");return}if(!state.tests.includes(state.focusId)){state.tests.push(state.focusId);persist();render();notify("أضيف إلى اختباراتي محلياً؛ لم يتم التحقق من Google Play")}return}if(b.dataset.report){state.focusId=b.dataset.report;state.view="report";render();return}if(b.id==="show-journey"){$("#journey")?.scrollIntoView({behavior:"smooth",block:"start"});return}
+document.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;if(b.dataset.tab){state.tab=b.dataset.tab;state.view="";state.search="";render();scrollTo(0,0);return}if(b.dataset.open){state.returnTab=state.tab;state.focusId=b.dataset.open;state.view="detail";state.visitedOptin=false;render();scrollTo(0,0);return}if(b.id==="add-app"){state.returnTab="apps";state.view=state.apps.length>=state.wallet.slots?"wallet":"add";render();return}if(b.id==="back"){state.view="";state.tab=state.returnTab||"apps";render();return}if(b.id==="back-tests"){state.view="";state.tab="tests";render();return}if(b.dataset.groupPane){state.groupPane=b.dataset.groupPane;state.view="";state.tab="groups";render();return}if(b.dataset.joinPack){const pack=getPack(b.dataset.joinPack);if(state.groupMember){notify("أنت منضم لمجموعة أخرى");return}if(packFull(pack)){notify("اكتملت المقاعد بهذه المجموعة");return}if(state.wallet.balance<ECONOMY.groupJoin){state.view="wallet";render();notify("الرصيد غير كافٍ");return}state.activePackId=pack.id;state.view="groupJoin";state.tab="groups";render();scrollTo(0,0);return}if(b.dataset.packDetails){state.activePackId=b.dataset.packDetails;state.view="packDetails";state.tab="groups";render();return}if(b.dataset.myPackApp){state.activePackId=b.dataset.myPackApp;state.view="groupApp";state.tab="groups";render();return}if(b.id==="back-groups"){state.view="";state.tab="groups";render();return}if(b.id==="my-group-app-details"){state.view="groupApp";state.tab="groups";render();return}if(b.id==="open-group-play"){const a=state.groupMember;if(a&&validUrl(a.play,["play.google.com"]))window.open(a.play,"_blank","noopener,noreferrer");else notify("رابط الاختبار غير صالح");return}if(b.id==="back-wallet"){state.view="";render();return}if(b.id==="balance-pill"||b.id==="balance-pill-apps"||b.id==="open-wallet"){state.view="wallet";render();return}if(b.id==="avatar-trigger"){document.getElementById("profile-photo")?.click();return}if(b.id==="unlock-slot"){if(state.wallet.slots>=2||state.wallet.balance<ECONOMY.secondSlot){notify("رصيد العملات غير كافٍ");return}state.wallet.balance-=ECONOMY.secondSlot;state.wallet.slots=2;state.wallet.ledger.unshift({id:"second-slot",type:"redeem",amount:-ECONOMY.secondSlot,day:DAY(),title:"فتح مساحة تطبيق إضافي"});persist();state.view="add";render();notify("فتحت مساحة ثانية بتجربة محلية");return}if(b.dataset.approve){approveDemoReport(b.dataset.approve);return}if(b.id==="finish-join"){if($("#join-check")?.checked){state.joined=true;persist();render();notify("تم الدخول إلى المعاينة، بدون تحقق فعلي من عضوية Google")};return}if(b.id==="open-play"){const a=lookup(state.focusId);if(validUrl(a?.play,["play.google.com"])){window.open(a.play,"_blank","noopener,noreferrer");state.visitedOptin=true}else notify("رابط Google Play غير صالح");return}if(b.id==="join-test"){if(!state.visitedOptin){notify("افتح رابط Google Play أولاً، ثم ارجع لتأكيد إقرارك");return}if(!state.tests.includes(state.focusId)){state.tests.push(state.focusId);persist();render();notify("أضيف إلى اختباراتي محلياً؛ لم يتم التحقق من Google Play")}return}if(b.dataset.report){state.focusId=b.dataset.report;state.view="report";render();return}if(b.id==="show-journey"){$("#journey")?.scrollIntoView({behavior:"smooth",block:"start"});return}
 if(b.id==="save-profile"){const name=$("#profile-name")?.value?.trim();if(!name||name.length<2||name.length>80){notify("اسم الحساب يجب أن يكون من حرفين إلى 80 حرفاً");return}state.profile.name=name;persist();render();notify("حُفظ الملف الشخصي محلياً فقط");return}
 if(b.id==="profile-my-apps"){state.tab="apps";state.view="";render();return}
 if(b.id==="profile-my-tests"){state.tab="tests";state.view="";render();return}
@@ -416,7 +514,7 @@ if(b.id==="profile-privacy"){notify("سيُربط هذا القسم بإعداد
 if(b.id==="reset-demo"){if(confirm("هل تريد مسح بيانات المعاينة المحلية فقط؟")){localStorage.removeItem(KEY);location.reload()}return}});
 document.addEventListener("change",async e=>{if(e.target.id==="join-check"){$("#finish-join").disabled=!e.target.checked}if(e.target.id==="profile-photo"){const chosen=e.target.files?.[0];if(!chosen)return;const name=$("#profile-name")?.value?.trim();try{const resized=await resizedIcon(chosen);if(name&&name.length>=2&&name.length<=80)state.profile.name=name;state.profile.image=resized;persist();render();notify("تم تحديث صورة المعاينة محلياً")}catch(err){notify(err.message||"تعذّر حفظ الصورة")}}});
 document.addEventListener("input",e=>{if(e.target.id==="search"){state.search=e.target.value;const matches=apps().filter(a=>(a.name+" "+a.developer).toLocaleLowerCase().includes(state.search.toLocaleLowerCase()));$("#app-list").innerHTML=matches.length?matches.map(appRow).join(""):'<div class="empty">ماكو تطبيق بهذا الاسم</div>'}});
-document.addEventListener("submit",async e=>{if(e.target.id==="group-join-form"){e.preventDefault();if(state.groupMember){notify("أنت منضم مسبقاً إلى هذه المجموعة");return}if(state.wallet.balance<ECONOMY.groupJoin){notify("الرصيد غير كافٍ");return}if(!$("#group-confirm")?.checked){notify("لازم توافق على قواعد التبادل أولاً");return}const get=id=>$("#"+id).value.trim();const name=get("group-name"),developer=get("group-developer"),play=get("group-play"),desc=get("group-desc"),tasks=get("group-tasks");if(!validUrl(play,["play.google.com"])){notify("رابط الاختبار لازم يكون HTTPS من play.google.com");return}if(name.length<2||developer.length<2||desc.length<10||tasks.length<10){notify("اكتب اسم ووصف وتعليمات اختبار واضحة");return}try{const image=await resizedIcon($("#group-icon")?.files?.[0]);if(state.groupMember||state.wallet.balance<ECONOMY.groupJoin)return;const localId="exchange-join:preview";const oldWallet={...state.wallet,ledger:[...state.wallet.ledger]};const oldMember=state.groupMember;state.wallet.balance-=ECONOMY.groupJoin;state.wallet.ledger.unshift({id:localId,type:"group_join",amount:-ECONOMY.groupJoin,day:DAY(),title:"رسوم دخول مجموعة التبادل"});state.groupMember={id:"exchange-local-member",name,developer,play,desc,tasks,image,joinedDay:DAY()};persist();state.view="";state.tab="groups";render();notify("انضممت للمجموعة التجريبية. ظهر تطبيقك داخل المجموعة فقط")}catch(err){notify(err.message||"تعذّر حفظ تطبيق المجموعة")};return}if(e.target.id==="app-form"){e.preventDefault();if(state.apps.length>=state.wallet.slots){notify("وصلت للحد المتاح من التطبيقات. افتح مساحة إضافية بالعملات");state.view="wallet";render();return}const get=id=>$("#"+id).value.trim();const name=get("app-name"),developer=get("app-developer"),play=get("app-play"),desc=get("app-desc"),tasks=get("app-tasks");if(!validUrl(play,["play.google.com"])){notify("رابط Play يجب أن يكون على play.google.com وبصيغة https");return}if(name.length<2||developer.length<2||desc.length<10||tasks.length<10){notify("رجاءً اكتب أسماء صحيحة ووصفاً ومهاماً واضحة");return}try{const image=await resizedIcon($("#app-icon").files[0]);state.apps.unshift({id:"local-"+Date.now(),name,developer,play,desc,tasks,image,icon:"◈",tone:"teal",reward:20});persist();state.view="";state.search="";render();notify("تمت إضافة التطبيق للمعاينة فقط، بدون نشر")}catch(err){notify(err.message)}return}if(e.target.id==="report-form"){e.preventDefault();const body=$("#report-text").value.trim();if(body.length<15){notify("التقرير يحتاج تفاصيل أكثر");return}state.reports[state.focusId]=body;persist();state.view="";state.tab="tests";render();notify("حُفظ التقرير محلياً دون XP حقيقية");return}});
+document.addEventListener("submit",async e=>{if(e.target.id==="group-join-form"){e.preventDefault();if(state.groupMember){notify("أنت منضم مسبقاً إلى مجموعة تبادل");return}const pack=getPack(state.activePackId);if(packFull(pack)){notify("اكتملت مقاعد المجموعة");return}if(state.wallet.balance<ECONOMY.groupJoin){notify("الرصيد غير كافٍ");return}if(!$("#group-confirm")?.checked){notify("لازم توافق على قواعد التبادل أولاً");return}const get=id=>$("#"+id).value.trim();const name=get("group-name"),developer=get("group-developer"),play=get("group-play"),desc=get("group-desc"),tasks=get("group-tasks");if(!validUrl(play,["play.google.com"])){notify("رابط الاختبار لازم يكون HTTPS من play.google.com");return}if(name.length<2||developer.length<2||desc.length<10||tasks.length<10){notify("اكتب اسم ووصف وتعليمات اختبار واضحة");return}try{const image=await resizedIcon($("#group-icon")?.files?.[0]);if(state.groupMember||state.wallet.balance<ECONOMY.groupJoin||packFull(pack))return;const localId="exchange-join:"+pack.id+":preview";state.wallet.balance-=ECONOMY.groupJoin;state.wallet.ledger.unshift({id:localId,type:"group_join",amount:-ECONOMY.groupJoin,day:DAY(),title:"رسوم الانضمام إلى "+pack.title});state.groupMember={id:"exchange-local-member",packId:pack.id,name,developer,play,desc,tasks,image,joinedDay:DAY()};state.groupPane="mine";persist();state.view="";state.tab="groups";render();notify(packFull(pack)?"اكتملت المجموعة! انتقلت إلى «مجموعاتي».":"انضممت للمجموعة؛ تطبيقك يظهر في «مجموعاتي» فقط.")}catch(err){notify(err.message||"تعذّر حفظ تطبيق المجموعة")};return}if(e.target.id==="app-form"){e.preventDefault();if(state.apps.length>=state.wallet.slots){notify("وصلت للحد المتاح من التطبيقات. افتح مساحة إضافية بالعملات");state.view="wallet";render();return}const get=id=>$("#"+id).value.trim();const name=get("app-name"),developer=get("app-developer"),play=get("app-play"),desc=get("app-desc"),tasks=get("app-tasks");if(!validUrl(play,["play.google.com"])){notify("رابط Play يجب أن يكون على play.google.com وبصيغة https");return}if(name.length<2||developer.length<2||desc.length<10||tasks.length<10){notify("رجاءً اكتب أسماء صحيحة ووصفاً ومهاماً واضحة");return}try{const image=await resizedIcon($("#app-icon").files[0]);state.apps.unshift({id:"local-"+Date.now(),name,developer,play,desc,tasks,image,icon:"◈",tone:"teal",reward:20});persist();state.view="";state.search="";render();notify("تمت إضافة التطبيق للمعاينة فقط، بدون نشر")}catch(err){notify(err.message)}return}if(e.target.id==="report-form"){e.preventDefault();const body=$("#report-text").value.trim();if(body.length<15){notify("التقرير يحتاج تفاصيل أكثر");return}state.reports[state.focusId]=body;persist();state.view="";state.tab="tests";render();notify("حُفظ التقرير محلياً دون XP حقيقية");return}});
 render();
 </script>
 </body>
