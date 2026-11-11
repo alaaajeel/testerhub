@@ -109,11 +109,14 @@ function groupDetails(){
  const checkedMine=checks.find(x=>x.uid===user.uid);
  const testingCount=checkCount(checkedMine,members);
  const checkingMe=checks.filter(c=>c.uid!==user.uid&&(c.testedUids||[]).includes(user.uid)).length;
+ const startMillis=Math.max(g.startedAt?.toMillis?.()||Date.now(),members.find(m=>m.uid===user.uid)?.joinedAt?.toMillis?.()||Date.now());
+ const startDay=new Date(startMillis).toISOString().slice(0,10),followupDay=Math.max(1,Math.floor((Date.parse(TODAY())-Date.parse(startDay))/86400000)+1);
+
  const myReminders=reminders.filter(x=>x.toUid===user.uid);
  const yesterday=YESTERDAY();
  $('#content').innerHTML='<div class="panel"><div class="row"><h2>'+esc(g.title)+'</h2><button class="ghost" id="back-groups">المجموعات</button></div>'+
  '<div class="row"><strong>'+members.length+'/'+CAPACITY+' عضواً</strong><span class="tag">'+(active?(g.status==='open'?'جارية — مقعد بديل متاح':'مكتملة — التبادل نشط'):'قيد التجميع')+'</span></div>'+
- '<p class="muted">آخر تحديث: '+esc(TODAY())+' (UTC). الإقرارات شخصية ولا تثبت فتح تطبيق خارجي.</p>'+
+ '<p class="muted">آخر تحديث: '+esc(TODAY())+' (UTC). الإقرارات شخصية ولا تثبت فتح تطبيق خارجي.</p>'+ '\n'+(active?'<p class="tag">يوم متابعة مجموعتك: '+followupDay+' (منه 14 يوماً مستهدفة، وليس إثباتاً لمدة Google Play)</p>':'')+
  '<div class="actions"><button id="copy-emails">نسخ إيميلات أعضاء المجموعة ('+members.length+')</button><button class="ghost" id="reload-group">تحديث الحالات</button></div>'+
  (active?'<p class="muted">أكّدت اليوم اختبار '+testingCount+' من '+(members.length-1)+' تطبيقاً. وأكّد '+checkingMe+' من '+(members.length-1)+' أعضاء اختبار تطبيقك اليوم.</p>':'<p class="warn">تبدأ المتابعة اليومية بعد اكتمال 15 عضواً. لا يتم احتساب أي اختبار قبل اكتمال المجموعة.</p>')+
  (myReminders.length?'<p class="warn">عندك '+myReminders.length+' تذكير اليوم من أعضاء المجموعة. يرجى إكمال الاختبارات وتأكيد كل تطبيق.</p>':'')+
