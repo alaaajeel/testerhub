@@ -840,7 +840,8 @@ service cloud.firestore {
           && request.resource.data.byUid == request.auth.uid
           && exchangePastDay(request.resource.data.day)
           && warningId == request.resource.data.uid + '_' + request.resource.data.day
-          && exchangeDoc(gid).data.startedAt < timestamp.date(int(request.resource.data.day[0:4]), int(request.resource.data.day[5:7]), int(request.resource.data.day[8:10])) + duration.value(1, 'd')
+          && exchangeDoc(gid).data.startedAt <= timestamp.date(int(request.resource.data.day[0:4]), int(request.resource.data.day[5:7]), int(request.resource.data.day[8:10]))
+          && get(/databases/$(database)/documents/exchangeGroups/$(gid)/members/$(request.resource.data.uid)).data.joinedAt <= timestamp.date(int(request.resource.data.day[0:4]), int(request.resource.data.day[5:7]), int(request.resource.data.day[8:10]))
           && (!exists(/databases/$(database)/documents/exchangeGroups/$(gid)/days/$(request.resource.data.day)/checkins/$(request.resource.data.uid))
             || get(/databases/$(database)/documents/exchangeGroups/$(gid)/days/$(request.resource.data.day)/checkins/$(request.resource.data.uid)).data.testedUids.size() < exchangeDoc(gid).data.memberUids.size() - 1)
           && request.resource.data.createdAt == request.time;
