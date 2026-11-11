@@ -6,6 +6,7 @@ import {getFirestore,collection,doc,getDoc,getDocs,query,where,limit,runTransact
 const CAPACITY=15;
 const TODAY=()=>new Date().toISOString().slice(0,10); // UTC, matching Firestore security rules
 const YESTERDAY=()=>new Date(Date.now()-86400000).toISOString().slice(0,10);
+const LOOKBACK=()=>new Date(Date.now()-22*86400000).toISOString().slice(0,10);
 const esc=x=>String(x??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const $=selector=>document.querySelector(selector);
 const groupRef=id=>doc(db,'exchangeGroups',id);
@@ -140,8 +141,8 @@ async function openGroup(id){
  const [m,c,r,w,p]=await Promise.all([
  getDocs(membersRef(id)),
  group.startedAt?getDocs(collection(db,'exchangeGroups',id,'days',TODAY(),'checkins')):Promise.resolve({docs:[]}),
- getDocs(remindersRef(id)),
- getDocs(warningsRef(id)),
+ getDocs(query(remindersRef(id),where('day','==',TODAY()),limit(250))),
+ getDocs(query(warningsRef(id),where('day','>=',LOOKBACK()),limit(400))),
  group.status==='active'?getDocs(collection(db,'exchangeGroups',id,'days',YESTERDAY(),'checkins')):Promise.resolve({docs:[]})
  ]);
  detail={group,members:m.docs.map(s=>s.data()).filter(v=>group.memberUids.includes(v.uid)),checks:c.docs.map(s=>s.data()),reminders:r.docs.map(s=>s.data()),warnings:w.docs.map(s=>s.data()),previousChecks:p.docs.map(s=>s.data())};
