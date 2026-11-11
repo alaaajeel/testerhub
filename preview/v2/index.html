@@ -273,9 +273,21 @@ const lookup=id=>apps().find(a=>a.id===id);
 const validUrl=(v,hosts)=>{try{const u=new URL(v);return u.protocol==="https:"&&hosts.includes(u.hostname)&&!u.username&&!u.password&&u.port===""&&v.length<600}catch{return false}};
 const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify({joined:state.joined,apps:state.apps,tests:state.tests,reports:state.reports,profile:state.profile,wallet:state.wallet}))}catch{notify("مساحة تخزين المتصفح غير كافية؛ بعض البيانات التجريبية قد لا تُحفظ")}};
 function notify(msg){const el=$("#toast");el.textContent=msg;el.classList.add("show");setTimeout(()=>el.classList.remove("show"),3800)}
-function iconHTML(a){const img=a.image&&a.image.startsWith("data:image/")?'<img alt="" src="'+esc(a.image)+'">':esc(a.icon||"◈");return '<span class="app-icon '+esc(a.tone||"")+'">'+img+'</span>'}
-function appRow(a){return '<button class="app" data-open="'+esc(a.id)+'">'+iconHTML(a)+'<span class="app-text"><span class="app-name">'+esc(a.name)+'</span><div class="app-author">'+esc(a.developer)+'</div></span><span class="app-reward"><b>'+Number(a.reward||20)+' XP</b>بعد تقرير مقبول</span><span class="chevron">‹</span></button>'}
-function renderApps(){const matches=apps().filter(a=>(a.name+" "+a.developer).toLocaleLowerCase().includes(state.search.toLocaleLowerCase()));return '<div class="section-head"><div><h2>التطبيقات المتاحة</h2><div class="muted small">شوف التطبيقات واختار اللي تريد تختبره</div></div><button class="primary" id="add-app">+ إضافة تطبيق</button></div><div class="search"><span>⌕</span><input id="search" aria-label="البحث في التطبيقات" placeholder="ابحث باسم التطبيق أو المطور..." value="'+esc(state.search)+'"></div><div class="pane-note" style="margin-bottom:15px">هذه أسماء وبيانات توضيحية، ولا تمثل تطبيقات المستخدمين الحقيقيين. مكافآت XP لا تُصرف في المعاينة.</div><div class="stack" id="app-list">'+(matches.length?matches.map(appRow).join(""):'<div class="empty">ماكو تطبيق بهذا الاسم</div>')+'</div>'}
+
+function iconHTML(a){
+ const image=a.image&&a.image.startsWith("data:image/")?'<img alt="" src="'+esc(a.image)+'">':ico(a.id==="demo-1"?"book":a.id==="demo-2"?"target":a.id==="demo-3"?"chart":"phone",30);
+ return '<span class="app-icon '+esc(a.tone||"")+'">'+image+'</span>';
+}
+function appRow(a){return '<button class="app" data-open="'+esc(a.id)+'">'+iconHTML(a)+'<span class="app-text"><span class="app-name">'+esc(a.name)+'</span><div class="app-author">'+esc(a.developer)+'</div></span><span class="app-reward"><b>'+ico("award",14)+' '+Number(a.reward||20)+' XP</b>بعد تقرير مقبول</span><span class="chevron">'+ico("arrow",18)+'</span></button>'}
+function renderApps(){
+ const matches=apps().filter(a=>(a.name+" "+a.developer).toLocaleLowerCase().includes(state.search.toLocaleLowerCase()));
+ return '<div class="balance-hero"><div class="eyebrow">TESTERHUB · مجتمع المطورين</div><strong>'+ico("sparkles",23)+' اختبر، ساهم، وتطوّر</strong><p>تطبيقك الأول مجاني · وكل مساهمة مفيدة تبني رصيدك.</p><button class="wallet-cta" id="balance-pill-apps">'+ico("coins",16)+' '+state.wallet.balance+' هب كوين '+ico("arrow",13)+'</button></div>'+
+ '<div class="section-head"><div><h2>اكتشف التطبيقات</h2><div class="muted small">اختبر تطبيقات المجتمع وساعد المطورين</div></div><button class="primary" id="add-app">'+ico("plus",19)+' إضافة تطبيق</button></div>'+
+ '<div class="search">'+ico("search",22)+'<input id="search" aria-label="البحث في التطبيقات" placeholder="اسم التطبيق أو المطور..." value="'+esc(state.search)+'"></div>'+
+ '<div class="pane-note" style="margin-bottom:16px;display:flex;gap:9px;align-items:start">'+ico("info",18)+'<span>التطبيقات المعروضة هنا أمثلة توضيحية. عند ربط Firebase راح تظهر التطبيقات الحقيقية بدون تغيير بياناتها.</span></div>'+
+ '<div class="stack" id="app-list">'+(matches.length?matches.map(appRow).join(""):'<div class="empty">ماكو تطبيق بهذا الاسم</div>')+'</div>';
+}
+
 function renderGroups(){
  const sample=[...state.apps,...starters].slice(0,15),filled=sample.length,capacity=15;
  const slots=Array.from({length:capacity},(_,i)=>{const a=sample[i];return a?'<div class="group-slot filled"><button data-open="'+esc(a.id)+'" title="'+esc(a.name)+'" aria-label="عرض تطبيق '+esc(a.name)+'">'+iconHTML(a)+'</button></div>':'<div class="group-slot" title="مقعد شاغر" aria-label="مقعد شاغر">＋</div>'}).join("");
@@ -296,7 +308,20 @@ function renderGroups(){
  '<div class="pane-note">المجموعة المعروضة هي مثال لتجربة التصميم فقط. الصور الحقيقية للتطبيقات المنضمة تُجلب عند ربط V2 بسجلات التطبيقات والمجموعات في Firebase بعد التحقق من الصلاحيات.</div>';
 }
 
-function renderTests(){const items=state.tests.map(lookup).filter(Boolean);return '<div class="section-head"><h2>اختباراتي</h2><span class="badge">'+items.length+' تطبيقات</span></div><div class="stats" style="margin-bottom:15px"><div class="stat"><strong>'+items.length+'</strong><span>اختبارات انضممت لها تجريبياً</span></div><div class="stat"><strong>'+Object.keys(state.reports).length+'</strong><span>تقارير محلية</span></div></div>'+(items.length?'<div class="stack">'+items.map(a=>'<div class="panel"><div class="row">'+iconHTML(a)+'<div style="flex:1"><h3>'+esc(a.name)+'</h3><div class="small muted">'+esc(a.developer)+'</div></div><button class="outline" data-report="'+esc(a.id)+'">أكتب تقرير</button></div><div class="small muted" style="margin-top:10px">'+(state.reports[a.id]?"تم حفظ تقرير تجريبي محلي":"بانتظار تقرير تجربة فعلية")+'</div></div>').join("")+'</div>':'<div class="empty">بعدك ما أضفت أي تطبيق لاختباراتي. افتح التطبيقات واختار أحدها.</div>')+'<p class="muted small">لا تعتبر هذه الحالات إثباتاً لاختبار Google Play أو احتساب أيامه.</p>'}
+
+function renderTests(){
+ const items=state.tests.map(lookup).filter(Boolean);
+ return '<div class="section-head"><div><h2>اختباراتي</h2><div class="small muted">نشاطك وتقاريرك اليومية</div></div><span class="badge">'+ico("check",15)+' '+items.length+' تطبيقات</span></div>'+
+ '<div class="stats" style="margin-bottom:16px"><div class="stat"><strong>'+items.length+'</strong><span>تطبيقات أختبرها</span></div><div class="stat"><strong>'+Object.keys(state.reports).length+'</strong><span>تقارير محلية</span></div></div>'+
+ (items.length?'<div class="stack">'+items.map(a=>{
+ const done=hasApprovedReport(a.id),reported=!!state.reports[a.id],local=state.apps.some(my=>my.id===a.id);
+ return '<div class="panel"><div class="row">'+iconHTML(a)+'<div style="flex:1;min-width:0"><h3 style="margin:0">'+esc(a.name)+'</h3><div class="small muted">'+esc(a.developer)+'</div></div></div><div class="row-wrap" style="margin-top:13px"><button class="secondary" data-report="'+esc(a.id)+'">'+ico("edit",16)+' '+(reported?"تعديل التقرير":"كتابة تقرير")+'</button>'+
+ (reported&&!done&&!local?'<button class="outline" data-approve="'+esc(a.id)+'">'+ico("circleCheck",16)+' محاكاة قبول +25</button>':'')+
+ (done?'<span class="badge">'+ico("circleCheck",16)+' مكافأة اليوم محتسبة</span>':'')+'</div>'+
+ '<div class="small muted" style="margin-top:9px">'+(reported?"تقريرك محفوظ محلياً":"لم تكتب تقريراً لهذا التطبيق بعد")+'</div></div>'
+ }).join("")+'</div>':'<div class="empty">'+ico("target",27)+'<p>ما ضفت أي تطبيق لاختباراتك بعد</p><span>افتح قسم التطبيقات واختار تطبيقاً تبدأ بيه</span></div>')+
+ '<p class="small muted" style="margin-top:14px">قبول التقرير هنا محاكاة للمعاينة فقط؛ لا XP أو عملات حقيقية من دون مراجعة وصلاحيات خادم موثوقة.</p>';
+}
 
 function profileAvatar(){const image=state.profile?.image;return '<button type="button" id="avatar-trigger" class="avatar-edit" aria-label="تغيير صورة الحساب" title="اضغط لتغيير صورتك"><span class="profile-avatar">'+(image&&image.startsWith("data:image/")?'<img src="'+esc(image)+'" alt="صورة حسابك">':ico("user",34))+'</span><span class="avatar-camera">'+ico("camera",16)+'</span></button>'}
 function renderAccount(){
