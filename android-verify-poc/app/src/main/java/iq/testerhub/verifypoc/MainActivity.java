@@ -56,7 +56,8 @@ public class MainActivity extends Activity {
     private String lastPackage;
 
     /** Per-package usage for today: foreground ms, number of opens, last open time. */
-    private static final class Usage { long ms; int opens; long last; long openedAt = -1; }
+    private static final class Usage { long ms; int opens; long last; long openedAt = -1; long systemMs;
+        final java.util.Set<String> resumed = new java.util.HashSet<>(); }
 
     @Override
     protected void onCreate(Bundle state) {
@@ -189,16 +190,30 @@ public class MainActivity extends Activity {
             String pkg = e.getPackageName();
             Usage u = map.get(pkg);
             if (u == null) { u = new Usage(); map.put(pkg, u); }
+            // Track each activity of the app separately: apps with a splash screen resume a second
+            // activity before the first one pauses. The app is "in front" while any of its activities is resumed.
+            String cls = e.getClassName() == null ? "" : e.getClassName();
             if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {          // == ACTIVITY_RESUMED
-                if (u.openedAt < 0) { u.openedAt = e.getTimeStamp(); u.opens++; }
+                if (u.resumed.isEmpty()) { u.openedAt = e.getTimeStamp(); u.opens++; }
+                u.resumed.add(cls);
                 u.last = e.getTimeStamp();
-            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND) {   // == ACTIVITY_PAUSED
-                if (u.openedAt >= 0) { u.ms += e.getTimeStamp() - u.openedAt; u.openedAt = -1; }
+            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND || type == 23 /* ACTIVITY_STOPPED */) {
+                if (u.resumed.remove(cls) && u.resumed.isEmpty() && u.openedAt >= 0) {
+                    u.ms += e.getTimeStamp() - u.openedAt; u.openedAt = -1;
+                }
             }
         }
         for (Usage u : map.values()) {
             if (u.openedAt >= 0) { u.ms += now - u.openedAt; u.openedAt = -1; }
         }
+        // Cross-check with Android's own daily total for the same period.
+        try {
+            for (Map.Entry<String, android.app.usage.UsageStats> en
+                    : usm.queryAndAggregateUsageStats(startOfToday(), now).entrySet()) {
+                Usage u = map.get(en.getKey());
+                if (u != null) u.systemMs = en.getValue().getTotalTimeInForeground();
+            }
+        } catch (Exception ignored) { }
         return map;
     }
 
@@ -226,6 +241,7 @@ public class MainActivity extends Activity {
                     out.append("\n\nاليوم: ما انفتح.");
                 } else {
                     out.append("\n\nاليوم: ").append(formatDuration(u.ms))
+                       .append("\nحسب عداد أندرويد: ").append(formatDuration(u.systemMs))
                        .append(" · انفتح ").append(u.opens).append(" مرة")
                        .append("\nآخر فتح: ").append(new SimpleDateFormat("HH:mm", Locale.US).format(new Date(u.last)));
                 }
