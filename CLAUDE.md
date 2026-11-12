@@ -31,3 +31,4 @@ HTML/JS ثابت (بدون framework) + Firebase Auth / Firestore / Hosting + Gi
 - المستودع عام: ممنوع أي سر، مفتاح، أو ملف service account بالكود.
 - الواجهة عربية RTL (سكيل arabic-rtl-ui). لا تعيد كتابة التطبيق كاملاً؛ استخرج الوحدات تدريجياً.
 - قبل ما تگول خلص: npm test و npm run build بدون أخطاء.
+- قبل أي دمج على main أو نشر، وبعد أي تغيير بقواعد Firestore أو الصلاحيات: سكيل security-review (اختبار هجوم على المحاكي ← إصلاح ← إعادة اختبار).
