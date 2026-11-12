@@ -2,6 +2,7 @@
 import {Timestamp} from 'firebase-admin/firestore';
 
 const TEST_DAYS = 14, DAY_MS = 86400000, HOUR_MS = 3600000;
+const REMINDER_WINDOW_HOURS = 6;
 const RESEND_GAP_MS = 20 * HOUR_MS, STALE_MS = 60 * DAY_MS, FIRST_RUN_MS = 30 * 60000, MAX_CATCH_UP_MS = 6 * HOUR_MS;
 const FCM_BATCH = 500, WRITE_BATCH = 400, IN_LIMIT = 30, READ_LIMIT = 500;
 // Only answers that are about the token itself; anything else could be our own fault and must not lose devices.
@@ -87,9 +88,11 @@ async function activeUsers(db, uids) {
 }
 
 export async function runReminders({db, messaging, now = new Date()}) {
-  // Scheduled runs can be late or skipped, so each run also covers the previous hour; lastReminderAt stops repeats.
+  // GitHub runs this schedule only a few times a day (measured: 3–4 runs/day instead of 96), so each run
+  // covers the last REMINDER_WINDOW_HOURS hours; lastReminderAt (20 h gap) still stops a second reminder.
   const hour = now.getUTCHours();
-  const snap = await db.collection('pushDevices').where('reminderUtcHour', 'in', [hour, (hour + 23) % 24]).get();
+  const hours = Array.from({length: REMINDER_WINDOW_HOURS}, (_, i) => (hour + 24 - i) % 24);
+  const snap = await db.collection('pushDevices').where('reminderUtcHour', 'in', hours).get();
   const stale = [], devices = [];
   for (const doc of snap.docs) {
     const {updatedAt, lastReminderAt} = doc.data();

@@ -73,12 +73,21 @@ test('two due tests become one message, on every device of that tester', async (
  assert.deepEqual(sentTo(m), ['token-phone', 'token-tablet']);
  assert.match(m.calls[0].data.body, /2 تطبيقات/);
 });
-test('other hours are left alone but a skipped previous hour is caught up', async () => {
- await device('now', 't1'); await device('late', 't1', {reminderUtcHour: 16}); await device('later', 't1', {reminderUtcHour: 18}); await device('early', 't1', {reminderUtcHour: 3});
+test('a run up to 5 hours late still reminds; future and older hours are left alone', async () => {
+ // GitHub runs the schedule only a few times a day, so a run must catch up the last 6 hours.
+ await device('now', 't1'); await device('late', 't1', {reminderUtcHour: 16}); await device('fiveLate', 't1', {reminderUtcHour: 12});
+ await device('sixLate', 't1', {reminderUtcHour: 11}); await device('later', 't1', {reminderUtcHour: 18}); await device('early', 't1', {reminderUtcHour: 3});
  await assignment('x', 't1');
  const m = messaging();
  await runReminders({db, messaging: m, now});
- assert.deepEqual(sentTo(m), ['token-late', 'token-now']);
+ assert.deepEqual(sentTo(m), ['token-fiveLate', 'token-late', 'token-now']);
+});
+test('the catch-up window wraps across midnight UTC', async () => {
+ await device('lateNight', 't1', {reminderUtcHour: 22});
+ await assignment('x', 't1');
+ const m = messaging();
+ await runReminders({db, messaging: m, now: new Date('2026-11-11T01:30:00Z')});
+ assert.deepEqual(sentTo(m), ['token-lateNight']);
 });
 test('running every 15 minutes still reminds once a day', async () => {
  await device('a', 't1');
