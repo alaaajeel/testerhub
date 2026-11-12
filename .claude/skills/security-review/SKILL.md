@@ -1,76 +1,78 @@
 ---
 name: security-review
-description: Use before merging, releasing or deploying, after any change to Firestore/Storage rules, auth, admin features or user input handling, or when asked for a security check (فحص أمني، ثغرات، حماية، قبل الإطلاق) — think like an attacker, prove each hole with a test, fix it, re-test.
+description: Use for any app, site, API or game before merging, releasing or deploying, after changes to auth, permissions, database rules, payments or user input, or when asked for a security check (فحص أمني، ثغرات، حماية، قبل الإطلاق) — think like an attacker, prove each hole with a test, fix it, re-test.
 ---
 
-# Security Review — find it, prove it, fix it
+# Security Review — find it, prove it, fix it (any project)
 
-No app is perfectly secure. The goal: every realistic attack has a test that shows it is blocked. Work like an attacker first, then like a fixer. Reply to the user in Iraqi Arabic, plain words, no fear-mongering, no flattery.
+No app is perfectly secure. The goal: every realistic attack has a test showing it is blocked. Work like an attacker first, then like a fixer. Works for web apps, PWAs, mobile apps (Android/Capacitor/Flutter), backends/APIs and games. Reply to the user in Iraqi Arabic, plain words, no fear-mongering, no flattery.
 
 ## Golden rules
-- **Never attack production.** All attack tests run on the Firebase Emulator / local build / a test project. No destructive or bulk actions on live data, ever.
-- **The client is the attacker's.** Anyone can open DevTools, read `firebase-config.js` and call Firestore directly with their own account. UI checks are not security; only rules and trusted servers are.
-- **Prove, don't guess.** A hole is "confirmed" only when a test reproduces it; "fixed" only when that same test now fails to attack.
-- **Fix the smallest thing at the source** (usually a rule), keep old data compatible, and ask before any migration.
+- **Never attack production or other people's systems.** Attack only the user's own project, on a local build, emulator, staging or test project. No destructive or bulk actions on live data.
+- **The client belongs to the attacker.** Web pages, APKs and game builds can be read, modified and replayed. Anything checked only in the UI/client is not security; only the server, database rules or a trusted backend can enforce it.
+- **Prove, don't guess.** "Confirmed" = a test reproduces it. "Fixed" = the same test is now blocked, and the normal-user test still passes.
+- **Fix the smallest thing at the source**, keep old data compatible, and ask before migrations, deleting data, or rotating keys that could break users.
 
 ## Process
-1. **Scope:** list what changed (git diff vs main) and the data/paths it touches. Full review before a release.
-2. **Recon:** map collections, who should read/write each, admin powers, user inputs, external links, secrets, GitHub workflows.
-3. **Attack:** for each item in the checklist write an emulator/unit test as the attacker (a different user, a signed-out user, an unverified user, a suspended user). Run it.
-4. **Fix:** tighten the rule/code. Re-run the attack test (must be denied) AND the normal-user test (must still work).
-5. **Report** (format below). Ask before merging anything.
+1. **Detect the stack** (package.json, firebase.json, supabase/, server code, AndroidManifest, Unity project…) and load the matching module below.
+2. **Scope:** what changed (`git diff` vs main) and what data/endpoints it touches. Full review before a release.
+3. **Recon / threat map:** assets (accounts, personal data, money, points/XP, admin power), entry points (forms, APIs, rules, deep links, uploads, webhooks), trust boundaries (client ↔ server), secrets, CI/CD.
+4. **Attack:** for each checklist item write a test as the attacker — another user, signed-out, unverified, suspended, a modified client, a replayed/duplicated request, a huge/malformed input. Run it.
+5. **Fix**, re-run attack + normal tests.
+6. **Report** (format at the end). Ask before merging.
 
-## Attacker checklist (Firebase web apps)
+## Universal checklist (every project)
+| # | Attack | What to try | Typical fix |
+|---|---|---|---|
+| 1 | **Broken access control (IDOR)** | Change an ID in a request/path to read or edit another user's data; list everything | Check ownership/membership on the server/rules for every read and write |
+| 2 | **Privilege escalation** | Send extra fields: `role`, `isAdmin`, `points`, `balance`, `verified`, `status` | Allow-list writable fields; admin only via server-side claims/roles |
+| 3 | **Broken auth** | Unverified email, weak/reset-password abuse, token reuse after logout, suspended account still working | Enforce verification/suspension server-side; short-lived tokens |
+| 4 | **Injection** | SQL/NoSQL injection, command injection, path traversal (`../`), template injection | Parameterized queries, strict validation, no shell/eval with user input |
+| 5 | **XSS / HTML injection** | Name = `<img src=x onerror=alert(1)>`, link = `javascript:alert(1)` | Escape output / `textContent`; allow only `https:` + expected hosts; `rel="noopener noreferrer"` |
+| 6 | **Forged values & business logic** | Fake timestamps, negative quantities, price=0, XP +1000, skip a step, use a coupon twice | Server computes time, prices, counters; validate state transitions |
+| 7 | **Race / replay / duplicates** | Double-click, two devices, replay the same request, join a full group twice | Transactions, idempotency keys, deterministic IDs, unique constraints |
+| 8 | **Secrets exposure** | `git grep -nE "private_key|BEGIN PRIVATE|service[_-]?account|sk_live|secret|password\s*=|AIza[0-9A-Za-z_-]{30,}"`, check APK/JS bundles | Secrets only on server/CI secrets; leaked key = **rotate**, not just delete |
+| 9 | **Abuse & cost (DoS / free-tier drain)** | Spam writes, unbounded queries, huge uploads, loops that reload everything | Rate limits, `limit` on queries, size limits, one-per-day IDs, budget alerts |
+| 10 | **Insecure uploads** | Huge file, wrong type, HTML/SVG with script, overwrite others' path | Size/type limits, per-user paths, serve as download/inert |
+| 11 | **Sensitive data exposure / privacy** | Emails/phones visible to strangers, data in logs/URLs/analytics, public repo | Least exposure + consent; deletion path; nothing personal in repo/logs |
+| 12 | **Security headers & transport** | Clickjacking (iframe), mixed content, no CSP | HTTPS only; CSP, `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy` |
+| 13 | **Vulnerable dependencies** | `npm audit --omit=dev` / Gradle / pub / NuGet advisories | Update/pin; remove unused packages |
+| 14 | **CI/CD supply chain** | Workflows with broad `permissions`, `pull_request_target` on untrusted code, secrets printed | Least permissions, manual/protected deploys, mask secrets |
 
-### A. Firestore / Storage rules — the main door
-| Attack | How to test | Typical fix |
-|---|---|---|
-| Read other users' private data (emails, messages, reports) via `get` or a broad `list` query | Emulator: user B reads/lists user A's docs | Per-doc ownership/membership checks; never `allow read: if signedIn()` on private data |
-| Write/overwrite someone else's document | User B `set`/`update` A's doc | `request.auth.uid == resource.data.ownerUid` and on create `request.resource.data.ownerUid == request.auth.uid` |
-| Privilege escalation: set `role`, `admin`, `xp`, `points`, `verified`, `suspended`, `status` on own doc | User updates own profile with extra fields | `diff(resource.data).affectedKeys().hasOnly([...safe fields])`; admin only via custom claims |
-| Mass assignment: extra unexpected fields | Create with extra keys | `keys().hasOnly([...])` on create and update |
-| Forged time/counters: fake `createdAt`, old/future day, XP increment by 1000 | Send client timestamps / big increments | `== request.time`; server-day checks; counters computed, not written by clients |
-| Bypass limits: join a full group, join twice, 17th member, duplicate daily report | Race / repeat writes | Transactions + rules on sizes; deterministic doc IDs (`uid_day`) so repeats collide |
-| Delete evidence | Delete reports/warnings | `allow delete: if false` unless truly needed |
-| Unverified / suspended / signed-out access | Run tests with those identities | `verified()` and not-suspended helpers on sensitive paths |
-| Storage upload abuse (if used) | Huge file, wrong type, others' path | Size/content-type/path-uid limits |
+## Stack modules (use what applies)
 
-### B. Auth & admin
-- Admin power only from **custom claims** or a trusted server, never from a client-writable field.
-- Admin pages (`admin.html`) must be protected by rules, not by hiding the link.
-- Email verification enforced in rules where emails or contact data are exposed.
+### Firebase (Firestore / Storage / Auth)
+- Rules are the real backend. Test with the **Emulator** and `@firebase/rules-unit-testing` as different identities.
+- `keys().hasOnly([...])` on create, `diff().affectedKeys().hasOnly([...])` on update, `== request.time` for timestamps, `allow delete: if false` by default.
+- Never `allow read: if request.auth != null` on private data; check broad `list` queries too.
+- Admin via custom claims only. Web apiKey is public by design — restrict it by HTTP referrer in Google Cloud.
+- Spark plan: count reads per user per day; rules `get()`/`exists()` also cost reads.
 
-### C. XSS / injection in the UI
-- Search for `innerHTML`, `insertAdjacentHTML`, template strings with user data. Every user value must be escaped (`esc()`/`clean()`) or set via `textContent`.
-- Links from users: allow only `https:` and expected hosts (e.g. `play.google.com`); block `javascript:` URLs; `target="_blank"` needs `rel="noopener noreferrer"`.
-- Test: save a name like `<img src=x onerror=alert(1)>` and a URL like `javascript:alert(1)` in the emulator/preview; nothing may execute.
+### Supabase / Postgres
+- **RLS enabled on every table** with policies per operation; the `anon` key is public, the `service_role` key must never reach the client.
+- Test as `anon`, as user A on user B's rows, and via RPC functions (`security definer` functions bypass RLS — review them).
 
-### D. Secrets & config
-- `git grep -nE "private_key|BEGIN PRIVATE|service[_-]?account|AIza[0-9A-Za-z_-]{30,}|sk_live|password\s*="` — the Firebase **web** apiKey is public by design, but must be restricted by HTTP referrer in Google Cloud Console; anything else is a leak.
-- `.gitignore` covers service-account JSON, `.env`, keystores. A leaked secret must be **rotated**, not just deleted from git.
+### Custom backend / API (Node, Express, PHP, Python…)
+- Authorization check in every handler, not only in middleware for some routes; validate body schemas; parameterized SQL.
+- Rate limiting, CORS restricted to your origins, no stack traces to clients, secure cookies (`HttpOnly`, `Secure`, `SameSite`).
 
-### E. Abuse & cost (Spark free-plan denial of service)
-- Unbounded queries/listeners (no `limit`), listeners not closed on logout, reloading whole collections after every click.
-- Spam writes (messages, reminders) — enforce one-per-day IDs or rate limits in rules.
-- Estimate reads per active user per day; flag anything that could exhaust 50k reads/day.
+### Android / Capacitor / Flutter apps
+- Decompile your own APK (jadx/apktool) and search for keys and hidden endpoints — what you find, an attacker finds.
+- `android:exported` components, deep links/intents validated, WebView: no `addJavascriptInterface` with untrusted pages, no loading arbitrary URLs.
+- Release builds: `debuggable=false`, minify/obfuscate, keystore never in repo, network security config HTTPS-only.
+- In-app purchases/subscriptions verified on a server, never trusted from the device.
 
-### F. Hosting & browser hardening (`firebase.json` headers)
-- `Content-Security-Policy` (scripts only from self + gstatic), `X-Frame-Options: DENY` or `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`.
-- Service worker must not cache private API responses for other users.
-
-### G. Dependencies & CI
-- `npm audit --omit=dev`; pin CDN SDK versions.
-- GitHub Actions: least `permissions`, no `pull_request_target` running untrusted code, secrets never echoed, deploy workflows manual/protected.
-
-### H. Privacy
-- Personal data (emails, names) visible only to who needs it, with consent; deletion path exists; nothing personal in public repo or logs.
+### Games (Unity and others)
+- Assume the player edits memory, saves and network packets. Scores, currency, unlocks and rewards are validated server-side if they matter (leaderboards, purchases, competitive play).
+- Save files: checksum/sign if tampering matters; never store purchase state only locally.
+- Multiplayer: server-authoritative movement/damage; rate-limit actions; validate every client message.
 
 ## Report format (to the user)
 ```
-## نتيجة الفحص الأمني — <التاريخ / الفرع>
+## نتيجة الفحص الأمني — <المشروع / الفرع / التاريخ>
 | # | الثغرة | الخطورة | مثبتة باختبار؟ | الحالة |
 |---|---|---|---|---|
-| 1 | مستخدم يگدر يقرا إيميلات مجموعة مو عضو بيها | عالية | نعم: tests/emulator/x.test.mjs | انحلت (قاعدة members) |
+| 1 | مستخدم يگدر يعدّل نقاطه بنفسه | عالية | نعم: tests/security/xp.test | انحلت (حقول مسموحة بالقواعد) |
 ```
-Severity: **حرجة** (data leak/takeover) · **عالية** (privilege/abuse) · **متوسطة** (cost/DoS, hardening) · **منخفضة**.
-End with: what was NOT tested (e.g. real devices, production config) and the one next action.
+Severity: **حرجة** (data leak / account takeover / money) · **عالية** (privilege, abuse) · **متوسطة** (cost/DoS, hardening) · **منخفضة**.
+End with: what was NOT tested (real devices, production config, third-party services) and the one next action.
