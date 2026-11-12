@@ -1,6 +1,7 @@
 import {before,after,beforeEach,test} from 'node:test';
 import {readFileSync} from 'node:fs';
 import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
+import {allowPublish,publish,publishBatch,publishDraftBatch} from './publish-helper.mjs';
 import {doc,setDoc,getDoc,updateDoc,deleteDoc,collection,query,where,getDocs,serverTimestamp,writeBatch,Timestamp} from 'firebase/firestore';
 let env;
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-testerhub',firestore:{rules:readFileSync('firestore.rules','utf8')}})});
@@ -35,8 +36,8 @@ test('daily report binds one UTC day to an atomic assignment checkin',async()=>{
 test('invalid names and nonboolean availability rejected',async()=>{await assertFails(updateDoc(doc(db('t1'),'users','t1'),{name:'x'}));await assertFails(updateDoc(doc(db('t1'),'users','t1'),{available:'yes'}))});
 test('project invitation list is unique and constrains assignment creation',async()=>{
  const d=db('d1'),p={name:'Selected App',link:'https://play.google.com/apps/testing/x',tasks:['Test login screen'],ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
- await assertSucceeds(setDoc(doc(d,'projects','selected'),p));
- await assertFails(setDoc(doc(d,'projects','duplicate'),{...p,testersCount:2,selectedTesterUids:['t1','t1']}));
+ await allowPublish(env,'d1');await assertSucceeds(publishBatch(d,'d1','selected',p).commit());
+ await allowPublish(env,'d1');await assertFails(publishBatch(d,'d1','duplicate',{...p,testersCount:2,selectedTesterUids:['t1','t1']}).commit());
  const assignment={projectId:'selected',testerUid:'t1',ownerUid:'d1',name:p.name,link:p.link,tasks:p.tasks,invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()};
  await assertSucceeds(setDoc(doc(d,'assignments','selected_t1'),assignment));
  await assertFails(setDoc(doc(d,'assignments','selected_t1'),assignment));
@@ -48,12 +49,12 @@ test('draft lifecycle preserves identity and rejects edits after invitations',as
  const draft={name:'Draft App',link:'',tasks:[],status:'draft',ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:0,selectedTesterUids:[]};
  await assertSucceeds(setDoc(ref,draft));
  await assertFails(setDoc(doc(owner,'projects','badDraft'),{...draft,status:'draft',testersCount:1,selectedTesterUids:['t1']}));
- await assertFails(setDoc(doc(owner,'projects','badLink'),{...draft,status:'recruiting',link:'https://example.com/x',testersCount:1,selectedTesterUids:['t1']}));
+ await allowPublish(env,'d1');await assertFails(publishBatch(owner,'d1','badLink',{...draft,status:'recruiting',link:'https://example.com/x',testersCount:1,selectedTesterUids:['t1']}).commit());
  await assertFails(updateDoc(doc(other,'projects','draft1'),{name:'Stolen'}));
  await assertSucceeds(updateDoc(ref,{name:'Edited Draft',link:'https://play.google.com/apps/testing/x'}));
- await assertFails(updateDoc(ref,{status:'recruiting',link:'https://example.com/x',testersCount:1,selectedTesterUids:['t1']}));
+ await assertFails(publishDraftBatch(owner,'d1','draft1',{status:'recruiting',link:'https://example.com/x',testersCount:1,selectedTesterUids:['t1']}).commit());
  await assertFails(setDoc(doc(owner,'assignments','draft1_t1'),{projectId:'draft1',testerUid:'t1',ownerUid:'d1',name:'Edited Draft',link:'https://play.google.com/apps/testing/x',tasks:['Test login screen'],invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()}));
- await assertSucceeds(updateDoc(ref,{status:'recruiting',tasks:['Test login screen'],testersCount:1,selectedTesterUids:['t1']}));
+ await assertSucceeds(publishDraftBatch(owner,'d1','draft1',{status:'recruiting',tasks:['Test login screen'],testersCount:1,selectedTesterUids:['t1']}).commit());
  await assertFails(updateDoc(ref,{name:'Erase history'}));
  await assertFails(updateDoc(ref,{selectedTesterUids:['t2']}));
  await assertFails(updateDoc(ref,{ownerUid:'d2'}));
@@ -62,7 +63,7 @@ test('draft lifecycle preserves identity and rejects edits after invitations',as
 test('task snapshot rejects mismatch and report must describe assigned task',async()=>{
  const owner=db('d1'),tester=db('t1'),tasks=['Test search and open result'];
  const p={name:'Tasks App',link:'https://play.google.com/apps/testing/x',tasks,ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
- await assertSucceeds(setDoc(doc(owner,'projects','taskp'),p));
+ await assertSucceeds(publish(env,owner,'d1','taskp',p));
  const a={projectId:'taskp',testerUid:'t1',ownerUid:'d1',name:p.name,link:p.link,tasks,invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()};
  await assertFails(setDoc(doc(owner,'assignments','taskp_t1'),{...a,tasks:['Do something else']}));
  await assertSucceeds(setDoc(doc(owner,'assignments','taskp_t1'),a));
@@ -83,7 +84,7 @@ test('task snapshot rejects mismatch and report must describe assigned task',asy
 test('declining an invitation blocks participation and preserves the assignment',async()=>{
  const owner=db('d1'),tester=db('t1'),tasks=['Test account creation'];
  const project={name:'Invite App',link:'https://play.google.com/apps/testing/x',tasks,ownerUid:'d1',ownerName:'Test User',createdAt:serverTimestamp(),testersCount:1,selectedTesterUids:['t1']};
- await assertSucceeds(setDoc(doc(owner,'projects','invite'),project));
+ await assertSucceeds(publish(env,owner,'d1','invite',project));
  await assertSucceeds(setDoc(doc(owner,'assignments','invite_t1'),{projectId:'invite',testerUid:'t1',ownerUid:'d1',name:project.name,link:project.link,tasks,invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()}));
  const ref=doc(tester,'assignments','invite_t1');
  await assertSucceeds(updateDoc(ref,{invitationStatus:'declined',respondedAt:serverTimestamp()}));

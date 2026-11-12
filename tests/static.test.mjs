@@ -34,7 +34,8 @@ test('tester IDs are populated from Firestore users document IDs',()=>{
 test('project creation rejects missing tester IDs before writing project data',()=>{
  const start=html.indexOf('async function createProject(');
  const validation=html.indexOf('seenTesterUids=new Set()',start);
- const write=html.indexOf('await storeFns.setDoc(projectRef',start);
+ // The app and its publish slot are written in one batch (fairness, V2 phase 2).
+ const write=html.indexOf('batch.set(projectRef',start);
  assert.ok(start>=0 && validation>start && write>validation);
  assert.match(html,/typeof tester\.uid!=='string'/);
  assert.match(html,/seenTesterUids\.has\(tester\.uid\)/);
@@ -57,7 +58,7 @@ test('repair missing assignments without resetting progress',()=>{
 test('new project explicitly attempts and verifies invitations',()=>{
  const start=html.indexOf("async function createProject(");
  const syncCall=html.indexOf("await syncProjectAssignments(projectRef.id)",start);
- const projectWrite=html.indexOf("await storeFns.setDoc(projectRef",start);
+ const projectWrite=html.indexOf("await batch.commit()",html.indexOf("batch.set(projectRef",start));
  assert.ok(start>=0&&projectWrite>start&&syncCall>projectWrite);
  assert.match(html,/التطبيق انحفظ لكن الدعوات ما وصلت بالكامل/);
 });

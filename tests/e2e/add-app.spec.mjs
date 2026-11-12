@@ -1,10 +1,12 @@
 import {test,expect} from '@playwright/test';
+import {grantPublishInDemo} from './demo-helpers.mjs';
 // Phase 4: simpler Add Application form and compact tester lists (demo store, 20 seeded testers).
 
 async function openAsDeveloper(page,where='new'){
  await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
  await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
- await page.evaluate(async where=>{resetDemo();user=await api.switchDemo('developer');await refresh();tab=where;render();window.copied=[];navigator.clipboard.writeText=async t=>{window.copied.push(t)}},where);
+ await page.evaluate(()=>resetDemo());await page.evaluate(grantPublishInDemo);
+ await page.evaluate(async where=>{user=await api.switchDemo('developer');await refresh();tab=where;render();window.copied=[];navigator.clipboard.writeText=async t=>{window.copied.push(t)}},where);
 }
 
 test('form order: name, prepare card, confirmation, closed link, group link, then the rest',async({page})=>{
