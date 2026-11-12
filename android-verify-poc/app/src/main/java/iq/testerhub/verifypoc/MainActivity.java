@@ -47,6 +47,10 @@ public class MainActivity extends Activity {
     private static final int INK = Color.parseColor("#0B1B3F");
     private static final int MUTED = Color.parseColor("#5B6B8C");
 
+    private static final java.util.Set<String> BROWSERS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "com.android.chrome", "com.chrome.beta", "com.chrome.dev", "com.chrome.canary",
+            "com.microsoft.emmx", "org.mozilla.firefox", "com.sec.android.app.sbrowser", "com.brave.browser"));
+
     private TextView usageStatus;
     private Button usageButton;
     private EditText input;
@@ -56,7 +60,7 @@ public class MainActivity extends Activity {
     private String lastPackage;
 
     /** Per-package usage for today: foreground ms, number of opens, last open time. */
-    private static final class Usage { long ms; int opens; long last; long openedAt = -1; long systemMs;
+    private static final class Usage { long ms; int opens; long last; long openedAt = -1; long systemMs; long hostedMs; String hostFor; long hostStart;
         final java.util.Set<String> resumed = new java.util.HashSet<>(); }
 
     @Override
@@ -184,6 +188,9 @@ public class MainActivity extends Activity {
         long now = System.currentTimeMillis();
         UsageEvents events = usm.queryEvents(startOfToday(), now);
         UsageEvents.Event e = new UsageEvents.Event();
+        // Apps wrapped from a website (TWA / PWABuilder / Bubblewrap) open, then hand the screen to Chrome
+        // within a second or two. Chrome's following session is credited to the app that launched it.
+        String lastLaunchPkg = null; long lastLaunchTs = 0;
         while (events.hasNextEvent()) {
             events.getNextEvent(e);
             int type = e.getEventType();
@@ -193,18 +200,36 @@ public class MainActivity extends Activity {
             // Track each activity of the app separately: apps with a splash screen resume a second
             // activity before the first one pauses. The app is "in front" while any of its activities is resumed.
             String cls = e.getClassName() == null ? "" : e.getClassName();
+            boolean browser = BROWSERS.contains(pkg);
             if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {          // == ACTIVITY_RESUMED
-                if (u.resumed.isEmpty()) { u.openedAt = e.getTimeStamp(); u.opens++; }
+                if (u.resumed.isEmpty()) {
+                    u.openedAt = e.getTimeStamp(); u.opens++;
+                    if (browser && lastLaunchPkg != null && !lastLaunchPkg.equals(pkg)
+                            && e.getTimeStamp() - lastLaunchTs <= 5000) {
+                        u.hostFor = lastLaunchPkg; u.hostStart = e.getTimeStamp();
+                    }
+                }
                 u.resumed.add(cls);
                 u.last = e.getTimeStamp();
+                if (!browser && !pkg.equals(getPackageName())) { lastLaunchPkg = pkg; lastLaunchTs = e.getTimeStamp(); }
             } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND || type == 23 /* ACTIVITY_STOPPED */) {
                 if (u.resumed.remove(cls) && u.resumed.isEmpty() && u.openedAt >= 0) {
                     u.ms += e.getTimeStamp() - u.openedAt; u.openedAt = -1;
+                    if (u.hostFor != null) {
+                        Usage host = map.get(u.hostFor);
+                        if (host != null) host.hostedMs += e.getTimeStamp() - u.hostStart;
+                        u.hostFor = null;
+                    }
                 }
             }
         }
         for (Usage u : map.values()) {
             if (u.openedAt >= 0) { u.ms += now - u.openedAt; u.openedAt = -1; }
+            if (u.hostFor != null) {
+                Usage host = map.get(u.hostFor);
+                if (host != null) host.hostedMs += now - u.hostStart;
+                u.hostFor = null;
+            }
         }
         // Cross-check with Android's own daily total for the same period.
         try {
@@ -237,11 +262,13 @@ public class MainActivity extends Activity {
         if (installed) {
             if (hasUsageAccess()) {
                 Usage u = todayUsage().get(pkg);
-                if (u == null || (u.ms == 0 && u.opens == 0)) {
+                if (u == null || (u.ms == 0 && u.opens == 0 && u.hostedMs == 0)) {
                     out.append("\n\nاليوم: ما انفتح.");
                 } else {
                     out.append("\n\nاليوم: ").append(formatDuration(u.ms))
                        .append("\nحسب عداد أندرويد: ").append(formatDuration(u.systemMs))
+                       .append(u.hostedMs > 0 ? "\nداخل Chrome (تطبيق ويب مغلّف): " + formatDuration(u.hostedMs) : "")
+                       .append(u.hostedMs > 0 ? "\nالمجموع: " + formatDuration(u.ms + u.hostedMs) : "")
                        .append(" · انفتح ").append(u.opens).append(" مرة")
                        .append("\nآخر فتح: ").append(new SimpleDateFormat("HH:mm", Locale.US).format(new Date(u.last)));
                 }
@@ -269,9 +296,9 @@ public class MainActivity extends Activity {
         Map<String, Usage> usage = todayUsage();
         List<Map.Entry<String, Usage>> rows = new ArrayList<>();
         for (Map.Entry<String, Usage> en : usage.entrySet()) {
-            if (labels.containsKey(en.getKey()) && en.getValue().ms > 0 && !en.getKey().equals(getPackageName())) rows.add(en);
+            if (labels.containsKey(en.getKey()) && (en.getValue().ms + en.getValue().hostedMs) > 0 && !en.getKey().equals(getPackageName())) rows.add(en);
         }
-        rows.sort((a, b) -> Long.compare(b.getValue().ms, a.getValue().ms));
+        rows.sort((a, b) -> Long.compare(b.getValue().ms + b.getValue().hostedMs, a.getValue().ms + a.getValue().hostedMs));
         if (rows.isEmpty()) {
             todayList.addView(text("ماكو استخدام مسجل اليوم لحد هسه.", 14, MUTED, false));
             return;
@@ -280,7 +307,7 @@ public class MainActivity extends Activity {
         for (Map.Entry<String, Usage> en : rows) {
             if (n++ >= 20) break;
             String pkg = en.getKey();
-            TextView row = text(labels.get(pkg) + "\n" + formatDuration(en.getValue().ms)
+            TextView row = text(labels.get(pkg) + "\n" + formatDuration(en.getValue().ms + en.getValue().hostedMs)
                     + " · " + en.getValue().opens + " مرة", 15, INK, false);
             row.setPadding(0, dp(10), 0, dp(10));
             row.setOnClickListener(v -> { input.setText(pkg); checkPackage(pkg); });
