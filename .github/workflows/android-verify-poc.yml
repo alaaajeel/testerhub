@@ -1,0 +1,30 @@
+name: Android verify PoC (APK)
+# Proof of concept only: builds a debug APK of android-verify-poc/ for testing on a real phone.
+# Never deploys anything and never touches Firebase or the live site.
+on:
+  push:
+    branches: [poc/android-verify]
+    paths: [android-verify-poc/**, .github/workflows/android-verify-poc.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build debug APK
+        run: gradle -p android-verify-poc assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: testerhub-verify-poc-apk
+          path: android-verify-poc/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
