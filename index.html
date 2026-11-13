@@ -379,6 +379,7 @@ html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 .auth-logo img{width:46px;height:46px;object-fit:contain}
 .header-brand-icon{width:36px;height:36px;object-fit:contain}
 </style>
+<link rel="stylesheet" href="./v2-theme.css?v=20261113" />
 </head>
 <body class="splash-boot">
   <div class="layout">
@@ -1762,9 +1763,20 @@ function stat(label,n,green=false){return `<div class="metric ${green?'green':''
 function projectCard(p){const isDraft=p.status==='draft';const members=myProjectAssignments(p.id),n=members.length,active=members.filter(lastActive).length,percent=n?Math.round(active/n*100):0;return `<article class="surface app-card"><div class="row between"><div class="row"><div class="app-mark blue">${ico('package',29)}</div><div><div class="bold">${clean(p.name)}</div><div class="tiny">اختبار مغلق · ${n} مختبر</div></div></div><span class="${n?'flag':'chip'}">${isDraft?'مسودة':p.status==='completed'?'انتهى الاختبار':n?'وصل للمختبرين':'بلا دعوات'}</span></div><div class="divider"></div><div class="row between"><span class="tiny">نسبة النشاط</span><strong class="success">${percent}%</strong></div><div class="progress" style="margin:7px 0"><i style="width:${percent}%"></i></div><button class="cta blue wide" data-action="project-details" data-id="${clean(p.id)}">${ico('testers',17)} عرض المختبرين والتقدم</button><button class="cta outline wide" style="margin-top:9px;background:#fff2f3;color:#aa3847" data-action="delete-project" data-id="${clean(p.id)}">${ico('trash',16)} حذف التطبيق نهائياً</button></article>`}
 // One compact card per app; the whole card opens its testers and reports.
 function devAppRow(p){
- const members=myProjectAssignments(p.id),n=members.length,active=members.filter(lastActive).length,pct=n?Math.round(active/n*100):0,[symbol,color]=appMark(p.name);
- const [cls,label]=p.status==='draft'?['chip','مسودة']:p.status==='completed'?['chip','انتهى']:isLiveProject(p)?['flag','نشط']:['chip','متوقف'];
- return `<button type="button" class="surface app-row" data-action="project-details" data-id="${clean(p.id)}"><span class="app-mark ${color}">${ico(symbol,24)}</span><span class="app-row-main"><strong>${clean(p.name)}</strong><span class="tiny">${p.status==='draft'?'ما انرسلت دعوات بعد':formatNum(n)+' مختبر · '+formatNum(pct)+'% نشاط'}</span></span><span class="${cls}">${label}</span><span class="app-row-go" aria-hidden="true">‹</span></button>`;
+  const members=myProjectAssignments(p.id),n=members.length,active=members.filter(lastActive).length,pct=n?Math.round(active/n*100):0,[symbol,color]=appMark(p.name);
+  const [cls,label]=p.status==='draft'?['chip','مسودة']:p.status==='completed'?['chip','انتهى']:isLiveProject(p)?['flag','نشط']:['chip','متوقف'];
+  return `<button type="button" class="surface app-row v2-project-card" data-action="project-details" data-id="${clean(p.id)}">
+    <span class="v2-project-top">
+      <span class="app-mark ${color}">${ico(symbol,24)}</span>
+      <span class="app-row-main"><strong>${clean(p.name)}</strong><span class="tiny">اختبار مغلق · Google Play</span></span>
+      <span class="${cls}">${label}</span>
+      <span class="app-row-go" aria-hidden="true">‹</span>
+    </span>
+    <span class="v2-project-progress">
+      <span class="v2-project-meta"><span>${formatNum(n)} مختبر</span><span>نشاط ${formatNum(pct)}%</span></span>
+      <span class="progress"><i style="width:${pct}%"></i></span>
+    </span>
+  </button>`;
 }
 function devHome(){const projects=mineProjects();return `${groupGate()}${crossBanner()}<div class="surface"><div class="row between"><div><div class="lead">تطبيقاتي</div><div class="small">${projects.length?'اضغط على التطبيق حتى تتابع المختبرين والتقارير.':'أضف تطبيقك بثلاث خطوات: التطبيق، المختبرين، المهام.'}</div></div><button class="cta blue home-add" data-tab="new">${ico('add',16)} إضافة تطبيق</button></div></div>${projects.length?`<div class="app-rows">${projects.map(devAppRow).join('')}</div>${participationPanel(participationStats(dashboard.assignments.filter(a=>projects.some(p=>p.id===a.projectId)),(dashboard.reports||[]).filter(r=>projects.some(p=>p.id===r.projectId))),'مؤشرات المشاركة لكل تطبيقاتك')}`:`<div class="tab-empty">${ico('apps',36)}<h3>ما عندك تطبيقات بعد</h3>اضغط «إضافة تطبيق» وابدأ.</div>`}<div class="surface" style="margin-top:13px"><button class="item-link" data-tab="testers">${ico('testers',20)} قائمة المختبرين المتاحين <span>‹</span></button><button class="item-link" data-action="copy-emails">${ico('copy',20)} نسخ الإيميلات <span>‹</span></button></div>`}
 // «اختباراتي» belongs to the tester view; one tap moves there. Nothing switches silently.
