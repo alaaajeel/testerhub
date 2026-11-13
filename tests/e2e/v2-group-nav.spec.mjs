@@ -29,7 +29,7 @@ test('developer app form defaults to Google Group but still preserves actual tes
  await page.locator('.home-add').click();
  await expect(page.locator('#project-group')).toHaveValue('https://groups.google.com/g/testerhubiq');
  await expect(page.locator('#project-form [data-action="copy-group-email"]')).toContainText('نسخ');
- await expect(page.locator('#project-form [name="confirmed"]').toBeVisible();
+ await expect(page.locator('#project-form [name="confirmed"]')).toBeVisible();
  await expect(page.locator('#project-form [data-action="copy-emails"]')).toBeVisible();
 });
 
