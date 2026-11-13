@@ -147,15 +147,20 @@ function v2Account(){
  const m=user,photo=myPublicProfile?.photo,xp=verifiedXp(),level=1+Math.floor(xp/100);
  const sw=(key,on,label)=>`<button type="button" class="v2-switch ${on?'on':''}" data-v2="${key}" role="switch" aria-checked="${!!on}" aria-label="${label}"></button>`;
  const links=[['rewards','دوري المساهمين'],['announcements','مركز الإشعارات'],['help','مركز المساعدة'],...(api.isDemo?[]:[['support','رسائل الإدارة'+(unreadSupport().length?' ('+v2n(unreadSupport().length)+')':'')]]),...(mineProjects().length?[['testers','المختبرون المتاحون']]:[])];
- return `<section class="v2-card" style="margin-top:6px">
-  <div class="v2-row">${photo?`<img class="v2-avatar" src="${clean(photo)}" alt="" width="56" height="56">`:`<span class="v2-appicon v2-avatar" aria-hidden="true">${clean(String(m.name||'؟').trim().charAt(0)||'؟')}</span>`}<div class="v2-grow"><b class="v2-h3">${clean(m.name)}</b><div class="v2-small v2-muted email-ltr" style="text-align:right">${clean(m.email||'')}</div></div><span class="v2-tag t-blue">المستوى ${v2n(level)}</span></div>
+ // Name and photo are edited right here: tap the photo to change it, the pencil to rename.
+ const avatar=photo?`<img class="v2-avatar" src="${clean(photo)}" alt="" width="56" height="56">`:`<span class="v2-appicon v2-avatar" aria-hidden="true">${clean(String(m.name||'؟').trim().charAt(0)||'؟')}</span>`;
+ const editable=!api.isDemo;
+ const nameRow=V2.editName&&editable?`<form id="v2-name-form" class="v2-name-form"><label class="sr-only" for="v2-name">الاسم</label><input id="v2-name" class="v2-input" name="name" minlength="2" maxlength="80" required value="${clean(m.name)}" autocomplete="name"><div class="v2-row" style="margin-top:8px"><button type="submit" class="v2-btn v2-btn-primary v2-btn-sm">حفظ</button><button type="button" class="v2-btn v2-btn-ghost v2-btn-sm" data-v2="name-cancel">إلغاء</button></div></form>`
+  :`<div class="v2-row" style="gap:6px"><b class="v2-h3">${clean(m.name)}</b>${editable?`<button type="button" class="v2-icon-btn v2-edit" data-v2="name-edit" aria-label="تغيير الاسم"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>`:''}</div>`;
+ return `<section class="v2-card v2-profile" style="margin-top:6px">
+  <div class="v2-row">${editable?`<label class="v2-avatar-btn" aria-label="${photo?'تغيير صورتك':'إضافة صورة شخصية'}">${avatar}<span class="v2-avatar-cam" aria-hidden="true">${ico('camera',14)}</span><input type="file" accept="image/*" data-change="profile-photo" hidden></label>`:avatar}<div class="v2-grow">${nameRow}<div class="v2-small v2-muted email-ltr" style="text-align:right">${clean(m.email||'')}</div>${photo&&editable&&!V2.editName?'<button type="button" class="v2-link-btn" data-action="remove-photo">إزالة الصورة</button>':''}</div>${V2.editName?'':`<span class="v2-tag t-blue">المستوى ${v2n(level)}</span>`}</div>
   <div class="v2-row" style="margin-top:14px"><div class="v2-stat"><b>${v2n(xp)}</b><span class="v2-small v2-muted">XP</span></div><div class="v2-stat"><b>${v2n(primaryAssignments().length)}</b><span class="v2-small v2-muted">أختبرها</span></div><div class="v2-stat"><b>${v2n(dashboard.packs?.coins?.balance||0)}</b><span class="v2-small v2-muted">عملة</span></div></div>
  </section>
  ${adminAuthorized?`<a class="v2-btn v2-btn-primary v2-btn-block" style="margin-top:12px" href="./admin.html">${ico('shield',18)} لوحة إدارة المنصة</a>`:''}
  <h2 class="v2-h2">الإعدادات</h2>
  <div class="v2-card">
   <div class="v2-setting"><div><b>إظهار إيميلي للمطورين</b><div class="v2-small v2-muted">حتى يضيفوك لاختباراتهم المغلقة</div></div>${sw('toggle-available',m.available,'إظهار إيميلي للمطورين')}</div>
-  <div class="v2-setting"><div><b>تذكير يومي</b><div class="v2-small v2-muted">إذا عندك اختبارات ما خلصتها</div></div><button type="button" class="v2-btn v2-btn-soft v2-btn-sm" data-action="enable-reminder">تفعيل</button></div>
+  <div class="v2-setting"><div><b>إشعارات التلفون</b><div class="v2-small v2-muted">التذكير اليومي، الرسائل، الدعوات، وإعلانات الإدارة</div></div><button type="button" class="v2-btn v2-btn-soft v2-btn-sm" data-action="enable-reminder">تفعيل</button></div>
   <div class="v2-setting"><div><b>وقت التذكير</b></div><select id="reminder-hour" class="v2-select" aria-label="وقت التذكير">${Array.from({length:24},(_,i)=>`<option value="${i}" ${i===api.getReminderHour()?'selected':''}>${(i%12)||12}:00 ${i<12?'ص':'م'}</option>`).join('')}</select></div>
  </div>
  <h2 class="v2-h2">أكثر</h2>
@@ -164,7 +169,6 @@ function v2Account(){
   <a class="v2-linkrow" href="./privacy.html"><span>الخصوصية والشروط</span><span class="v2-muted" aria-hidden="true">‹</span></a>
   ${api.isDemo?`<button type="button" class="v2-linkrow" data-action="switch-demo"><span>تبديل الحساب التجريبي</span><span class="v2-muted">‹</span></button><button type="button" class="v2-linkrow" data-action="reset-demo"><span>إعادة بيانات المعاينة</span><span class="v2-muted">‹</span></button>`:`<button type="button" class="v2-linkrow v2-danger" data-action="request-deletion"><span>حذف الحساب</span><span class="v2-muted" aria-hidden="true">‹</span></button>`}
  </div>
- ${api.isDemo?'':`<h2 class="v2-h2">ملفك</h2>${profileEditor()}<div class="v2-card"><div class="v2-row"><label class="v2-btn v2-btn-soft v2-grow">${ico('camera',16)} ${photo?'تغيير صورتك':'إضافة صورة شخصية'}<input type="file" accept="image/*" data-change="profile-photo" hidden></label>${photo?'<button type="button" class="v2-btn v2-btn-ghost" data-action="remove-photo">إزالة</button>':''}</div><p class="v2-small v2-muted" style="margin:8px 0 0">صورتك واسمك يظهرون بالدوري بس إذا فعّلتها بصفحة الدوري. البريد ما يظهر أبداً.</p></div>`}
  ${api.isDemo?'':`<button type="button" class="v2-btn v2-btn-ghost v2-btn-block v2-danger" style="margin-top:14px" data-action="logout">تسجيل الخروج</button>`}`;
 }
 
@@ -323,6 +327,8 @@ function v2Click(button){
   return true;
  }
  if(k==='add-draft'&&s){pending(async()=>{const id=await api.saveProjectDraft({name:s.name,link:s.link,tasks:s.tasks,group:OFFICIAL_GROUP.url},null);V2.sheet=null;V2.testsView='mine';await refresh();tab='tests';render();toast('انحفظت المسودة');if(id)selectedProjectId=id});return true}
+ if(k==='name-edit'){V2.editName=true;render();setTimeout(()=>{const n=document.getElementById('v2-name');if(n){n.focus();n.select()}},30);return true}
+ if(k==='name-cancel'){V2.editName=false;render();return true}
  if(k==='toggle-available'){pending(async()=>{try{await api.setAvailability(!user.available);user=await api.currentUser();toast(user.available?'صار إيميلك يظهر للمطورين':'انخفى إيميلك من القائمة')}finally{render()}});return true}
  return false;
 }
@@ -333,3 +339,11 @@ document.addEventListener('input',e=>{
  const q=document.getElementById('v2-q');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(pos,pos)}catch{}}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&V2.sheet){V2.sheet=null;render()}});
+// Renaming from the profile card. Participation stays as it was (the switch above controls the email).
+document.addEventListener('submit',e=>{
+ if(e.target?.id!=='v2-name-form')return;
+ e.preventDefault();e.stopPropagation();
+ const name=String(new FormData(e.target).get('name')||'').trim();
+ if(name.length<2){toast('الاسم لازم يكون حرفين على الأقل');return}
+ pending(async()=>{user=await accountService.updateProfile({name,participationPaused:!!user.participationPaused});await api.refreshLeagueName().catch(err=>console.warn('League name:',err));V2.editName=false;await refresh();toast('تغيّر اسمك')});
+},true);

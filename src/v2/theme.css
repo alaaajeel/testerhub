@@ -6,7 +6,7 @@
  --green:#08875C;--green-l:#E3F7EF;--amber:#A86200;--amber-l:#FFF3DF;--red:#B42842;--red-l:#FDECEF;
  --r:18px;--v2shadow:0 6px 20px rgba(11,27,63,.07);
  position:relative;background:var(--bg)!important;color:var(--ink);
- font-family:"IBM Plex Sans Arabic","Noto Sans Arabic",Tahoma,sans-serif;-webkit-font-smoothing:antialiased;
+ font-family:"Noto Sans Arabic","Roboto",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;-webkit-font-smoothing:antialiased;
 }
 #app.v2 button,#app.v2 input,#app.v2 textarea,#app.v2 select{font-family:inherit}
 #app.v2 .status{display:none}
@@ -110,6 +110,11 @@
 #app.v2 .v2-cbox:disabled{opacity:.55;cursor:not-allowed}
 #app.v2 .v2-check-item{align-items:center}
 /* Account */
+#app.v2 .v2-avatar-btn{position:relative;display:block;cursor:pointer;flex:0 0 56px;border-radius:50%}
+#app.v2 .v2-avatar-cam{position:absolute;bottom:-2px;left:-2px;width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;border:2px solid #fff}
+#app.v2 .v2-edit{width:32px;height:32px;border-radius:10px;color:var(--ink3)}
+#app.v2 .v2-link-btn{border:0;background:none;padding:4px 0 0;color:var(--red);font-size:13px;font-weight:600;cursor:pointer}
+#app.v2 .v2-name-form .v2-input{padding:10px 12px}
 #app.v2 .v2-setting{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px solid var(--line)}
 #app.v2 .v2-setting:first-child{border-top:0}
 #app.v2 .v2-switch{width:50px;height:30px;border-radius:99px;background:#CBD5E5;position:relative;border:0;flex:0 0 50px;cursor:pointer;padding:0}

@@ -241,3 +241,41 @@ test('a user reply reaches every active owner and nobody else', async () => {
  assert.equal(m.calls[0].data.title, 'TesterHub — رد من مستخدم');
  assert.equal(m.calls[0].data.url, './admin.html');
 });
+
+/* Admin announcements */
+const notice = (id, ago, extra = {}) => db.doc('announcements/' + id).set({kind: 'update', audience: 'all', broadcast: true, targetUid: '', title: 'تحديث جديد', body: 'نزل تحديث المجموعات', active: true, createdAt: at(ago), ...extra});
+test('an announcement to all reaches every device of every active user, once', async () => {
+ await cursor(15 * MIN);
+ await device('a', 't1'); await device('b', 't2'); await device('c', 'd1');
+ await db.doc('users/t2').set({name: 'User', suspended: true});
+ await notice('n1', 5 * MIN);
+ const m = messaging();
+ const r = await runActivity({db, messaging: m, now});
+ assert.deepEqual(sentTo(m), ['token-a', 'token-c']);
+ assert.equal(m.calls[0].data.title, 'TesterHub — تحديث جديد');
+ assert.equal(m.calls[0].data.body, 'نزل تحديث المجموعات');
+ assert.equal(r.broadcasts, 1);
+ const again = messaging();
+ await runActivity({db, messaging: again, now: new Date(now.getTime() + 15 * MIN)});
+ assert.equal(again.calls.length, 0);
+});
+test('an announcement to one person reaches only them; a withdrawn one reaches nobody', async () => {
+ await cursor(15 * MIN);
+ await device('a', 't1'); await device('b', 't2');
+ await notice('n2', 5 * MIN, {audience: 'user', broadcast: false, targetUid: 't2', title: 'رسالة لك', body: 'مرحبا'});
+ await notice('n3', 4 * MIN, {active: false});
+ const m = messaging();
+ await runActivity({db, messaging: m, now});
+ assert.deepEqual(sentTo(m), ['token-b']);
+ assert.equal(m.calls[0].data.title, 'TesterHub — رسالة لك');
+});
+test('a broadcast and personal news arrive as one message', async () => {
+ await cursor(15 * MIN);
+ await device('tester', 't1');
+ await message('fromDev', 'developer', 5 * MIN);
+ await notice('n4', 5 * MIN);
+ const m = messaging();
+ await runActivity({db, messaging: m, now});
+ assert.equal(m.calls.length, 1);
+ assert.match(m.calls[0].data.body, /ولديك 1 جديد/);
+});

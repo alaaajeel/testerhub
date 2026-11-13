@@ -58,10 +58,20 @@ test('profile writes confirm success only after accepted save; logout removes pr
  await setup(page,{loggedIn:true,profile:{name:'Old Name',role:'tester',available:true}});
  await page.evaluate(()=>window.fixture.verified=true);await page.locator('[data-action="check-verification"]').click();
  await page.locator('.nav [data-tab="profile"]').click();
- await page.locator('#profile-name').fill('اسم جديد');await page.locator('[name="paused"]').check();await page.locator('#profile-form button').click();
- await expect(page.locator('#toast')).toContainText('تم حفظ');expect(await page.evaluate(()=>window.fixture.profile.available)).toBe(false);
- await page.evaluate(()=>window.fixture.failSave=true);await page.locator('#profile-name').fill('اسم مرفوض');await page.locator('#profile-form button').click();await expect(page.locator('#toast')).toContainText('رفضت قاعدة البيانات');
- await page.locator('[data-action="logout"]').click();await expect(page.locator('#auth-form')).toBeVisible();await expect(page.locator('#profile-form')).toHaveCount(0);
+ // V2: the name is changed on the profile card itself; there is no separate profile form.
+ await expect(page.locator('#profile-form')).toHaveCount(0);
+ await page.locator('[data-v2="name-edit"]').click();
+ await expect(page.locator('#v2-name')).toBeFocused();
+ await page.locator('#v2-name').fill('اسم جديد');await page.locator('#v2-name-form button[type="submit"]').click();
+ await expect(page.locator('#toast')).toContainText('تغيّر اسمك');
+ await expect(page.locator('.v2-profile')).toContainText('اسم جديد');
+ expect(await page.evaluate(()=>window.fixture.profile.name)).toBe('اسم جديد');
+ // The photo is changed by tapping it.
+ await expect(page.locator('.v2-profile label.v2-avatar-btn input[data-change="profile-photo"]')).toHaveCount(1);
+ await page.evaluate(()=>window.fixture.failSave=true);
+ await page.locator('[data-v2="name-edit"]').click();await page.locator('#v2-name').fill('اسم مرفوض');await page.locator('#v2-name-form button[type="submit"]').click();
+ await expect(page.locator('#toast')).toContainText('رفضت قاعدة البيانات');
+ await page.locator('[data-action="logout"]').click();await expect(page.locator('#auth-form')).toBeVisible();await expect(page.locator('.v2-profile')).toHaveCount(0);
 });
 test('add-app form shows no tester names or emails and copies the whole eligible list',async({page})=>{
  await setup(page,{loggedIn:true,profile:{name:'Developer',role:'developer',available:false}});
