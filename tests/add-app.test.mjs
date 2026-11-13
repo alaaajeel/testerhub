@@ -34,7 +34,9 @@ test('the form itself never renders tester names or emails',()=>{
  const form=from('function newProject(){','\nfunction ');
  assert.doesNotMatch(form,/t\.email|t\.name|testerUid/);
  assert.match(form,/prepareCard\(\)/);
- assert.match(form,/أؤكد أني أضفت الإيميلات إلى Google Play Console/);
+ assert.match(form,/أؤكد أني أضفت بريد مجموعة Google أو إيميلات المختبرين في Play Console/);
+ assert.match(form,/OFFICIAL_GROUP\.email/);
+ assert.match(form,/OFFICIAL_GROUP\.url/);
  const rows=from('function testerRow(','function prepareCard(');
  assert.doesNotMatch(rows,/email/);
 });
