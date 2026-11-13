@@ -24,7 +24,7 @@ async function seedLeague(page,{others=3,mine=null,names={}}={}){
   d.publicProfiles=names;save(d);
  },{others,mine,names});
  await page.evaluate(async()=>{user=await api.switchDemo('tester');tab='home';await refresh()});
- await page.locator('.nav [data-tab="rewards"]').click();
+ await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
  await expect(page.locator('.league-list')).not.toContainText('جاري تحميل');
 }
 
@@ -106,7 +106,7 @@ test('a volunteer with no app of their own joins the league after an accepted re
  await page.locator('.report-record').first().locator('[data-decision="accepted"]').click();
  await expect(page.locator('#toast')).toContainText('XP');
  await page.evaluate(async()=>{user=await api.switchDemo('tester');tab='home';await refresh()});
- await page.locator('.nav [data-tab="rewards"]').click();
+ await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
  await expect(page.locator('.league-row.mine')).toContainText('١٠ XP');
  await expect(page.locator('.badge-row')).toContainText('أول تقرير مقبول');
 });
