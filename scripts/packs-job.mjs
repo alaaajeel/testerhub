@@ -1,8 +1,8 @@
-// The daily packs job (GitHub Actions, Firebase Admin SDK). It is the only writer of warnings and earned coins:
-// for each finished day of a running pack, every confirmed app of another active member earns 1 coin, and a
-// member who confirmed fewer than 70% of them gets one warning; 3 warnings and they are out. Day 1 (the day
-// the pack filled) is for installing: it earns coins but never warns. After day 16 the pack is done and its
-// public app cards are hidden. It also opens the first pack.
+// The packs job (GitHub Actions every 15 minutes, Firebase Admin SDK). It is the only writer of warnings and
+// earned coins. Coins arrive within the next run: 1 per confirmed app of another active member, 1 per daily
+// report on any app. Once a day is over, a member who confirmed fewer than 70% of the day's apps gets one
+// warning; 3 warnings and they are out. Day 1 (the day the pack filled) is for installing: it earns coins but
+// never warns. After day 16 the pack is done and its public app cards are hidden. It also opens the first pack.
 
 export const PACK_SIZE = 16, PACK_DAYS = 16, PASS = 0.7, MAX_STRIKES = 3;
 // Daily reports on any app (the old invitations and the new apps alike) also earn 1 coin each, from this day on.
@@ -45,10 +45,11 @@ export function judgeDay(members, confirmed) {
 }
 
 export async function runPacks({db, now = new Date()}) {
-  const {FieldValue} = await import('firebase-admin/firestore');
+  const {FieldValue, Timestamp} = await import('firebase-admin/firestore');
   const flags = await db.doc('appConfig/features').get();
   if (!(flags.exists && flags.data().packs === true)) return {enabled: false};
-  const summary = {enabled: true, opened: 0, judged: 0, warnings: 0, removed: 0, finished: 0};
+  const summary = {enabled: true, opened: 0, judged: 0, warnings: 0, removed: 0, finished: 0, packCoins: 0, reportCoins: 0};
+  const give = (batch, uid, n) => batch.set(db.doc('coins/' + uid), {earned: FieldValue.increment(n), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   // The first pack: created here once, then every 16th joiner opens the next one.
   const meta = db.doc('packMeta/current');
   if (!(await meta.get()).exists) {
@@ -57,38 +58,57 @@ export async function runPacks({db, now = new Date()}) {
     batch.set(db.doc('packs/p1'), {number: 1, status: 'open', size: PACK_SIZE, days: PACK_DAYS, memberCount: 0, createdAt: FieldValue.serverTimestamp()});
     await batch.commit();summary.opened++;
   }
-  const yesterday = addDays(dayKey(now), -1);
-  // Daily reports: every finished day once, from REPORT_COINS_FROM. A cursor keeps each day paid exactly once.
-  const cursor = db.doc('coinsState/reports'), seen = await cursor.get();
-  let reportDay = seen.exists && seen.data().through ? addDays(seen.data().through, 1) : REPORT_COINS_FROM;
-  while (reportDay <= yesterday) {
-    const snap = await db.collection('reports').where('date', '==', reportDay).get();
-    const batch = db.batch();
-    for (const [uid, n] of Object.entries(coinsForReports(snap.docs.map(d => d.data())))) {
-      batch.set(db.doc('coins/' + uid), {earned: FieldValue.increment(n), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
-      summary.reportCoins = (summary.reportCoins || 0) + n;
+  // Coins for daily reports arrive within the run after they are sent (every 15 minutes): only reports newer than the cursor are read.
+  {
+    const cursor = db.doc('coinsState/reports'), seen = await cursor.get();
+    const since = seen.exists && seen.data().after ? seen.data().after : Timestamp.fromMillis(Date.parse(REPORT_COINS_FROM + 'T00:00:00Z'));
+    const snap = await db.collection('reports').where('submittedAt', '>', since).orderBy('submittedAt').limit(400).get();
+    if (snap.size) {
+      const fresh = snap.docs.map(d => d.data()).filter(r => r.date >= REPORT_COINS_FROM);
+      const batch = db.batch();
+      for (const [uid, n] of Object.entries(coinsForReports(fresh))) {give(batch, uid, n);summary.reportCoins += n}
+      batch.set(cursor, {after: snap.docs[snap.size - 1].data().submittedAt, updatedAt: FieldValue.serverTimestamp()});
+      await batch.commit();
     }
-    batch.set(cursor, {through: reportDay, updatedAt: FieldValue.serverTimestamp()});
-    await batch.commit();
-    reportDay = addDays(reportDay, 1);
   }
+  const today = dayKey(now), yesterday = addDays(today, -1);
   const running = await db.collection('packs').where('status', '==', 'running').get();
   for (const packSnap of running.docs) {
     const pack = packSnap.data();
     if (!pack.startDay) continue;
     const last = addDays(pack.startDay, PACK_DAYS - 1);
-    let day = pack.checkedThrough ? addDays(pack.checkedThrough, 1) : pack.startDay;
     const membersSnap = await packSnap.ref.collection('members').get();
     const members = membersSnap.docs.map(d => ({uid: d.id, ...d.data()}));
+    // Pack coins as they happen: each confirmation of another active member's app, once. The ledger
+    // packs/{id}/paid/{date} (unreadable to members) remembers what each member was already paid that day.
+    const since = pack.coinsAfter || Timestamp.fromMillis(0);
+    const changed = await packSnap.ref.collection('days').where('updatedAt', '>', since).orderBy('updatedAt').limit(400).get();
+    if (changed.size) {
+      const byDate = {};
+      for (const d of changed.docs) {
+        const rec = d.data();
+        if (rec.date < pack.startDay || rec.date > last || (pack.checkedThrough && rec.date <= pack.checkedThrough)) continue;
+        (byDate[rec.date] ||= {})[rec.uid] = rec.confirmed || [];
+      }
+      const batch = db.batch();
+      for (const [date, confirmed] of Object.entries(byDate)) {
+        const ledgerRef = packSnap.ref.collection('paid').doc(date), ledger = (await ledgerRef.get()).data()?.counts || {};
+        const due = coinsForDay(members, confirmed), counts = {...ledger};
+        for (const [uid, n] of Object.entries(due)) {
+          const extra = n - (ledger[uid] || 0);
+          if (extra > 0) {give(batch, uid, extra);counts[uid] = n;summary.packCoins += extra}
+        }
+        batch.set(ledgerRef, {counts});
+      }
+      batch.update(packSnap.ref, {coinsAfter: changed.docs[changed.size - 1].data().updatedAt});
+      await batch.commit();
+    }
+    // Warnings once a day is over. Day 1 is for installing: it never warns.
+    let day = pack.checkedThrough ? addDays(pack.checkedThrough, 1) : pack.startDay;
     while (day <= yesterday && day <= last) {
       const daysSnap = await packSnap.ref.collection('days').where('date', '==', day).get();
       const confirmed = Object.fromEntries(daysSnap.docs.map(d => [d.data().uid, d.data().confirmed || []]));
       const batch = db.batch();
-      for (const [uid, n] of Object.entries(coinsForDay(members, confirmed))) {
-        batch.set(db.doc('coins/' + uid), {earned: FieldValue.increment(n), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
-        summary.coins = (summary.coins || 0) + n;
-      }
-      // Day 1 is for installing: it never warns.
       const verdicts = day === pack.startDay ? [] : judgeDay(members, confirmed);
       for (const v of verdicts) {
         const m = members.find(x => x.uid === v.uid);

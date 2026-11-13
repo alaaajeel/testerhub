@@ -2,7 +2,7 @@
 import {before, after, beforeEach, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {initializeApp, deleteApp} from 'firebase-admin/app';
-import {getFirestore} from 'firebase-admin/firestore';
+import {getFirestore, FieldValue, Timestamp} from 'firebase-admin/firestore';
 import {runPacks} from '../../scripts/packs-job.mjs';
 
 process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080';
@@ -23,7 +23,7 @@ async function seedRunning(startDay, extra = {}) {
  await db.doc('packs/p1').set({number: 1, status: 'running', size: 16, days: 16, memberCount: 4, startDay, ...extra});
  for (const uid of UIDS) await db.doc('packs/p1/members/' + uid).set({uid, status: 'active', strikes: 0});
 }
-const confirm = (uid, date, list) => db.doc(`packs/p1/days/${uid}_${date}`).set({uid, date, confirmed: list});
+const confirm = (uid, date, list) => db.doc(`packs/p1/days/${uid}_${date}`).set({uid, date, confirmed: list, updatedAt: FieldValue.serverTimestamp()});
 
 test('off unless the admin turned packs on', async () => {
  assert.deepEqual(await runPacks({db, now}), {enabled: false});
@@ -67,20 +67,35 @@ test('the third warning removes the member, and the pack ends after day 16', asy
  assert.equal(p.status, 'done');assert.equal(p.endedDay, '2026-11-16');
 });
 
-test('daily reports on any app earn 1 coin each from 2026-11-13, each day once, rejected ones never', async () => {
+test('daily reports on any app earn 1 coin each from 2026-11-13, in the next run, once, rejected ones never', async () => {
  await db.doc('appConfig/features').set({packs: true});
- const report = (id, testerUid, date, extra = {}) => db.doc('reports/' + id).set({testerUid, ownerUid: 'dev', date, outcome: 'ok', ...extra});
- await report('old_1', 't1', '2026-11-12');                    // before the start: nothing
- await report('a_13', 't1', '2026-11-13');
- await report('b_13', 't1', '2026-11-13');                     // a second app the same day
- await report('c_13', 't2', '2026-11-13', {reviewStatus: 'rejected'});
- await report('a_19', 't2', '2026-11-19');
- await report('a_20', 't2', '2026-11-20');                     // today: paid tomorrow
+ const report = (id, testerUid, date, ms, extra = {}) => db.doc('reports/' + id).set({testerUid, ownerUid: 'dev', date, outcome: 'ok', submittedAt: Timestamp.fromMillis(ms), ...extra});
+ const at = (d, h = 10) => Date.parse(d + 'T0' + h + ':00:00Z');
+ await report('old_1', 't1', '2026-11-12', at('2026-11-12'));   // before the start: nothing
+ await report('a_13', 't1', '2026-11-13', at('2026-11-13', 1));
+ await report('b_13', 't1', '2026-11-13', at('2026-11-13', 2));   // a second app the same day
+ await report('c_13', 't2', '2026-11-13', at('2026-11-13', 3), {reviewStatus: 'rejected'});
+ await report('a_20', 't2', '2026-11-20', at('2026-11-20', 2));   // today: paid now, not tomorrow
  const s = await runPacks({db, now});
  assert.equal(s.reportCoins, 3);
  const earned = async uid => (await db.doc('coins/' + uid).get()).data()?.earned || 0;
  assert.equal(await earned('t1'), 2);assert.equal(await earned('t2'), 1);
  await runPacks({db, now});
  assert.equal(await earned('t1'), 2, 'never paid twice');
- assert.equal((await db.doc('coinsState/reports').get()).data().through, '2026-11-19');
+ await report('b_20', 't2', '2026-11-20', at('2026-11-20', 3));
+ await runPacks({db, now});
+ assert.equal(await earned('t2'), 2, 'the next report in the next run');
+});
+
+test('pack coins arrive as confirmations happen, never twice', async () => {
+ await seedRunning('2026-11-20');
+ const earned = async uid => (await db.doc('coins/' + uid).get()).data()?.earned || 0;
+ await confirm('a', '2026-11-20', ['b']);
+ await runPacks({db, now});
+ assert.equal(await earned('a'), 1);
+ await runPacks({db, now});
+ assert.equal(await earned('a'), 1, 'same confirmation, no new coin');
+ await confirm('a', '2026-11-20', ['b', 'c', 'a', 'zz']);   // own app and strangers never count
+ await runPacks({db, now});
+ assert.equal(await earned('a'), 2);
 });

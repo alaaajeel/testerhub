@@ -286,7 +286,7 @@ function v2Click(button){
   const notes=String(document.getElementById('v2-note')?.value||'').trim();s.notes=notes;
   if(notes.length<10){v2Err('اكتب جملة قصيرة عن تجربتك، 10 أحرف على الأقل');return true}
   const a=primaryAssignments().find(x=>x.id===s.id),retest=a&&typeof retestTarget==='function'?retestTarget(a):null;
-  pending(async()=>{const result=await api.submitDailyReport(s.id,{outcome:s.outcome,notes,retestOf:retest?.id||''});V2.sheet=null;selectedAssignmentId=s.id;await refresh();toast(result?.alreadySaved?'تقرير اليوم محفوظ من قبل':'انرسل التقرير · ‎+10 XP بعد قبوله')});
+  pending(async()=>{const result=await api.submitDailyReport(s.id,{outcome:s.outcome,notes,retestOf:retest?.id||''});V2.sheet=null;selectedAssignmentId=s.id;await refresh();toast(result?.alreadySaved?'تقرير اليوم محفوظ من قبل':'انرسل التقرير · ‎+10 XP بعد قبوله'+(features.packs||api.isDemo?' · وعملة خلال ربع ساعة':''))});
   return true;
  }
  if(k==='add-open'){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2KeepTyped();render()});return true}
