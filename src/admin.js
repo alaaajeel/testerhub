@@ -399,7 +399,7 @@ async function sendAnnouncement(form){
   targetUid=found.docs[0].id;targetName=email;
  }
  busy(false);
- const ok=await confirmDialog({title:'إرسال «'+title+'»؟',body:'إلى: '+(audience==='user'?targetName:NOTICE_AUDIENCE[audience])+'\nيظهر فوراً بجرس الإشعارات ولا يمكن تعديل نصه بعد الإرسال (يمكن سحبه).',action:'إرسال'});
+ const ok=await confirmDialog({title:'إرسال «'+title+'»؟',body:'إلى: '+(audience==='user'?targetName:NOTICE_AUDIENCE[audience])+'\nيظهر فوراً بجرس الإشعارات، ويوصل إشعار لتلفونات اللي مفعّلين الإشعارات خلال 15 دقيقة. ما يمكن تعديل نصه بعد الإرسال (يمكن سحبه).',action:'إرسال'});
  busy(true);
  if(!ok)return false;
  const batch=writeBatch(state.db),ref=doc(collection(state.db,'announcements'));

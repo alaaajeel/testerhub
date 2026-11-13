@@ -38,6 +38,7 @@ function activityFor(events) {
   if (events.length === 1) {
     const e = events[0];
     const titles = {message: 'TesterHub — رسالة جديدة', support: 'TesterHub — رسالة من الإدارة', supportReply: 'TesterHub — رد من مستخدم'};
+    if (e.kind === 'notice') return {title: 'TesterHub — ' + String(e.title || 'إشعار جديد').slice(0, 60), body: String(e.text || '').slice(0, 160), url: APP_URL, tag: 'testerhub-notice'};
     if (e.kind === 'invite') return {title: 'TesterHub — اختبار جديد', body: 'وصلك رابط اختبار ' + String(e.name || 'تطبيق جديد').slice(0, 80), url: APP_URL, tag: 'testerhub-activity'};
     return {title: titles[e.kind], body: String(e.text || 'وصلتك رسالة').slice(0, 110), url: e.kind === 'supportReply' ? './admin.html' : APP_URL, tag: 'testerhub-activity'};
   }
@@ -129,7 +130,7 @@ export async function runActivity({db, messaging, now = new Date()}) {
   // A long outage must not bury people in old news, and the first run must not replay history.
   const since = Math.max(saved ?? now.getTime() - FIRST_RUN_MS, now.getTime() - MAX_CATCH_UP_MS);
   const range = name => db.collection(name).where('createdAt', '>', Timestamp.fromMillis(since)).where('createdAt', '<=', Timestamp.fromDate(now)).orderBy('createdAt').limit(READ_LIMIT).get();
-  const [messageDocs, inviteDocs, supportDocs] = await Promise.all([range('messages'), range('assignments'), range('supportMessages')]);
+  const [messageDocs, inviteDocs, supportDocs, noticeDocs] = await Promise.all([range('messages'), range('assignments'), range('supportMessages'), range('announcements')]);
   const events = new Map();
   const add = (uid, event) => { if (uid) events.set(uid, [...(events.get(uid) || []), event]); };
   for (const doc of messageDocs.docs) {
@@ -148,17 +149,38 @@ export async function runActivity({db, messaging, now = new Date()}) {
     if (m.sender === 'admin') add(m.uid, {kind: 'support', text: m.text});
     else for (const uid of admins) add(uid, {kind: 'supportReply', text: m.text});
   }
+  // Admin announcements (مركز إشعارات الإدارة): one to a person joins their news; a broadcast reaches every device.
+  const notices = noticeDocs.docs.map(d => d.data()).filter(n => n.active !== false);
+  for (const n of notices) if (n.audience === 'user') add(n.targetUid, {kind: 'notice', title: n.title, text: n.body});
+  const broadcasts = notices.filter(n => n.broadcast === true && ['all', 'developers', 'testers'].includes(n.audience));
   const uids = [...events.keys()];
-  const {missing, active} = await activeUsers(db, uids);
-  const devices = [];
-  for (const part of chunks(uids.filter(uid => active.has(uid)), IN_LIMIT)) {
-    const snap = await db.collection('pushDevices').where('uid', 'in', part).get();
-    devices.push(...snap.docs);
+  let devices = [];
+  if (broadcasts.length) {
+    // Everyone with notifications on hears it; their own news, if any, comes in the same message.
+    const all = await db.collection('pushDevices').get();
+    devices = all.docs;
+  } else {
+    for (const part of chunks(uids, IN_LIMIT)) {
+      const snap = await db.collection('pushDevices').where('uid', 'in', part).get();
+      devices.push(...snap.docs);
+    }
   }
-  const {delivered, dead, failed} = await deliver(messaging, devices, doc => activityFor(events.get(doc.get('uid'))), 24 * 3600);
+  const {missing, active} = await activeUsers(db, [...new Set([...uids, ...devices.map(d => d.get('uid'))])]);
+  devices = devices.filter(d => active.has(d.get('uid')));
+  const latest = broadcasts[broadcasts.length - 1];
+  const broadcastMessage = latest && (broadcasts.length === 1
+    ? {title: 'TesterHub — ' + String(latest.title || 'إعلان جديد').slice(0, 60), body: String(latest.body || '').slice(0, 160), url: APP_URL, tag: 'testerhub-notice'}
+    : {title: 'TesterHub — ' + broadcasts.length + ' إعلانات جديدة', body: String(latest.title || '').slice(0, 160), url: APP_URL, tag: 'testerhub-notice'});
+  const messageFor = doc => {
+    const own = events.get(doc.get('uid'));
+    if (!broadcastMessage) return own ? activityFor(own) : null;
+    if (!own) return broadcastMessage;
+    return {...broadcastMessage, body: (broadcastMessage.body + ' · ولديك ' + own.length + ' جديد').slice(0, 180)};
+  };
+  const {delivered, dead, failed} = await deliver(messaging, devices, messageFor, 24 * 3600);
   await commitAll(db, dead, (batch, ref) => batch.delete(ref));
   // Keep the cursor when nothing got through, so a messaging outage delays news instead of losing it.
   const fellOver = failed > 0 && delivered.length === 0;
   if (!fellOver) await cursorRef.set({lastRunAt: Timestamp.fromDate(now)});
-  return {events: uids.length, skippedMissing: missing.size, sent: delivered.length, failed, removed: dead.length};
+  return {events: uids.length, broadcasts: broadcasts.length, skippedMissing: missing.size, sent: delivered.length, failed, removed: dead.length};
 }
