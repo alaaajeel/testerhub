@@ -54,9 +54,9 @@ test('the console escapes everything it shows and records each change',()=>{
  assert.match(part,/batchAudit\(batch,'save_help_article'/);
  assert.match(part,/batchAudit\(batch,'delete_help_article'/);
 });
-test('both the tester and the developer views include the help page',()=>{
+test('the one-account screens include the help page',()=>{
  const line=html.match(/const screens=([^\n]*);/)[1];
- assert.equal((line.match(/help:helpPage/g)||[]).length,2);
+ assert.equal((line.match(/help:helpPage/g)||[]).length,1);
 });
 test('the app asks Firestore for published articles only',()=>{
  const load=html.slice(html.indexOf('async function loadHelpArticles('),html.indexOf('async function getDashboard('));

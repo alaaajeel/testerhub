@@ -13,16 +13,17 @@ test('a live change uses the listener data and never reloads the dashboard',asyn
  const ctx=vm.createContext({console,user:{uid:'u1',role:'tester'},dashboard:{assignments:[{id:'old'}],reports:[],messages:[],support:[],xp:null,testers:['kept']},
   liveSyncTimer:null,liveFetchInProgress:false,liveSyncDeferred:true,canRerenderLive:()=>true,render:()=>{rendered++},
   api:{loadTesterXp:async()=>{xpLoads++;return {totals:{xp:5}}}},userScrolling:()=>false,tab:'home',document:{getElementById:()=>null}});
- vm.runInContext(from('let liveSubscriptions=','function stopLiveSync(').replace(/^let /,'var ')+from('async function flushLiveSync(','let leagueNameChecked='),ctx);
- vm.runInContext("livePending={assignments:[{id:'a1'}],messages:[{id:'m1'}]}",ctx);
+ vm.runInContext(from('let liveSubscriptions=','function stopLiveSync(').replace(/^let /,'var ')+from('async function flushLiveSync(','let leagueNameChecked=')+from('function unionById(','async function loadTesters('),ctx);
+ // One account: each list is the union of the owner's listener and the tester's listener.
+ vm.runInContext("liveCache.data={'assignments:ownerUid':[{id:'a1'}],'assignments:testerUid':[{id:'a2'},{id:'a1'}],'messages:testerUid':[{id:'m1'}]};livePending={assignments:true,messages:true}",ctx);
  await vm.runInContext('flushLiveSync()',ctx);
  const d=vm.runInContext('dashboard',ctx);
- assert.equal(JSON.stringify(d.assignments),'[{"id":"a1"}]');
+ assert.equal(JSON.stringify(d.assignments),'[{"id":"a1"},{"id":"a2"}]');
  assert.equal(JSON.stringify(d.messages),'[{"id":"m1"}]');
  assert.equal(JSON.stringify(d.testers),'["kept"]');
  assert.equal(xpLoads,0);assert.equal(rendered,1);
  // A reviewed report can change a tester's XP: only that is read again.
- vm.runInContext("livePending={reports:[{id:'r1'}],supportMessages:[{id:'s1'}]}",ctx);
+ vm.runInContext("liveCache.data['reports:testerUid']=[{id:'r1'}];liveCache.data.supportMessages=[{id:'s1'}];livePending={reports:true,supportMessages:true}",ctx);
  await vm.runInContext('flushLiveSync()',ctx);
  const e=vm.runInContext('dashboard',ctx);
  assert.equal(xpLoads,1);assert.equal(e.xp.totals.xp,5);assert.equal(JSON.stringify(e.support),'[{"id":"s1"}]');
@@ -30,7 +31,10 @@ test('a live change uses the listener data and never reloads the dashboard',asyn
 test('every listener feeds the pending lists with the same shape as the dashboard',()=>{
  const sync=from('function startLiveSync(','function canRerenderLive(');
  assert.match(sync,/const list=snap\.docs\.map\(tidy\);/);
- assert.match(sync,/livePending\[collectionName\]=list/);
+ assert.match(sync,/liveCache\.data\[name\]=list/);
+ assert.match(sync,/livePending\[collectionName\]=true/);
+ // One account listens to both sides.
+ for(const spec of ["['projects','ownerUid']","['assignments','ownerUid']","['assignments','testerUid']","['reports','testerUid']","['messages','testerUid']"])assert.ok(sync.includes(spec),spec);
  assert.match(html,/LIVE_KEYS=\{projects:'projects',assignments:'assignments',reports:'reports',messages:'messages',supportMessages:'support'\}/);
 });
 test('the tester directory is read at most every 15 minutes unless fresh data is asked for',async()=>{
@@ -49,21 +53,24 @@ test('coming back to the app reloads everything at most every 30 minutes',()=>{
 });
 test('the dashboard takes the listened collections from the live listeners instead of reading them again',()=>{
  const dash=from('async function getDashboard(','async function supportThread(');
- for(const name of ['projects','assignments','reports','messages'])assert.ok(dash.includes("from('"+name+"',query"),name);
+ assert.match(dash,/const pick=\(field,name\)=>from\(name\+':'\+field,query\(collection\(db,name\),where\(field,'==',user\.uid\)\)\)/);
+ for(const name of ['projects','assignments','reports','messages'])assert.ok(dash.includes("pick('ownerUid','"+name+"')"),name);
+ for(const name of ['assignments','reports','messages'])assert.ok(dash.includes("pick('testerUid','"+name+"')"),name);
  assert.doesNotMatch(dash,/ read\(query\(collection\(db,'(projects|assignments|reports|messages)'\)/);
  assert.match(dash,/support:liveList\(user,'supportMessages',fromServer\)\?\?await supportThread/);
  // Start and refresh connect the listeners first and wait for them, briefly.
  assert.match(html,/if\(user\)\{startLiveSync\(\);await waitLive\(\);dashboard=await api\.getDashboard\(\)\}/);
  assert.match(html,/startLiveSync\(\);await waitLive\(\);const \[fresh\]=await Promise\.all\(\[api\.getDashboard\(\)/);
 });
-test('live data is used only for the same account and view, and never when fresh data is asked for',()=>{
- const ctx=vm.createContext({liveCache:{key:'u1|tester',ready:new Set(['assignments']),data:{assignments:[{id:'a'}]}}});
+test('live data is used only for the same account, and never when fresh data is asked for',()=>{
+ const ctx=vm.createContext({liveCache:{key:'u1|one',ready:new Set(['assignments:testerUid']),data:{'assignments:testerUid':[{id:'a'}]}}});
  const liveList=vm.runInContext(from('function liveList(','const liveSnap=')+';liveList',ctx);
- assert.equal(liveList({uid:'u1',role:'tester'},'assignments',false).length,1);
- assert.equal(liveList({uid:'u1',role:'developer'},'assignments',false),null);
- assert.equal(liveList({uid:'u2',role:'tester'},'assignments',false),null);
- assert.equal(liveList({uid:'u1',role:'tester'},'reports',false),null);
- assert.equal(liveList({uid:'u1',role:'tester'},'assignments',true),null);
+ assert.equal(liveList({uid:'u1',role:'tester'},'assignments:testerUid',false).length,1);
+ // The stored role no longer matters: the same account sees the same data in both.
+ assert.equal(liveList({uid:'u1',role:'developer'},'assignments:testerUid',false).length,1);
+ assert.equal(liveList({uid:'u2',role:'tester'},'assignments:testerUid',false),null);
+ assert.equal(liveList({uid:'u1',role:'tester'},'assignments:ownerUid',false),null);
+ assert.equal(liveList({uid:'u1',role:'tester'},'assignments:testerUid',true),null);
 });
 test('waiting for the listeners never blocks: it ends when all answered, when none run, or after a short time',async()=>{
  const ctx=vm.createContext({setTimeout,clearTimeout,Promise});

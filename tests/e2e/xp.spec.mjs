@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {sendReportViaSheet} from './demo-helpers.mjs';
 // Phase 2 XP in Chromium. Preview tests use the on-device demo store; the last test checks the exact Firestore
 // batch with in-browser doubles. Security is proven separately in tests/emulator/xp.rules.test.mjs.
 
@@ -19,16 +20,14 @@ async function seed(page,{checkins=[],reports=[],joined=utcDaysAgo(2)}={}){
 const asDeveloper=page=>page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();selectedProjectId='xp';tab='details';render()});
 const asTester=(page,where='home')=>page.evaluate(async where=>{user=await api.switchDemo('tester');tab=where;await refresh()},where);
 async function submitToday(page,outcome='ok',notes='جرّبت الشاشة الرئيسية واشتغلت تمام'){
- await page.locator(`#daily-report-form label.${outcome}`).click();
- await page.locator('#daily-report-form textarea').fill(notes);
- await page.locator('#daily-report-form button[type="submit"]').click();
- await expect(page.locator('.daily-test.saved')).toBeVisible();
+ await sendReportViaSheet(page,'XP App',{outcome,notes});
+ await expect(page.locator('.v2-test',{hasText:'XP App'}).locator('.v2-saved')).toBeVisible();
 }
 
 test('no XP for a submitted report until the developer accepts it, then 10 XP once',async({page})=>{
  await openPreview(page);await seed(page);
  await submitToday(page);
- await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
+ await page.locator('.nav [data-tab="profile"]').click();await page.locator('.v2-linkrow[data-tab="rewards"]').click();
  await expect(page.locator('.xp-card .coins')).toHaveText(/^0 XP$|^٠ XP$/);
  await expect(page.locator('.xp-card')).toContainText('بانتظار مراجعة المطور');
 
@@ -39,16 +38,17 @@ test('no XP for a submitted report until the developer accepts it, then 10 XP on
  for(const b of await page.locator('.report-record').first().locator('[data-action="review-report"]').all())await expect(b).toBeDisabled();
  await expect(page.evaluate(()=>api.reviewReport(dashboard.reports[0].id,'rejected'))).rejects.toThrow(/مقبول مسبقاً/);
 
- await asTester(page);
- await expect(page.locator('.daily-test.saved .xp-earned')).toContainText('+10 XP');
- await expect(page.locator('.feature .badge')).toContainText('١٠ XP');
- await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
+ await asTester(page,'tests');
+ await expect(page.locator('.v2-test .xp-earned')).toContainText('+10 XP');
+ await page.locator('.nav [data-tab="profile"]').click();
+ await expect(page.locator('.v2-stat').first()).toContainText('10');
+ await page.locator('.v2-linkrow[data-tab="rewards"]').click();
  await expect(page.locator('.xp-card .coins')).toHaveText('١٠ XP');
  await expect(page.locator('.xp-stat',{hasText:'تقارير مقبولة'})).toContainText('١');
  await expect(page.locator('.xp-stat',{hasText:'تطبيقات ساعدت بيها'})).toContainText('١');
  await expect(page.locator('.level-chip')).toHaveText('مبتدئ');
  // Opening the page again or syncing again never pays twice.
- await page.evaluate(()=>api.syncMyXp());await page.locator('.nav [data-tab="home"]').click();await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
+ await page.evaluate(()=>api.syncMyXp());await page.locator('.nav [data-tab="home"]').click();await page.locator('.nav [data-tab="profile"]').click();await page.locator('.v2-linkrow[data-tab="rewards"]').click();
  await expect(page.locator('.xp-card .coins')).toHaveText('١٠ XP');
  expect(await page.evaluate(()=>Object.keys(demoState().xp.events))).toEqual([expect.stringMatching(/^xp_t1_\d{4}-\d{2}-\d{2}_review$/)]);
 });
@@ -80,8 +80,10 @@ test('retesting a fixed problem is linked to it and earns 10 extra XP when accep
  await openPreview(page);
  const fixedId='xp_t1_'+utcDaysAgo(1);
  await seed(page,{checkins:[utcDaysAgo(1)],reports:[{id:fixedId,assignmentId:'xp_t1',projectId:'xp',testerUid:'t1',ownerUid:'d1',date:utcDaysAgo(1),tested:'فتح التطبيق وتجربة وظيفة أساسية',outcome:'issue',notes:'التطبيق يعلق عند فتح الإعدادات',status:'fixed',createdAt:new Date(Date.now()-86400000).toISOString()}]});
- const card=page.locator('.daily-test');
- await expect(card.locator('.retest-notice')).toContainText('التطبيق يعلق عند فتح الإعدادات');
+ await page.locator('.nav [data-tab="tests"]').click();
+ await page.locator('.v2-test',{hasText:'XP App'}).locator('[data-v2="report-open"]').click();
+ await expect(page.locator('.v2-sheet .v2-notice')).toContainText('التطبيق يعلق عند فتح الإعدادات');
+ await page.keyboard.press('Escape');
  await submitToday(page,'ok','فتحت الإعدادات وصارت تشتغل بعد التحديث');
  expect(await page.evaluate(()=>demoState().reports.find(r=>r.date===api.dayKey()).retestOf)).toBe(fixedId);
  await asDeveloper(page);
@@ -98,10 +100,10 @@ test('the tester recovers accepted work that has no reward yet, once',async({pag
  await openPreview(page);
  const accepted=i=>({id:'xp_t1_2026-10-0'+i,assignmentId:'xp_t1',projectId:'xp',testerUid:'t1',ownerUid:'d1',date:'2026-10-0'+i,tested:'فتح التطبيق وتجربة وظيفة أساسية',outcome:'ok',notes:'تقرير مقبول قبل تفعيل النقاط',status:'ok',reviewStatus:'accepted',createdAt:'2026-10-0'+i+'T10:00:00.000Z'});
  await seed(page,{reports:[accepted(1),accepted(2)]});
- await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
+ await page.locator('.nav [data-tab="profile"]').click();await page.locator('.v2-linkrow[data-tab="rewards"]').click();
  await expect(page.locator('#toast')).toContainText('انضافت');
  await expect(page.locator('.xp-card .coins')).toHaveText('٢٠ XP');
- await page.locator('.nav [data-tab="home"]').click();await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
+ await page.locator('.nav [data-tab="home"]').click();await page.locator('.nav [data-tab="profile"]').click();await page.locator('.v2-linkrow[data-tab="rewards"]').click();
  await expect(page.locator('.xp-card .coins')).toHaveText('٢٠ XP');
 });
 
@@ -109,7 +111,7 @@ test('old check-in points stay visible but separate and unverified',async({page}
  await openPreview(page);
  const old=Array.from({length:14},(_,i)=>`2026-10-${String(i+1).padStart(2,'0')}`);
  await seed(page,{joined:'2026-10-01',checkins:old});
- await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
+ await page.locator('.nav [data-tab="profile"]').click();await page.locator('.v2-linkrow[data-tab="rewards"]').click();
  await expect(page.locator('.legacy-xp')).toContainText('نقاط سابقة غير موثّقة');
  await expect(page.locator('.legacy-xp .chip')).toContainText('١٦٠ XP');
  await expect(page.locator('.xp-card .coins')).toHaveText(/^(0|٠) XP$/);
@@ -117,7 +119,7 @@ test('old check-in points stay visible but separate and unverified',async({page}
 
 test('rewards page fits a phone screen',async({page})=>{
  await openPreview(page);await seed(page);
- await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
+ await page.locator('.nav [data-tab="profile"]').click();await page.locator('.v2-linkrow[data-tab="rewards"]').click();
  await expect(page.locator('.xp-card')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
  await page.locator('.xp-rules summary').click();

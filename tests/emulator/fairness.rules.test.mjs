@@ -92,8 +92,10 @@ test('the slot is private and only its owner moves it, to their own live app',as
  const slotWith=fields=>{const x=db('d2'),b=writeBatch(x);b.set(doc(x,'projects','b1'),app('d2'));b.set(doc(x,'publishSlots','d2'),{projectId:'b1',acceptedAtPublish:3,updatedAt:serverTimestamp(),...fields});return b.commit()};
  await assertFails(slotWith({updatedAt:Timestamp.fromMillis(Date.now()-20*DAY)}),'a back-dated slot would allow ending at once');
  await assertFails(slotWith({bonus:true}),'extra fields');
+ // V2 one account: the stored role is not a gate; the fairness limits still apply to every account.
  await admin(d=>updateDoc(doc(d,'users','d2'),{role:'tester'}));
- await assertFails(publishBatch(db('d2'),'d2','b2',app('d2')).commit());
+ await assertSucceeds(publishBatch(db('d2'),'d2','b2',app('d2')).commit());
+ await assertFails(publishBatch(db('d2'),'d2','b3',app('d2')).commit(),'a second live app, or the same reports used twice');
 });
 test('accepted reports cannot be typed in',async()=>{
  await assertFails(setDoc(doc(db('d1'),'xpTotals','d1'),{uid:'d1',points:30,reports:3,bugs:0,retests:0,cycles:0,apps:1,lastEventId:'x',updatedAt:serverTimestamp()}));

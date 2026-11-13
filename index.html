@@ -21,12 +21,13 @@
   <script src="./src/services/deletion.js"></script>
   <script src="./src/services/push.js"></script>
   <script src="./src/help/content.js"></script>
+  <script src="./src/v2/views.js"></script>
   
   
   
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>:root{--navy:#142e60;--ink:#15264c;--muted:#7282a5;--blue:#1559b7;--green:#07b978;--pale:#f3f7ff;--line:#e0e8f5;--shadow:0 12px 26px rgba(21,70,141,.10)}*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:"Noto Sans Arabic",Roboto,system-ui,Arial,sans-serif;color:var(--ink)}body{background:radial-gradient(circle at 8% 75%,#d1e8fb,transparent 40%),radial-gradient(circle at 90% 12%,#c8f9ed,transparent 35%),#e8f0fc}.layout{max-width:1200px;min-height:100vh;margin:auto;display:grid;grid-template-columns:1fr 430px;align-items:center;gap:52px;padding:32px}.showcase{max-width:560px}.brand-tile{height:195px;width:195px;border:1px solid white;border-radius:46px;background:linear-gradient(145deg,#fff,#dce9ff);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;box-shadow:0 25px 50px #5180b13b;margin-bottom:38px;font-size:27px;direction:ltr}.brand-sign{width:80px;height:80px;display:grid;place-items:center;border-radius:25px;background:linear-gradient(135deg,#04ce8b,#1459bf);color:#fff;font-size:68px;line-height:1;font-weight:900;box-shadow:0 8px 15px #16938c44}.eyebrow{display:block;color:#1459b6;font-size:13px;font-weight:800;letter-spacing:.4px}h1{font-size:clamp(32px,4vw,56px);line-height:1.45;margin:12px 0;color:#16356c}h1 em{font-style:normal;color:#0aa779}.showcase p{font-size:17px;line-height:2;max-width:500px;color:#5b6c91}.switcher{display:flex;gap:10px;background:#f5f8ff;padding:7px;border-radius:18px;width:max-content;box-shadow:0 6px 20px #7996c72b}.switcher button{border:0;background:transparent;border-radius:14px;padding:14px 20px;font-size:15px;font-weight:800;cursor:pointer;color:#6b7b9c}.switcher button.chosen{background:linear-gradient(110deg,#1662c8,#11539f);color:white;box-shadow:0 6px 14px #0c5eb342}.showcase-note{padding:15px 20px;background:#ffffff94;border:1px solid #fff;border-radius:16px;font-size:13px;color:#687b9c;line-height:1.9;margin-top:20px;max-width:475px}.device-wrap{display:flex;justify-content:center;align-items:center}.device{height:850px;width:409px;max-height:calc(100vh - 32px);padding:11px;background:#0a1a33;border:4px solid #315687;border-radius:49px;box-shadow:0 34px 50px #18477969, inset 0 0 0 2px #829dbf,0 8px 0 #b0bfd0;position:relative}.camera{position:absolute;top:19px;left:50%;transform:translateX(-50%);width:14px;height:14px;border-radius:50%;background:#091931;border:3px solid #30466b;z-index:10}.device #app{height:100%;background:var(--pale);border-radius:36px;overflow:hidden;position:relative;display:flex;flex-direction:column}.status{position:absolute;top:13px;left:20px;right:20px;color:white;font-size:13px;display:flex;justify-content:space-between;align-items:center;z-index:2;direction:ltr;font-weight:700}.hero{background:linear-gradient(126deg,#2382dc 2%,#1554a8 53%,#123f80);height:230px;flex:none;color:white;padding:42px 21px 17px;position:relative;overflow:hidden;border-radius:0 0 32px 32px}.hero:after{content:"";position:absolute;width:310px;height:110px;left:-25px;bottom:-45px;transform:rotate(-10deg);border-radius:50%;background:linear-gradient(110deg,#24ca9d,#49d6d0);opacity:.97}.hero:before{content:"";position:absolute;width:300px;height:170px;left:-50px;top:35px;border-radius:50%;background:linear-gradient(125deg,transparent,#5eafff88);transform:rotate(-33deg)}.header{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}.logo{font-size:19px;font-weight:900;display:flex;gap:6px;align-items:center;direction:ltr}.mini-check{background:linear-gradient(145deg,#0fd59c,#1671eb);border-radius:11px;width:27px;height:27px;display:grid;place-items:center;color:white;font-size:24px;font-weight:900}.round-ico{background:#ffffff22;border:1px solid #ffffff26;color:white;width:35px;height:35px;border-radius:12px;font-size:18px;cursor:pointer}.hello{position:relative;z-index:1;margin-top:28px;text-align:right}.hello h2{font-size:21px;margin:0 0 8px}.hello p{margin:0;color:#e0eefa;font-size:12px}.page{position:relative;z-index:1;flex:1;overflow:auto;padding:0 14px 16px;scrollbar-width:none;margin-top:-26px}.page::-webkit-scrollbar{display:none}.surface{background:#fff;border:1px solid #dbe7fa;border-radius:19px;padding:15px;box-shadow:var(--shadow);margin-bottom:12px}.surface.feature{background:linear-gradient(150deg,#fff,#eff5ff)}.row{display:flex;align-items:center;gap:10px}.between{justify-content:space-between}.column{display:flex;flex-direction:column}.small{font-size:12px;color:var(--muted);line-height:1.8}.tiny{font-size:11px;color:var(--muted)}.bold{font-weight:900}.section-title{font-size:17px;font-weight:900;margin:22px 2px 12px;display:flex;justify-content:space-between;align-items:center}.section-title button{background:transparent;border:0;color:var(--blue);font-weight:800;cursor:pointer}.progress{height:12px;background:#dbe6f4;border-radius:25px;overflow:hidden;margin:16px 0}.progress i{display:block;height:100%;background:linear-gradient(90deg,#08b878,#42d8ab);border-radius:25px;transition:width .5s}.day-number{font-size:12px;font-weight:900;white-space:nowrap}.stat-top{font-size:15px;font-weight:900}.st-ico{font-size:23px}.app-card .app-mark{width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#367dea,#6531ea);display:grid;place-items:center;color:white;font-size:27px;box-shadow:0 7px 14px #6b5ed52b;flex-shrink:0}.app-card .app-mark.green{background:linear-gradient(130deg,#56de6b,#079f65)}.app-card .app-mark.purple{background:linear-gradient(130deg,#a867f3,#672ada)}.app-card h4{margin:0 0 2px;font-size:15px;direction:ltr;text-align:right}.badge{display:inline-flex;background:#fff0cd;color:#8c5811;padding:6px 10px;border-radius:100px;font-weight:900;font-size:12px;white-space:nowrap}.flag{color:#008d62;background:#dcf7ed;padding:5px 9px;border-radius:12px;font-size:12px;font-weight:900}.app-card .content{flex:1;min-width:0}.app-card p{margin:2px 0 9px;font-size:11px;color:#7b88aa}.cta{border:0;background:linear-gradient(120deg,#08a973,#008650);color:white;border-radius:12px;min-height:36px;padding:7px 16px;font-size:12px;font-weight:900;cursor:pointer;box-shadow:0 4px 8px #078e6730}.cta:disabled{opacity:.55;cursor:not-allowed}.cta.blue{background:linear-gradient(110deg,#126ac5,#174990)}.cta.outline{background:#eaf2ff;color:#1762b5;box-shadow:none}.cta.wide{width:100%}.nav{height:70px;flex:none;background:#fcfdff;border-top:1px solid #dce6f5;display:grid;grid-template-columns:repeat(4,1fr);padding-bottom:7px}.nav button{border:none;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#52658d;gap:3px;font-size:11px;font-weight:700;cursor:pointer}.nav button span{font-size:20px}.nav button.active{color:#00996c;font-weight:900}#busy-bar{display:none;position:fixed;top:0;left:0;right:0;height:3px;z-index:10000;overflow:hidden;pointer-events:none}html.app-busy #busy-bar{display:block}#busy-bar::before{content:"";position:absolute;top:0;bottom:0;width:40%;background:#07b978;border-radius:3px;animation:busy-slide 1.1s ease-in-out infinite}@keyframes busy-slide{from{transform:translateX(-110%)}to{transform:translateX(260%)}}.is-loading{opacity:.72;pointer-events:none}.is-loading::after{content:"";display:inline-block;width:12px;height:12px;margin-inline-start:7px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-2px;animation:busy-spin .7s linear infinite}@keyframes busy-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){#busy-bar::before{animation-duration:3s}.is-loading::after{animation-duration:2s}}.queue-row.quiet{background:#fffaf2}.warn-chip{background:#fff4e5;color:#b45f06}.help-search input{width:100%;margin-top:12px;min-height:46px;border:1px solid #cdd9ea;border-radius:14px;padding:0 14px;font:inherit;background:#f7faff}.help-cats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.help-cat{background:#fff;border:1px solid #dbe7fa;border-radius:17px;padding:13px;text-align:right;display:grid;gap:4px;cursor:pointer;color:var(--ink);font:inherit;box-shadow:0 5px 18px #1e4b8310}.help-cat small{color:#7184a4;font-size:11px}.help-sq{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:10px;background:#eaf2ff;color:#1059af;font-weight:900;flex:none}.help-row{display:flex;gap:10px;align-items:center}.help-link small{display:block;color:#7184a4;font-weight:400;font-size:11px;margin-top:2px}.help-title{display:block}.help-article h2{font-size:19px;margin:12px 0 4px}.help-steps{padding-inline-start:20px;margin:14px 0 0;display:grid;gap:10px}.help-steps li strong{display:block}.help-steps li span{color:#4b5d7f;font-size:13px;line-height:1.9}.help-notice{background:#f1f6fd;border-radius:12px;padding:10px}.help-image{display:block;width:100%;max-height:340px;object-fit:contain;border-radius:14px;margin-top:12px;background:#f1f6fd}.help-video{position:relative;padding-top:56.25%;margin-top:12px;border-radius:14px;overflow:hidden;background:#0a347b}.help-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}.help-video-link{display:block;text-align:center;text-decoration:none;margin-top:12px;padding:11px}.help-support{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}.help-note{margin:4px 2px 8px}.help-shell{align-items:stretch}.help-shell .page{padding:0;width:100%}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}.group-box{margin-top:10px;padding:10px;border-radius:12px;background:#f1f6fd;display:grid;gap:8px}.group-mail code{font-size:13px;word-break:break-all}.opening-row{gap:8px;margin:10px 0}.opening-row input{width:80px;min-height:36px;border:1px solid #cdd9ea;border-radius:10px;text-align:center}.queue-row{gap:8px;padding:8px 0;border-bottom:1px solid #eef3fb}.queue-row:last-child{border-bottom:0}.queue-row .row{gap:6px}.group-card .cta.wide{display:block;text-align:center;text-decoration:none;padding:11px}.pstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:10px}.pstat{background:#f1f6fd;border-radius:12px;padding:9px 6px;text-align:center;min-width:0}.pstat strong{display:block;font-size:18px;color:#16365f}.pstat span{display:block;font-size:11px;color:#5b6b8c;line-height:1.35}.pstat.good strong{color:#078e5f}.pstat.warn{background:#fff4e5}.pstat.warn strong{color:#b45f06}@media(max-width:380px){.pstats{grid-template-columns:repeat(2,minmax(0,1fr))}}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:9px}.metric{padding:16px 8px;background:#e7f4ff;text-align:center;border-radius:15px}.metric.green{background:#def6ee}.metric .num{font-size:29px;font-weight:900;line-height:1.3}.metric .label{font-size:11px;font-weight:700}.donut{height:82px;width:82px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#07aa72 var(--percent),#e1ebf4 0);flex:none}.donut b{width:62px;height:62px;border-radius:50%;background:white;display:grid;place-items:center;font-size:20px}.item-link{border:1px solid #e5ecf6;background:linear-gradient(140deg,#fff,#eff5fd);border-radius:13px;padding:13px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;font-weight:800;font-size:12px;margin-top:8px;width:100%;text-align:right;color:var(--ink)}.item-link span:last-child{font-size:19px;color:#4472ad}.field{display:block;margin-bottom:13px}.field label{display:block;font-size:12px;font-weight:800;color:#4a5c7c;margin-bottom:7px}.field input,.field textarea{width:100%;font:inherit;font-size:13px;padding:12px;border:1px solid #d5e0f1;border-radius:12px;outline:none;background:#f9fbff;direction:rtl;color:var(--ink)}.field input:focus,.field textarea:focus{border-color:#1584d2;box-shadow:0 0 0 3px #1684d219}.field textarea{min-height:75px;resize:vertical}.email-list{background:#f0f5fe;border:1px dashed #bed2f5;padding:12px;border-radius:13px;max-height:114px;overflow-y:auto;font-size:11px;line-height:1.9;direction:ltr;text-align:left;color:#415479;word-break:break-all}.checks{display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.9;color:#546784;margin:13px 0}.checks input{accent-color:#08a972;margin-top:5px}.empty{text-align:center;padding:30px 10px;color:#6d80a0}.empty strong{display:block;margin:12px 0 5px;color:var(--navy)}.divider{border-bottom:1px solid #e4eaf4;margin:12px 0}.chip{font-size:11px;background:#f0f5fd;color:#3563a2;border-radius:99px;padding:5px 9px}.lead{font-weight:900;font-size:18px;margin:4px 0 8px}.coins{font-size:35px;font-weight:900;color:#c1811a}.medal{height:72px;width:72px;border-radius:24px;background:linear-gradient(135deg,#fbe4b0,#eeb641);display:grid;place-items:center;font-size:39px;margin:auto}.warning{background:#fff6dc;color:#987020;border-radius:10px;font-size:11px;line-height:1.8;padding:10px}#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#102e54;color:#fff;padding:13px 20px;border-radius:16px;box-shadow:0 12px 30px #142e6050;z-index:30;font-size:13px;transition:transform .24s}#toast.show{transform:translateX(-50%) translateY(0)}@media(max-width:830px){.layout{display:flex;flex-direction:column;gap:24px;padding:18px}.showcase{width:100%;text-align:center}.brand-tile{display:none}.showcase h1{font-size:28px;line-height:1.35}.showcase p{font-size:13px;margin:8px auto}.showcase .switcher{margin:auto}.showcase-note{display:none}.device{width:min(410px,calc(100vw - 20px));height:min(850px,calc(100dvh - 204px));min-height:530px;max-height:none}.device-wrap{width:100%}}@media(max-height:700px) and (min-width:831px){.device{height:calc(100vh - 12px);border-radius:38px}.layout{padding:6px}}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 /* TesterHub PWA design system — mobile app + desktop marketing preview */
 body{min-height:100dvh}
@@ -379,6 +380,7 @@ html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 .auth-logo img{width:46px;height:46px;object-fit:contain}
 .header-brand-icon{width:36px;height:36px;object-fit:contain}
 </style>
+<link rel="stylesheet" href="./src/v2/theme.css" />
 </head>
 <body class="splash-boot">
   <div class="layout">
@@ -489,12 +491,13 @@ async function groupData(active,read){
  if(isDemo||!features.officialGroup)return {openings:[],joinRequests:[]};
  const {collection,query,where,limit}=storeFns;
  try{
-  const mine=active.role==='developer'?where('ownerUid','==',active.uid):where('testerUid','==',active.uid);
-  const [o,j]=await Promise.all([
-   read(active.role==='developer'?query(collection(db,'openings'),where('ownerUid','==',active.uid)):query(collection(db,'openings'),where('status','==','open'),limit(50))),
-   read(query(collection(db,'joinRequests'),mine))
+  const [o,om,j,jm]=await Promise.all([
+   read(query(collection(db,'openings'),where('status','==','open'),limit(50))),
+   read(query(collection(db,'openings'),where('ownerUid','==',active.uid))),
+   read(query(collection(db,'joinRequests'),where('testerUid','==',active.uid))),
+   read(query(collection(db,'joinRequests'),where('ownerUid','==',active.uid)))
   ]);
-  return {openings:o.docs.map(tidy),joinRequests:j.docs.map(tidy)};
+  return {openings:unionById(om.docs.map(tidy),o.docs.map(tidy)),joinRequests:unionById(j.docs.map(tidy),jm.docs.map(tidy))};
  }catch(err){console.warn('Self-join:',err);return {openings:[],joinRequests:[]}}
 }
 const stamp=x=>x?.toMillis?.()??(Date.parse(x||'')||0);
@@ -503,7 +506,7 @@ async function setProjectTestMode(projectId,mode,{slots,open=true}={}){
  if(isDemo)throw Error('غير متاح في وضع المعاينة');
  if(!features.officialGroup)throw Error('هذه الميزة غير مفعّلة حالياً');
  if(!['group','invites'].includes(mode))throw Error('طريقة اختبار غير معروفة');
- const owner=await currentUser();if(owner?.role!=='developer')throw Error('لصاحب التطبيق فقط');
+ const owner=await currentUser();if(!owner)throw Error('سجّل الدخول أولاً');
  const {doc,getDoc,writeBatch,serverTimestamp}=storeFns,ref=doc(db,'projects',projectId),snap=await getDoc(ref);
  if(!snap.exists()||snap.data().ownerUid!==owner.uid)throw Error('هذا التطبيق غير تابع لحسابك');
  const p=snap.data();if((p.status||'recruiting')!=='recruiting')throw Error('التطبيق ليس في مرحلة استقبال المختبرين');
@@ -541,7 +544,7 @@ function invitationFields(projectId,p,ownerUid,testerUid){
 // tester gets their own new assignment and starts from day zero.
 async function decideJoinRequest(requestId,decision){
  if(isDemo)throw Error('غير متاح في وضع المعاينة');
- const owner=await currentUser();if(owner?.role!=='developer')throw Error('لصاحب التطبيق فقط');
+ const owner=await currentUser();if(!owner)throw Error('سجّل الدخول أولاً');
  const {doc,getDoc,setDoc,updateDoc,writeBatch,serverTimestamp}=storeFns,ref=doc(db,'joinRequests',requestId),snap=await getDoc(ref);
  if(!snap.exists()||snap.data().ownerUid!==owner.uid)throw Error('هذا الطلب غير تابع لتطبيقاتك');
  const r=snap.data();
@@ -620,7 +623,7 @@ async function loadHelpArticles(){
 // The live listeners run the very same queries; once they have answered, their data is used as is.
 function liveList(active,name,fromServer){
  const c=liveCache;
- if(fromServer||!active||c.key!==active.uid+'|'+active.role||!c.ready.has(name))return null;
+ if(fromServer||!active||c.key!==active.uid+'|one'||!c.ready.has(name))return null;
  return c.data[name];
 }
 const liveSnap=list=>({docs:list.map(x=>({id:x.id,data:()=>x})),size:list.length});
@@ -632,28 +635,27 @@ async function getDashboard({fromServer=false}={}){
  const from=(name,q)=>{const list=liveList(user,name,fromServer);return list?Promise.resolve(liveSnap(list)):read(q)};
  await loadFeatures(user.uid);
  const selfJoin=await groupData(user,read);
- if(user.role==='developer'){
- const [p,a,t,r,m,pt,ps]=await Promise.all([
- from('projects',query(collection(db,'projects'),where('ownerUid','==',user.uid))),
- from('assignments',query(collection(db,'assignments'),where('ownerUid','==',user.uid))),
- loadTesterDirectory(user.uid,read,fromServer).then(docs=>({docs})),
- from('reports',query(collection(db,'reports'),where('ownerUid','==',user.uid))),
- from('messages',query(collection(db,'messages'),where('ownerUid','==',user.uid))),
+const pick=(field,name)=>from(name+':'+field,query(collection(db,name),where(field,'==',user.uid)));
+ const [po,ao,ro,mo,pt,ps,at,rt,mt,xl]=await Promise.all([
+ pick('ownerUid','projects'),pick('ownerUid','assignments'),pick('ownerUid','reports'),pick('ownerUid','messages'),
  // Two small reads for «اختبر قبل ما تنشر»: accepted reports so far, and what the last publish used.
  storeFns.getDoc(storeFns.doc(db,'xpTotals',user.uid)).catch(()=>null),
- storeFns.getDoc(storeFns.doc(db,'publishSlots',user.uid)).catch(()=>null)
- ]);
- return {publish:{totals:pt?.exists?.()?pt.data():null,slot:ps?.exists?.()?ps.data():null},projects:p.docs.map(tidy),assignments:a.docs.map(tidy),testers:t.docs.map(testerProfile).filter(x=>x.uid!==user.uid),crossCount:await crossWorkCount(user,read),support:liveList(user,'supportMessages',fromServer)??await supportThread(user,read),reports:r.docs.map(tidy),messages:m.docs.map(tidy),...selfJoin,settings:{reminderHour:20}};
- }
- const [a,r,m,x,l]=await Promise.all([
- from('assignments',query(collection(db,'assignments'),where('testerUid','==',user.uid))),
- from('reports',query(collection(db,'reports'),where('testerUid','==',user.uid))),
- from('messages',query(collection(db,'messages'),where('testerUid','==',user.uid))),
- storeFns.getDoc(storeFns.doc(db,'xpTotals',user.uid)).catch(()=>null),
+ storeFns.getDoc(storeFns.doc(db,'publishSlots',user.uid)).catch(()=>null),
+ pick('testerUid','assignments'),pick('testerUid','reports'),pick('testerUid','messages'),
  read(query(collection(db,'xpAssignments'),where('testerUid','==',user.uid))).catch(()=>null)
  ]);
- const xp={totals:x?.exists?.()?x.data():null,ledgers:Object.fromEntries((l?.docs||[]).map(d=>[d.id,d.data()]))};
- return {projects:[],assignments:a.docs.map(tidy),testers:[],reports:r.docs.map(tidy),messages:m.docs.map(tidy),xp,crossCount:await crossWorkCount(user,read),support:liveList(user,'supportMessages',fromServer)??await supportThread(user,read),...selfJoin,settings:JSON.parse(previewStorage.getItem('testerhub_settings')||'{"reminderHour":20}')};
+ const totals=pt?.exists?.()?pt.data():null,projects=po.docs.map(tidy);
+ // The list of available testers is only needed to add an app; it is read on demand (and cached 15 minutes).
+ const testers=projects.length||directoryCache.docs?await loadTesters(user,read,fromServer):[];
+ return {publish:{totals,slot:ps?.exists?.()?ps.data():null},projects,assignments:unionById(ao.docs.map(tidy),at.docs.map(tidy)),testers,testersLoaded:!!testers.length||!!directoryCache.docs,crossCount:0,support:liveList(user,'supportMessages',fromServer)??await supportThread(user,read),reports:unionById(ro.docs.map(tidy),rt.docs.map(tidy)),messages:unionById(mo.docs.map(tidy),mt.docs.map(tidy)),xp:{totals,ledgers:Object.fromEntries((xl?.docs||[]).map(d=>[d.id,d.data()]))},...selfJoin,settings:JSON.parse(previewStorage.getItem('testerhub_settings')||'{"reminderHour":20}')};
+}
+// One account: the owner's lists and the tester's lists can share a document (never the same app), so merge by id.
+function unionById(...lists){const seen=new Map();for(const list of lists)for(const x of list||[])if(x&&!seen.has(x.id))seen.set(x.id,x);return [...seen.values()]}
+async function loadTesters(active=null,read=null,fresh=false){
+ if(isDemo)return demoState().testers;
+ active=active||await currentUser();if(!active)return [];
+ const docs=await loadTesterDirectory(active.uid,read||storeFns.getDocs,fresh);
+ return docs.map(testerProfile).filter(x=>x.uid!==active.uid);
 }
 const DIRECTORY_TTL=15*60000;
 let directoryCache={uid:'',at:0,docs:null};
@@ -746,7 +748,7 @@ async function ensurePublishAllowed(owner,ignoreId=null){
 }
 // Ends a live app after its 14 days so the next one can go live. Started testers keep reporting.
 async function completeProject(projectId){
- const owner=await currentUser();if(owner?.role!=='developer')throw Error('لصاحب التطبيق فقط');
+ const owner=await currentUser();if(!owner)throw Error('سجّل الدخول أولاً');
  if(isDemo){const d=demoState(),p=d.projects.find(x=>x.id===projectId&&x.ownerUid===owner.uid);if(!isLiveProject(p))throw Error('التطبيق مو نشط');if(Date.now()<liveEndsAt(p,d.publishSlot))throw Error('تگدر تنهي الاختبار بعد 14 يوم من نشره');p.status='completed';save(d);return}
  const {doc,getDoc,getDocFromServer,writeBatch,serverTimestamp}=storeFns,ref=doc(db,'projects',projectId);
  const [snap,slot]=await Promise.all([getDoc(ref),getDocFromServer(doc(db,'publishSlots',owner.uid)).catch(()=>null)]);
@@ -775,8 +777,8 @@ async function createProject({name,link,tasks,group},testers){
   if(seenTesterUids.has(tester.uid))throw Error('القائمة تحتوي مختبراً مكرراً. حدّث الصفحة وحاول مرة ثانية.');
   seenTesterUids.add(tester.uid);
  }
- if(isDemo){const g=await ensurePublishAllowed({uid:'d1'}),d=demoState(),id='app'+Date.now();d.projects.unshift({id,name:name.trim(),link,tasks,ownerUid:'d1',ownerName:'مطور تجريبي',created:dayKey(),status:'recruiting',selectedTesterUids:testers.map(t=>t.uid)});d.publishSlot={projectId:id,acceptedAtPublish:g.next,updatedAt:new Date().toISOString()};for(const tester of testers){d.assignments.push({id:`${id}_${tester.uid}`,projectId:id,testerUid:tester.uid,ownerUid:'d1',name:name.trim(),link,tasks,invitationStatus:'pending',joinedDay:null,checkins:[]})}save(d);return id}
- const user=await currentUser();if(user?.role!=='developer')throw Error('هذه الوظيفة للمطور فقط');
+ if(isDemo){const me=await currentUser();const g=await ensurePublishAllowed({uid:me.uid}),d=demoState(),id='app'+Date.now();d.projects.unshift({id,name:name.trim(),link,tasks,ownerUid:me.uid,ownerName:me.name,created:dayKey(),status:'recruiting',selectedTesterUids:testers.map(t=>t.uid)});d.publishSlot={projectId:id,acceptedAtPublish:g.next,updatedAt:new Date().toISOString()};for(const tester of testers){d.assignments.push({id:`${id}_${tester.uid}`,projectId:id,testerUid:tester.uid,ownerUid:me.uid,name:name.trim(),link,tasks,invitationStatus:'pending',joinedDay:null,checkins:[]})}save(d);return id}
+ const user=await currentUser();if(!user)throw Error('سجّل الدخول أولاً');
  const gate=await ensurePublishAllowed(user);
  const projectRef=storeFns.doc(storeFns.collection(db,'projects')),batch=storeFns.writeBatch(db);
  // The app and its publish slot are one write: the rules accept neither without the other.
@@ -796,8 +798,8 @@ async function saveProjectDraft({name,link,tasks,group},projectId=null){
  name=String(name||'').trim();link=String(link||'').trim();
  if(name.length<2||name.length>70)throw Error('اسم التطبيق يجب أن يكون بين 2 و70 حرفاً');
  if(link){const url=new URL(link);if(url.protocol!=='https:'||url.hostname!=='play.google.com')throw Error('أدخل رابط Google Play صحيحاً')}
- if(isDemo){const d=demoState();if(projectId){const p=d.projects.find(p=>p.id===projectId&&p.status==='draft');if(!p)throw Error('لا يمكن تعديل هذا المشروع');Object.assign(p,{name,link,tasks})}else{projectId='draft'+Date.now();d.projects.unshift({id:projectId,name,link,status:'draft',tasks,ownerUid:'d1',selectedTesterUids:[],testersCount:0})}save(d);return projectId}
- const owner=await currentUser();if(owner?.role!=='developer')throw Error('هذه الوظيفة للمطور فقط');
+ if(isDemo){const me=await currentUser();const d=demoState();if(projectId){const p=d.projects.find(p=>p.id===projectId&&p.status==='draft');if(!p)throw Error('لا يمكن تعديل هذا المشروع');Object.assign(p,{name,link,tasks})}else{projectId='draft'+Date.now();d.projects.unshift({id:projectId,name,link,status:'draft',tasks,ownerUid:me.uid,selectedTesterUids:[],testersCount:0})}save(d);return projectId}
+ const owner=await currentUser();if(!owner)throw Error('سجّل الدخول أولاً');
  if(projectId){const ref=storeFns.doc(db,'projects',projectId),snap=await storeFns.getDoc(ref);if(!snap.exists()||snap.data().ownerUid!==owner.uid||snap.data().status!=='draft')throw Error('المسودة غير متاحة للتعديل');await storeFns.updateDoc(ref,{name,link,tasks,groupLink:group});return projectId}
  const ref=storeFns.doc(storeFns.collection(db,'projects'));
  await storeFns.setDoc(ref,{name,link,tasks,...(group?{groupLink:group}:{}),status:'draft',ownerUid:owner.uid,ownerName:owner.name,createdAt:storeFns.serverTimestamp(),testersCount:0,selectedTesterUids:[]});return ref.id;
@@ -808,9 +810,9 @@ async function publishProjectDraft(projectId,{name,link,tasks,group},testers){
  name=String(name||'').trim();link=String(link||'').trim();
  if(name.length<2||name.length>70)throw Error('اسم التطبيق غير صالح');
  const url=new URL(link);if(url.protocol!=='https:'||url.hostname!=='play.google.com')throw Error('أدخل رابط Google Play صحيحاً');
- if(isDemo){const g=await ensurePublishAllowed({uid:'d1'},projectId),d=demoState(),p=d.projects.find(p=>p.id===projectId&&p.status==='draft');if(!p)throw Error('المسودة غير متاحة');Object.assign(p,{name,link,tasks,status:'recruiting',selectedTesterUids:testers.map(t=>t.uid),testersCount:testers.length});d.publishSlot={projectId,acceptedAtPublish:g.next,updatedAt:new Date().toISOString()};save(d);return syncProjectAssignments(projectId)}
+ if(isDemo){const me=await currentUser();const g=await ensurePublishAllowed({uid:me.uid},projectId),d=demoState(),p=d.projects.find(p=>p.id===projectId&&p.status==='draft');if(!p)throw Error('المسودة غير متاحة');Object.assign(p,{name,link,tasks,status:'recruiting',selectedTesterUids:testers.map(t=>t.uid),testersCount:testers.length});d.publishSlot={projectId,acceptedAtPublish:g.next,updatedAt:new Date().toISOString()};save(d);return syncProjectAssignments(projectId)}
  const owner=await currentUser(),ref=storeFns.doc(db,'projects',projectId),snap=await storeFns.getDoc(ref);
- if(owner?.role!=='developer'||!snap.exists()||snap.data().ownerUid!==owner.uid||snap.data().status!=='draft')throw Error('المسودة غير متاحة للنشر');
+ if(!owner||!snap.exists()||snap.data().ownerUid!==owner.uid||snap.data().status!=='draft')throw Error('المسودة غير متاحة للنشر');
  const gate=await ensurePublishAllowed(owner,projectId),batch=storeFns.writeBatch(db);
  batch.update(ref,{name,link,tasks,groupLink:group,status:'recruiting',selectedTesterUids:testers.map(t=>t.uid),testersCount:testers.length});
  batch.set(storeFns.doc(db,'publishSlots',owner.uid),{projectId,acceptedAtPublish:gate.next,updatedAt:storeFns.serverTimestamp()});
@@ -824,7 +826,7 @@ async function syncProjectAssignments(projectId){
   if(!p)throw Error('التطبيق غير موجود');
   let added=0;
   if(!Array.isArray(p.selectedTesterUids))throw Error('هذا مشروع قديم بلا قائمة اختيار محفوظة. الدعوات الحالية محفوظة؛ لا يتم إرسال دعوات عامة.');
-  for(const t of d.testers.filter(x=>x.available&&x.role==='tester'&&p.selectedTesterUids.includes(x.uid))){
+  for(const t of d.testers.filter(x=>x.available&&p.selectedTesterUids.includes(x.uid))){
    if(!d.assignments.some(a=>a.projectId===projectId&&a.testerUid===t.uid)){
     d.assignments.push({id:projectId+'_'+t.uid,projectId,testerUid:t.uid,ownerUid:p.ownerUid,name:p.name,link:p.link,...(p.tasks?{tasks:p.tasks}:{}),invitationStatus:'pending',joinedDay:null,checkins:[]});added++;
    }
@@ -832,7 +834,7 @@ async function syncProjectAssignments(projectId){
   save(d);return {added,total:d.assignments.filter(a=>a.projectId===projectId).length};
  }
  const owner=await currentUser();
- if(owner?.role!=='developer')throw Error('إعادة إرسال الدعوات متاحة لصاحب التطبيق فقط');
+ if(!owner)throw Error('سجّل الدخول أولاً');
  const {collection,query,where,getDocs,getDoc,doc,writeBatch,serverTimestamp}=storeFns;
  const projectSnap=await getDoc(doc(db,'projects',projectId));
  if(!projectSnap.exists()||projectSnap.data().ownerUid!==owner.uid)throw Error('هذا التطبيق غير تابع لحسابك');
@@ -876,7 +878,7 @@ async function respondInvite(assignmentId,status){
  if(!['accepted','declined'].includes(status))throw Error('حالة الدعوة غير صالحة');
  if(isDemo){const d=demoState(),a=d.assignments.find(a=>a.id===assignmentId&&a.testerUid==='t1');if(!a||a.invitationStatus!=='pending')throw Error('الدعوة غير متاحة');a.invitationStatus=status;save(d);return}
  const active=await currentUser(),ref=storeFns.doc(db,'assignments',assignmentId),snap=await storeFns.getDoc(ref);
- if(active?.role!=='tester'||!snap.exists()||snap.data().testerUid!==active.uid||snap.data().invitationStatus!=='pending')throw Error('الدعوة غير متاحة');
+ if(!active||!snap.exists()||snap.data().testerUid!==active.uid||snap.data().invitationStatus!=='pending')throw Error('الدعوة غير متاحة');
  await storeFns.updateDoc(ref,{invitationStatus:status,respondedAt:storeFns.serverTimestamp()});
 }
 async function confirmDay(assignmentId){
@@ -920,7 +922,7 @@ async function submitDailyReport(assignmentId,input){
  const retestOf=typeof input?.retestOf==='string'&&input.retestOf.startsWith(assignmentId+'_')?input.retestOf:'';
  if(!isDemo){
   const active=await currentUser();
-  if(active?.role!=='tester')throw Error('هذه الوظيفة للمختبر فقط');
+  if(!active)throw Error('سجّل الدخول أولاً');
   const ref=storeFns.doc(db,'assignments',assignmentId),date=dayKey();
   const reportRef=storeFns.doc(db,'reports',`${assignmentId}_${date}`);
   // A weak network makes a server read fail fast, so retry it a few times before giving up.
@@ -980,7 +982,7 @@ async function reviewReport(reportId,decision){
   text:`طلب المطور توضيحاً حول تقرير ${r.date}: رجاءً اكتب تفاصيل أكثر عن اللي جرّبته.`});
  if(!isDemo){
   const active=await currentUser();
-  if(active?.role!=='developer')throw Error('مراجعة التقارير لصاحب التطبيق فقط');
+  if(!active)throw Error('سجّل الدخول أولاً');
   const ref=storeFns.doc(db,'reports',reportId),snap=await storeFns.getDoc(ref);
   if(!snap.exists()||snap.data().ownerUid!==active.uid)throw Error('هذا التقرير غير تابع لتطبيقاتك');
   const r=snap.data();
@@ -1220,10 +1222,10 @@ async function photoDataUrl(file){
 const NOTICE_KINDS={announcement:'إعلان',update:'تحديث للمنصة',instruction:'تعليمات مهمة'};
 const NOTICE_LIMIT=15;
 const noticeMillis=n=>n?.createdAt?.toMillis?.()??(typeof n?.createdAt?.seconds==='number'?n.createdAt.seconds*1000:Date.parse(n?.createdAt||''));
-// Broadcasts are filtered by the account's current side here; the rules keep direct messages private.
-function noticesFor(items,role){
- const side=role==='developer'?'developers':'testers';
- return items.filter(n=>n&&n.active!==false&&(n.audience==='all'||n.audience===side||n.audience==='user'))
+// The rules keep direct messages private.
+// One account is both a developer and a tester, so broadcasts to either side reach it.
+function noticesFor(items){
+ return items.filter(n=>n&&n.active!==false&&['all','developers','testers','user'].includes(n.audience))
   .sort((a,b)=>(noticeMillis(b)||0)-(noticeMillis(a)||0));
 }
 async function loadAdminNotices(){
@@ -1252,7 +1254,7 @@ async function messageRetryKey(uid,assignmentId,body){
 async function sendMessage(assignmentId,body,sender){
  if(!isDemo){
   const active=await currentUser();
-  if(!active||active.role!==sender)throw Error('الصلاحية غير متاحة');
+  if(!active)throw Error('الصلاحية غير متاحة');
   body=String(body||'').trim();
   if(body.length<2||body.length>600)throw Error('الرسالة لازم تكون من حرفين إلى 600 حرف');
   const aSnap=await storeFns.getDoc(storeFns.doc(db,'assignments',assignmentId));
@@ -1284,7 +1286,7 @@ async function sendMessage(assignmentId,body,sender){
 async function resolveLatestIssue(assignmentId){
  if(!isDemo){
   const active=await currentUser();
-  if(active?.role!=='developer')throw Error('فقط صاحب التطبيق يستطيع تحديد الإصلاح');
+  if(!active)throw Error('سجّل الدخول أولاً');
   const aSnap=await storeFns.getDoc(storeFns.doc(db,'assignments',assignmentId));
   if(!aSnap.exists()||aSnap.data().ownerUid!==active.uid)throw Error('غير مصرح');
   const a=aSnap.data();
@@ -1306,7 +1308,7 @@ async function resolveLatestIssue(assignmentId){
 }
 async function setAvailability(value){
  if(isDemo){const d=demoState();d.user.available=!!value;const t=d.testers.find(x=>x.uid==='t1');if(t)t.available=!!value;save(d);return}
- const user=await currentUser();if(user?.role!=='tester')return;
+ const user=await currentUser();if(!user)return;
  if(value&&user.participationPaused)throw Error('ألغِ إيقاف المشاركة مؤقتاً قبل إظهار بريدك.');
  await accountService.updateProfile({available:!!value});
 }
@@ -1354,7 +1356,7 @@ async function requestAccountDeletion(){
 }
 async function deleteProject(projectId){
  if(isDemo){const d=demoState();d.projects=d.projects.filter(p=>p.id!==projectId);d.assignments=d.assignments.filter(a=>a.projectId!==projectId);d.reports=d.reports.filter(r=>r.projectId!==projectId);d.messages=d.messages.filter(m=>m.projectId!==projectId);save(d);return}
- const owner=await currentUser();if(owner?.role!=='developer')throw Error('هذه الوظيفة للمطور فقط');
+ const owner=await currentUser();if(!owner)throw Error('سجّل الدخول أولاً');
  await TesterHubDeletion.deleteProject({db,f:storeFns,projectId,ownerUid:owner.uid});
 }
 async function switchRole(){
@@ -1362,7 +1364,7 @@ async function switchRole(){
  const active=await currentUser();
  return accountService.updateProfile({role:active.role==='tester'?'developer':'tester'});
 }
-const api={isDemo,loadTesterXp,loadHelpArticles,setProjectTestMode,requestToJoin,cancelJoinRequest,decideJoinRequest,switchRole,sendSupport,setProfilePhoto,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,completeProject,loadPublishState,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,loadAdminNotices,markAdminNoticesRead,getLeague,setLeagueName,refreshLeagueName,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
+const api={isDemo,loadTesterXp,loadTesters,loadHelpArticles,setProjectTestMode,requestToJoin,cancelJoinRequest,decideJoinRequest,switchRole,sendSupport,setProfilePhoto,setProjectGroupLink,dayKey,daysSince,initialize,currentUser,switchDemo,signup,login,logout,getDashboard,createProject,saveProjectDraft,publishProjectDraft,completeProject,loadPublishState,syncProjectAssignments,projectDeletionCounts,deleteProject,addProjectTesters,requestAccountDeletion,respondInvite,confirmJoin,confirmDay,submitDailyReport,sendMessage,resolveLatestIssue,reviewReport,syncMyXp,loadAdminNotices,markAdminNoticesRead,getLeague,setLeagueName,refreshLeagueName,setAvailability,getReminderHour,setReminderHour,resetDemo,getReminderMarker,setReminderMarker};
 
 
 const app=document.getElementById('app');
@@ -1425,6 +1427,9 @@ let lastPageScroll=0;
 const trDays=days=>Math.min(14,Math.max(0,days));
 function primaryAssignments(){return dashboard.assignments.filter(a=>a.testerUid===user?.uid)}
 function mineProjects(){return dashboard.projects.filter(p=>p.ownerUid===user?.uid)}
+// One account: which side of an assignment am I on? The rules check the same thing for every message.
+function sideOf(assignmentId){return dashboard.assignments.find(a=>a.id===assignmentId)?.ownerUid===user?.uid?'developer':'tester'}
+function ownerIssues(){return (dashboard.reports||[]).filter(r=>r.ownerUid===user?.uid&&needsFollowUp(r)&&r.status!=='fixed')}
 function myProjectAssignments(id){return dashboard.assignments.filter(a=>a.projectId===id)}
 function currentDay(a){return trDays(api.daysSince(a.joinedDay))}
 function verifiedXp(){return dashboard.xp?.totals?.points||0}
@@ -1463,7 +1468,7 @@ function participationPanel(st,title){
 function lastActive(a){const dates=a.checkins||[];if(!a.joinedDay)return false;return dates.some(key=>api.daysSince(key)<=3)||api.daysSince(a.joinedDay)<=3}
 function countActive(assignments){return assignments.filter(lastActive).length}
 const formatNum=n=>new Intl.NumberFormat('ar-IQ').format(n);
-function siteHeader(){return `<div class="status"><span>10:24</span><span>◆ ◕ 100%</span></div><header class="hero"><div class="header"><button class="round-ico" data-action="open-menu" aria-label="فتح القائمة" aria-haspopup="dialog">${ico('menu',21)}</button><div class="logo"><img class="header-brand-icon" src="./assets/brand-icon.svg" alt="" width="33" height="33"/>TesterHub</div><button class="round-ico" data-action="notice" aria-label="الإشعارات" aria-haspopup="dialog">${ico('bell',20)}${noticeBadgeCount()?`<span class="bell-count">${Math.min(99,noticeBadgeCount())}</span>`:''} </button></div><div class="hello"><h2>${user?.role==='developer'?'لوحة المطور':'مرحباً، '+clean(user?.name||'مختبر')}</h2><p>${user?.role==='developer'?'إدارة الاختبار المغلق لتطبيقاتك':'تابع تطبيقاتك وخطواتك نحو إكمال الاختبار'}</p></div></header>`}
+function siteHeader(){const n=noticeBadgeCount();return `<header class="v2-top"><div class="v2-brand"><img src="./assets/brand-icon.svg" alt="" width="34" height="34"/><span>TesterHub</span></div><button class="v2-icon-btn" data-action="notice" aria-label="الإشعارات${n?' ('+n+')':''}" aria-haspopup="dialog">${ico('bell',22)}${n?'<span class="v2-dot"></span>':''}</button></header>`}
 function appMenu(){
  if(!drawerOpen||!user)return '';
  const menu=user.role==='developer'?[['home','التطبيقات'],['new','إضافة تطبيق'],['groups','المجموعات'],['testers','المختبرون'],['rewards','دوري المساهمين'],['profile','حسابي']]:[['home','التطبيقات'],['groups','المجموعات'],['tests','اختباراتي'],['rewards','دوري المساهمين'],['profile','حسابي']];
@@ -1476,7 +1481,7 @@ function sectionOf(t){return SECTION_OF[t]||t}
 function bottomBar(){const current=sectionOf(tab);return `<nav class="nav" aria-label="التنقل الرئيسي">${SECTIONS.map(([key,icon,label])=>`<button data-tab="${key}" ${current===key?'class="active" aria-current="page"':''}>${ico(icon)}<span>${label}</span></button>`).join('')}</nav>`}
 // At most three steps for any operation; the current one is highlighted and finished ones are ticked.
 function steps3(labels,current,allDone=false){return `<ol class="steps3">${labels.map((l,i)=>{const done=allDone||i<current,now=!allDone&&i===current;return `<li class="${done?'done':now?'now':''}"${now?' aria-current="step"':''}><b>${done?'✓':formatNum(i+1)}</b><span>${clean(l)}</span></li>`}).join('')}</ol>`}
-function welcomeBanner(){if(!api.isDemo)return '';return `<div class="demo-banner">نسخة معاينة — البيانات تجريبية ومحفوظة على هذا الجهاز فقط</div>`}
+function welcomeBanner(){if(!api.isDemo)return '';return `<div class="demo-banner">معاينة · بيانات تجريبية محفوظة على هذا الجهاز فقط</div>`}
 
 const FIFTEEN_DAYS=15*86400000;
 function invitationExpired(a){const at=a.createdAt?.toMillis?.();return a.invitationStatus==='pending'&&Number.isFinite(at)&&Date.now()>=at+7*86400000}
@@ -1495,7 +1500,7 @@ function classifyTesterWork(assignments, dateKey=api.dayKey(), nowMs=Date.now())
  }
  return state;
 }
-function messageIsIncoming(message){return user&&message.senderUid!==user.uid&&message.sender!==user.role}
+function messageIsIncoming(message){return !!user&&message.senderUid!==user.uid}
 function messageTime(message){return message.createdAt?.toMillis?.()??Date.parse(message.at||'')}
 // Admin notices load at sign-in, on opening the bell, and at most every 10 minutes otherwise (Spark reads).
 let adminNotices={items:[],readAt:0,loadedAt:0,uid:null},noticeUnreadAtOpen=[];
@@ -1531,13 +1536,11 @@ function unreadNoticeMessages(){
 function noticeKeys(){
  if(!user)return [];
  const keys=[...unreadNoticeMessages().map(m=>'msg:'+(m.id||messageTime(m))),...unreadAdminNotices().map(n=>'admin:'+n.id),...unreadSupport().map(m=>'support:'+(m.id||supportTime(m)))];
- if(user.role==='tester'){
-  const st=classifyTesterWork(primaryAssignments()),day=api.dayKey();
-  keys.push(...st.due.map(a=>'due:'+a.id+':'+day),...st.invites.map(a=>'invite:'+a.id+':'+(a.invitationStatus||'new')));
- }else{
-  keys.push(...(dashboard.reports||[]).filter(r=>needsFollowUp(r)&&r.status!=='fixed').map(r=>'issue:'+r.id));
-  keys.push(...mineProjects().filter(p=>!dashboard.assignments.some(a=>a.projectId===p.id)).map(p=>'setup:'+p.id));
- }
+ // One account: what I test and what I own.
+ {const st=classifyTesterWork(primaryAssignments()),day=api.dayKey();
+  keys.push(...st.due.map(a=>'due:'+a.id+':'+day),...st.invites.map(a=>'invite:'+a.id+':'+(a.invitationStatus||'new')));}
+ keys.push(...ownerIssues().map(r=>'issue:'+r.id));
+ keys.push(...mineProjects().filter(p=>p.status!=='draft'&&!dashboard.assignments.some(a=>a.projectId===p.id)).map(p=>'setup:'+p.id));
  return keys;
 }
 function noticeKeysSeenKey(){return 'testerhub_notice_keys_'+(user?.uid||'guest')}
@@ -1565,27 +1568,28 @@ function notificationPanel(){
    const unread=new Set(noticeUnreadAtOpen);
    body+='<div class="notice-section-title">إعلانات الإدارة</div>'+fromAdmin.map(n=>adminNoticeItem(n,unread.has(n.id))).join('')+'<button type="button" class="item-link" data-action="notice-go-announcements">كل الإعلانات <span>‹</span></button>';
   }
-  if(user.role==='tester'){
+  {
    const work=classifyTesterWork(primaryAssignments());
-   if(!dashboard.assignments.length)body+=noticeCard('لا توجد تطبيقات مسندة لحسابك','ما عندك تكليفات اختبار حالياً.');
+   if(!primaryAssignments().length&&!mineProjects().length)body+=noticeCard('لا توجد تطبيقات مسندة لحسابك','ما عندك تكليفات اختبار حالياً.');
    for(const a of work.invites)body+=noticeCard((a.invitationStatus==='pending'?'دعوة اختبار جديدة: ':'دعوة مقبولة: ')+a.name,a.invitationStatus==='pending'?'بانتظار ردك على الدعوة. القبول هنا لا يؤكد اشتراك Google Play.':'اقبلت الدعوة؛ انضم للاختبار المغلق ثم أكد بدء المشاركة.','notice-go-tests','tests');
    for(const a of work.due)body+=noticeCard('اختبار مطلوب اليوم: '+a.name,'ماكو تقرير محفوظ لهذا اليوم، والاختبار جاهز للتنفيذ.','notice-go-tests','tests');
    for(const a of work.cooldown)body+=noticeCard('بانتظار موعد التقرير التالي: '+a.name,'تم تقديم تقرير سابق قبل أقل من 14 ساعة. الاختبار بعده ضمن المتابعة.','notice-go-tests','tests');
-   if(!work.invites.length&&!work.due.length&&!work.cooldown.length&&dashboard.assignments.length){
+   if(!work.invites.length&&!work.due.length&&!work.cooldown.length&&primaryAssignments().length){
     body+=noticeCard('ما عندك اختبارات مطلوبة هسه',work.completed.length?'تم حفظ تقارير التطبيقات النشطة لليوم.':'ماكو اختبارات نشطة تحتاج إجراء اليوم.');
    }
-  }else{
-   const issues=(dashboard.reports||[]).filter(r=>needsFollowUp(r)&&r.status!=='fixed');
-   const empty=mineProjects().filter(p=>!dashboard.assignments.some(a=>a.projectId===p.id));
+  }
+  if(mineProjects().length){
+   const issues=ownerIssues();
+   const empty=mineProjects().filter(p=>p.status!=='draft'&&!dashboard.assignments.some(a=>a.projectId===p.id));
    for(const p of empty)body+=noticeCard('دعوات غير مكتملة: '+p.name,'هذا التطبيق لا يحتوي تكليفات مختبرين محفوظة.','notice-go-project',p.id);
    for(const r of issues.slice(0,8))body+=noticeCard('بلاغ مشكلة: '+(dashboard.projects.find(p=>p.id===r.projectId)?.name||'تطبيقك'),r.notes||'مشكلة تحتاج مراجعة.','notice-go-project',r.projectId);
-   if(!issues.length&&!empty.length)body+=noticeCard('ماكو بلاغات مفتوحة','تم التحقق من التقارير والتكليفات.');
+   if(!issues.length&&!empty.length)body+=noticeCard('ماكو بلاغات مفتوحة على تطبيقاتك','تم التحقق من التقارير والتكليفات.');
   }
   for(const m of unreadSupport().slice(-3))body+=noticeCard('رسالة من إدارة TesterHub',String(m.text||'').slice(0,140),'notice-go-support','');
   const messages=(dashboard.messages||[]).filter(messageIsIncoming).slice().sort((a,b)=>messageTime(b)-messageTime(a)).slice(0,5);
   if(messages.length){
    body+='<div class="notice-section-title">آخر رسائل الطرف الآخر</div>';
-   for(const m of messages)body+=noticeCard(user.role==='tester'?'رد من المطور':'رسالة من مختبر',String(m.text||'').slice(0,140),'notice-go-chat',m.assignmentId);
+   for(const m of messages)body+=noticeCard(dashboard.assignments.find(a=>a.id===m.assignmentId)?.ownerUid===user.uid?'رسالة من مختبر':'رد من المطور',String(m.text||'').slice(0,140),'notice-go-chat',m.assignmentId);
   }
  }
  return '<div class="notices-overlay"><button class="notices-backdrop" type="button" data-action="close-notices" aria-label="إغلاق الإشعارات"></button>'+
@@ -1617,7 +1621,7 @@ async function syncNotificationPanel(){
  render();
 }
 
-function reminderPending(){return user?.role==='tester'&&new Date().getHours()>=api.getReminderHour()&&classifyTesterWork(primaryAssignments()).due.length>0}
+function reminderPending(){return !!user&&new Date().getHours()>=api.getReminderHour()&&classifyTesterWork(primaryAssignments()).due.length>0}
 function reminderUi(){return reminderPending()?`<div class="reminder-banner">${ico('bell',17)} وقت اختبارك اليوم! افتح التطبيقات الحالية، وبعد التجربة سجّل تقرير اليوم حتى يتحدث تقدمك.</div>`:''}
 function trackerCard(){const apps=primaryAssignments().filter(a=>a.joinedDay&&api.daysSince(a.joinedDay)<=14),a=apps[0],d=a?currentDay(a):0;return `<article class="surface feature"><div class="row between"><div class="stat-top">${ico('calendar',20)} الفترة الزمنية للاختبار — 14 يوماً</div><span class="mode-pill">${a?(api.daysSince(a.joinedDay)>14?'انتهت الفترة':'مستمر'):'جاهز'}</span></div><div class="test-summary"><span class="small">${clean(a?.name||'ابدأ أول اختبار لك')}</span><strong class="day-number">${d} / 14 يوماً</strong></div><div class="progress"><i style="width:${d/14*100}%"></i></div><div class="row between"><span class="tiny">${a?`اليوم ${d} من 14؛ مرور الأيام لا يعني اكتمال التقارير`:'انضم لتطبيق لتبدأ المتابعة'}</span><span class="badge">${ico('star',13)} ${formatNum(verifiedXp())} XP</span></div></article>`}
 function seedProjectName(id){return dashboard.projects.find(p=>p.id===id)||{}}
@@ -1667,9 +1671,9 @@ function dailyReport(){
 }
 function threadMessages(assignmentId){return (dashboard.messages||[]).filter(m=>m.assignmentId===assignmentId).slice().sort((a,b)=>messageTime(a)-messageTime(b))}
 function chatPage(){
- const a=dashboard.assignments.find(x=>x.id===selectedAssignmentId && (user.role==='developer'?x.ownerUid===user.uid:x.testerUid===user.uid));
+ const a=dashboard.assignments.find(x=>x.id===selectedAssignmentId&&(x.ownerUid===user.uid||x.testerUid===user.uid));
  if(!a)return `<div class="tab-empty">المحادثة غير متاحة</div>`;
- const messages=threadMessages(a.id),isDeveloper=user.role==='developer',issues=(dashboard.reports||[]).filter(r=>r.assignmentId===a.id&&needsFollowUp(r)&&r.status!=='fixed');
+ const messages=threadMessages(a.id),isDeveloper=a.ownerUid===user.uid,issues=(dashboard.reports||[]).filter(r=>r.assignmentId===a.id&&needsFollowUp(r)&&r.status!=='fixed');
  return `<div class="surface"><button class="top-link" data-tab="${isDeveloper?'details':'tests'}">${ico('chevron',16)} رجوع</button><div class="lead" style="margin-top:12px">${ico('message',20)} محادثة ${clean(a.name)}</div><div class="small">${isDeveloper?'محادثة خاصة بينك وبين المختبر':'ملاحظاتك توصل لصاحب هذا التطبيق بعد تفعيل الحسابات الحقيقية'}</div>${api.isDemo?`<div class="notice">معاينة محلية: تقدر تكتب وتبدّل الدور بنفس الهاتف، لكن الرسائل ما تنتقل لأجهزة أخرى حالياً.</div>`:''}</div>
  <div class="surface" aria-label="سجل الرسائل">${messages.length?messages.map(m=>`<div class="chat-bubble ${m.sender==='developer'?'developer':''}"><strong>${m.sender==='developer'?'المطور':'المختبر'}</strong><div>${clean(m.text)}</div><div class="chat-meta">${new Date(messageTime(m)).toLocaleString('ar-IQ',{dateStyle:'short',timeStyle:'short'})}</div></div>`).join(''):`<div class="empty">ماكو رسائل بعد. اكتب ملاحظة أو استفسار ليبدأ النقاش.</div>`}</div>
  ${isDeveloper&&issues.length?`<div class="surface"><div class="lead">بلاغ مفتوح</div><p class="small">${clean(issues[issues.length-1].notes)}</p><button class="cta wide" data-action="mark-fixed" data-id="${clean(a.id)}">${ico('check',16)} تم الإصلاح — أبلغ المختبر</button></div>`:''}
@@ -1920,7 +1924,7 @@ function projectDetails(id){
 // What used to sit in the bottom bar is one tap away here.
 function profileShortcuts(){const dev=user.role==='developer',items=[['rewards','rewards','دوري المساهمين و XP'],...(dev?[['testers','testers','المختبرون المتاحون'],['apps','apps','كل تطبيقاتي']]:[]),['announcements','bell','مركز الإشعارات'],['help','message','مركز المساعدة'],['support','message','الدعم']];return `<div class="surface shortcuts">${items.map(([t,icon,label])=>`<button class="item-link" data-tab="${t}">${ico(icon,19)} ${label} <span>‹</span></button>`).join('')}</div>`}
 function profile(){return `${profileShortcuts()}${adminAuthorized?'<div class="surface"><a class="cta blue wide" style="display:block;text-align:center;text-decoration:none;padding:12px" href="./admin.html">'+ico('shield',18)+' لوحة إدارة المنصة</a></div>':''}${profileEditor()}<div class="surface"><div class="user-bar"><div><div class="bold">${clean(user.name)}</div><small class="email-ltr">${clean(user.email)}</small></div>${myPublicProfile?.photo?`<img class="profile-photo" src="${clean(myPublicProfile.photo)}" alt="صورتك" width="54" height="54">`:`<div class="app-mark" style="width:54px;height:54px;border-radius:50%;background:linear-gradient(125deg,#2a78dc,#0eae8b);color:#fff;display:grid;place-items:center">${ico('user',28)}</div>`}</div><div class="photo-actions"><label class="cta outline photo-pick">${ico('camera',16)} ${myPublicProfile?.photo?'تغيير صورتك':'إضافة صورة شخصية'}<input type="file" accept="image/*" data-change="profile-photo" hidden></label>${myPublicProfile?.photo?'<button type="button" class="cta outline" data-action="remove-photo">إزالة الصورة</button>':''}</div><div class="tiny">تظهر صورتك واسمك بالدوري فقط إذا فعّلت «اظهر اسمي وصورتي» بصفحة الدوري. البريد ما يظهر أبداً.</div><div class="divider"></div><span class="chip">${user.role==='developer'?'واجهة المطور':'واجهة المختبر'}</span></div>${user.role==='tester'?`<div class="surface"><div class="lead">المشاركة بالاختبارات</div><label class="checks"><input type="checkbox" data-change="availability" ${user.available?'checked':''}/><span>إظهار بريدي للمطورين كأحد المختبرين المتاحين</span></label><div class="small">لن يظهر بريدك إلا للمطورين المسجلين، لغرض إضافتك إلى قائمة الاختبار.</div></div><div class="surface"><div class="lead">تذكيري اليومي</div><div class="setting-row"><span class="small">وقت التذكير</span><select id="reminder-hour">${Array.from({length:24},(_,i)=>`<option value="${i}" ${i===api.getReminderHour()?'selected':''}>${(i%12)||12}:00 ${i<12?'ص':'م'}</option>`).join('')}</select></div><button class="cta outline wide" data-action="enable-reminder">${ico('bell',16)} السماح بإشعار التذكير</button><button class="cta outline wide" style="margin-top:8px" data-action="calendar-reminder">${ico('calendar',16)} إضافة تذكير 14 يوم إلى تقويم الهاتف</button><div class="card-note">${window.TESTERHUB_VAPID_KEY?'بعد السماح تصلك الإشعارات حتى والتطبيق مغلق، وقد تتأخر قليلاً.':'تذكير المتصفح يظهر أثناء فتح التطبيق. التذكير بالتقويم يحتاج استيراد ملف المواعيد داخل تطبيق التقويم حتى يصلك والهاتف مقفل.'}</div></div>`:''}<div class="surface"><div class="lead">التطبيق</div>${api.isDemo?'':`<button class="item-link" data-tab="support">${ico('message',20)} رسائل إدارة TesterHub ${unreadSupport().length?`<span class="message-counter">${unreadSupport().length}</span>`:'<span>‹</span>'}</button>`}${api.isDemo?'':`<button class="item-link" data-action="switch-role">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button>`}${user.role==='developer'?`<button class="item-link" data-action="enable-reminder">${ico('bell',20)} السماح بالإشعارات <span>‹</span></button>`:''}<button class="item-link" data-action="install">${ico('add',20)} تثبيت على الشاشة الرئيسية <span>‹</span></button>${api.isDemo?`<button class="item-link" data-action="switch-demo">${ico('user',20)} الانتقال إلى واجهة ${user.role==='tester'?'المطور':'المختبر'} <span>‹</span></button><button class="item-link" data-action="reset-demo">إعادة بيانات المعاينة <span>‹</span></button>`:`<button class="item-link" data-action="logout">${ico('power',20)} تسجيل الخروج <span>‹</span></button>`}<a class="item-link" style="text-decoration:none" href="./privacy.html">${ico('shield',20)} سياسة الخصوصية <span>‹</span></a><a class="item-link" style="text-decoration:none" href="./terms.html">${ico('clipboard',20)} الشروط <span>‹</span></a>${api.isDemo?'':`<button class="item-link" data-action="request-deletion">${ico('trash',20)} طلب حذف حسابي <span>‹</span></button>`}</div>`}
-function profileEditor(){if(api.isDemo)return '';return `<div class="surface"><form id="profile-form"><div class="field"><label for="profile-name">الاسم</label><input id="profile-name" name="name" minlength="2" maxlength="80" required value="${clean(user.name)}" /></div>${user.role==='tester'?`<label class="checks"><input type="checkbox" name="paused" ${user.participationPaused?'checked':''}/><span>إيقاف المشاركة الجديدة مؤقتاً وإخفاء بريدي</span></label><p class="small">المشاركات الحالية وتواريخها تبقى محفوظة؛ هذا الخيار لا يوقف عداد الاختبار الجاري.</p>`:''}<button class="cta blue" type="submit">حفظ الحساب</button></form></div>`}
+function profileEditor(){if(api.isDemo)return '';return `<div class="surface"><form id="profile-form"><div class="field"><label for="profile-name">الاسم</label><input id="profile-name" name="name" minlength="2" maxlength="80" required value="${clean(user.name)}" /></div><label class="checks"><input type="checkbox" name="paused" ${user.participationPaused?'checked':''}/><span>إيقاف المشاركة الجديدة مؤقتاً وإخفاء بريدي</span></label><p class="small">المشاركات الحالية وتواريخها تبقى محفوظة؛ هذا الخيار لا يوقف عداد الاختبار الجاري.</p><button class="cta blue" type="submit">حفظ الحساب</button></form></div>`}
 function accountGate(){return `<div class="login-shell"><div class="auth-card"><h2>${user.profileMissing?'إكمال بيانات حسابك':'تأكيد البريد الإلكتروني'}</h2><p>${clean(user.email)}</p>${user.profileMissing?`<p>حساب الدخول موجود. أكمل ملفك بنفس الحساب دون إنشاء حساب جديد.</p><form id="complete-profile-form"><div class="field"><label for="recover-name">الاسم</label><input id="recover-name" name="name" minlength="2" maxlength="80" required /></div><label class="checks"><input type="checkbox" name="available"/><span>أوافق على مشاركة بريدي مع المطورين للاختبارات.</span></label><button class="cta blue" type="submit">إكمال الحساب</button></form>`:`<p>أكد ملكية بريدك حتى تفتح لوحة الحساب. المشاركات والتقارير القديمة تبقى محفوظة.</p><button class="cta blue wide" data-action="send-verification">إرسال رسالة تأكيد البريد</button><button class="item-link" data-action="check-verification">تحققت من بريدي — تحديث الحالة</button>`}<button class="item-link" data-action="logout">تسجيل الخروج</button></div></div>`}
 function suspendedScreen(){return `<div class="login-shell"><div class="auth-card"><h2>هذا الحساب موقوف</h2><p>${clean(user.email)}</p><p>أوقفت إدارة TesterHub هذا الحساب، ولا يمكن استخدامه حالياً. بياناتك محفوظة ولم تُحذف.</p><button class="cta blue wide" data-action="logout">تسجيل الخروج</button></div></div>`}
 function authScreen(){return `<div class="login-shell"><div class="auth-logo"><img src="./assets/brand-icon.svg" alt="" /> TesterHub</div><div class="auth-card"><div class="auth-switch"><button data-auth="login" class="${authMode==='login'?'selected':''}">تسجيل الدخول</button><button data-auth="signup" class="${authMode==='signup'?'selected':''}">إنشاء حساب</button></div><h2>${authMode==='login'?'أهلاً بعودتك 👋':'إنشاء حساب جديد'}</h2><p>${authMode==='login'?'ادخل ببريدك حتى تتابع اختباراتك':'خطوات قليلة فقط وتبدأ رحلتك مع المختبرين'}</p><form id="auth-form">${authMode==='signup'?`<div class="card-note" style="margin:0 0 13px">حساب واحد للجميع: تختبر تطبيقات غيرك وتضيف تطبيقك، وتتنقل بينهما متى شئت.</div><div class="field"><label for="auth-name">الاسم</label><input id="auth-name" name="name" minlength="2" required placeholder="اسمك" value="${clean(authDraft.name)}" /></div>`:''}<div class="field"><label for="auth-email">البريد الإلكتروني</label><input id="auth-email" type="email" name="email" autocomplete="email" placeholder="example@gmail.com" required value="${clean(authDraft.email)}" /><div class="help">${authMode==='signup'&&signupRole==='tester'?'استعمل نفس البريد الذي تشترك به في اختبارات Google Play':'بريد واحد لحسابك'}</div></div><div class="field"><label for="auth-password">كلمة المرور</label><input id="auth-password" name="password" type="password" minlength="6" autocomplete="${authMode==='login'?'current-password':'new-password'}" required placeholder="••••••••" /></div>${authMode==='signup'&&signupRole==='tester'?`<label class="checks"><input name="available" type="checkbox" /><span>أوافق على ظهور بريدي الإلكتروني للمطورين لإضافتي إلى اختبارات Google Play.</span></label>`:''}<button class="cta blue wide" type="submit">${authMode==='login'?'دخول':'إنشاء الحساب'}</button>${authMode==='signup'?'<div class="card-note">بإنشاء حسابك توافق على <a href="./terms.html">الشروط</a> و<a href="./privacy.html">سياسة الخصوصية</a>.</div>':''}</form><button class="text-button" type="button" data-action="reset-password">نسيت كلمة المرور؟</button><button class="text-button" type="button" data-action="help-open" data-target="">مركز المساعدة</button><div class="auth-footer">${authMode==='login'?'ليس لديك حساب؟':'عندك حساب؟'} <button class="text-button" data-auth="${authMode==='login'?'signup':'login'}">${authMode==='login'?'سجّل الآن':'سجّل الدخول'}</button></div></div></div>`}
@@ -1931,9 +1935,10 @@ function drawView(){
  if(!user){app.innerHTML=authScreen();return}
  if(!api.isDemo&&user.suspended){app.innerHTML=suspendedScreen();return}
  if(!api.isDemo&&(user.profileMissing||!user.emailVerified)){app.innerHTML=accountGate();return}
- const screens=user.role==='developer'?{home:devHome,groups:groupsPage,tests:devTestsBridge,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),tester:testerDetails,chat:chatPage,support:supportPage,help:helpPage,rewards,announcements:announcementsPage,profile}:{home:testerHome,groups:groupsPage,tests:testerTests,report:dailyReport,chat:chatPage,support:supportPage,help:helpPage,rewards,announcements:announcementsPage,profile};
+ // V2: one account, one set of screens (the approved preview). Inner pages are the existing ones.
+ const screens={home:v2Home,groups:v2Groups,tests:v2Tests,profile:v2Account,apps:devApps,testers:testerDirectory,new:newProject,details:()=>projectDetails(selectedProjectId),tester:testerDetails,report:dailyReport,chat:chatPage,support:supportPage,help:helpPage,rewards,announcements:announcementsPage};
  const content=(screens[tab]||screens.home)();
- app.innerHTML=siteHeader()+welcomeBanner()+`<main class="page" id="page">${content}</main>`+bottomBar()+appMenu()+notificationPanel();
+ app.classList.add('v2');app.innerHTML=welcomeBanner()+siteHeader()+`<main class="page" id="page">${content}</main>`+v2Fab()+bottomBar()+notificationPanel()+v2Sheet();
 }
 let selectedProjectId=null,selectedAssignmentId=null,draftEditingId=null,selectedTesterUid=null,testerBack='testers';
 // ---- Help center ----
@@ -2095,21 +2100,21 @@ function startLiveSync(){
  if(api.isDemo||!fbReady||!user||user.profileMissing||!user.emailVerified||user.suspended)return;
  if(liveSyncUid===user.uid)return;
  stopLiveSync();liveSyncUid=user.uid;
- const uid=user.uid,role=user.role;
+ const uid=user.uid,role='one';
  liveCache={key:uid+'|'+role,data:{},ready:new Set(),expected:0,waiters:liveCache.waiters};
  pushService?.sync(uid).catch(err=>console.warn('Push registration:',err));
- const specs=role==='developer'?
-  [['projects','ownerUid'],['assignments','ownerUid'],['reports','ownerUid'],['messages','ownerUid'],['supportMessages','uid']]:
-  [['assignments','testerUid'],['reports','testerUid'],['messages','testerUid'],['supportMessages','uid']];
+ // One account: listen to both sides (what I own and what I test).
+ const specs=[['projects','ownerUid'],['assignments','ownerUid'],['reports','ownerUid'],['messages','ownerUid'],['assignments','testerUid'],['reports','testerUid'],['messages','testerUid'],['supportMessages','uid']];
  liveCache.expected=specs.length;
  for(const [collectionName,ownerField] of specs){
   const q=storeFns.query(storeFns.collection(db,collectionName),storeFns.where(ownerField,'==',uid));
   let initialized=false,knownIds=new Set();
+  const name=collectionName==='supportMessages'?collectionName:collectionName+':'+ownerField;
   liveSubscriptions.push(storeFns.onSnapshot(q,snap=>{
    const ids=new Set(snap.docs.map(d=>d.id));
    const list=snap.docs.map(tidy);
-   if(liveCache.key===uid+'|'+role){liveCache.data[collectionName]=list;if(!liveCache.ready.has(collectionName)){liveCache.ready.add(collectionName);liveSettled()}}
-   if(user?.uid===uid)livePending[collectionName]=list;
+   if(liveCache.key===uid+'|'+role){liveCache.data[name]=list;if(!liveCache.ready.has(name)){liveCache.ready.add(name);liveSettled()}}
+   if(user?.uid===uid)livePending[collectionName]=true;
    if(!initialized){
     // Waiting for a server-confirmed snapshot here swallowed the first real change.
     knownIds=ids;
@@ -2120,7 +2125,7 @@ function startLiveSync(){
    const incoming=snap.docs.filter(d=>!knownIds.has(d.id));
    knownIds=ids;
    if(incoming.length&&'Notification' in window&&Notification.permission==='granted'){
-    if(collectionName==='assignments'&&role==='tester'){
+    if(collectionName==='assignments'&&ownerField==='testerUid'){
      for(const doc of incoming.slice(0,2)){
       const a=doc.data(),time=a.createdAt?.toMillis?.();
       if(Number.isFinite(time)&&Date.now()-time<120000)
@@ -2174,8 +2179,13 @@ async function flushLiveSync(){
  try{
   // The listener snapshots are complete for their queries, so they replace those lists at no extra read.
   const next={...dashboard};
-  for(const [name,list] of Object.entries(changed))if(LIVE_KEYS[name])next[LIVE_KEYS[name]]=list;
-  if(changed.reports&&user.role==='tester')next.xp=await api.loadTesterXp(uid);
+  // Each list is the union of the owner's and the tester's listener; both are complete for their query.
+  const d=liveCache.data;
+  for(const name of Object.keys(changed)){
+   if(!LIVE_KEYS[name])continue;
+   next[LIVE_KEYS[name]]=name==='supportMessages'?d.supportMessages||[]:name==='projects'?d['projects:ownerUid']||[]:unionById(d[name+':ownerUid'],d[name+':testerUid']);
+  }
+  if(changed.reports)next.xp=await api.loadTesterXp(uid);
   if(user?.uid===uid){const page=document.getElementById('page'),y=page?.scrollTop||0,was=tab;dashboard=next;liveSyncDeferred=false;render();const again=document.getElementById('page');if(again&&tab===was)again.scrollTop=y}
  }catch(err){console.warn('Cloud notification sync:',err)}
  finally{liveFetchInProgress=false}
@@ -2287,6 +2297,7 @@ document.getElementById('installDesktop').addEventListener('click',install);
 for(const [id,role] of [['previewTester','tester'],['previewDeveloper','developer']])document.getElementById(id).addEventListener('click',async()=>{if(!api.isDemo){if(!user){toast('سجّل الدخول أولاً، ثم تنقّل بين الواجهتين بنفس الحساب');return}if(user.role!==role)pending(changeRole);return}await api.switchDemo(role);user=await api.currentUser();tab='home';await refresh()});
 app.addEventListener('click',event=>{const button=event.target.closest('button');if(!button||button.disabled)return;
  const {tab:next,action,id,auth:authNext,role}=button.dataset;
+ if(user&&typeof v2Click==='function'&&v2Click(button))return;
  if(authNext||role){const typedName=document.getElementById('auth-name'),typedEmail=document.getElementById('auth-email');if(typedName)authDraft.name=typedName.value;if(typedEmail)authDraft.email=typedEmail.value}
  if(authNext){authMode=authNext;render();return}
  if(role&&['tester','developer'].includes(role)){signupRole=role;render();return}
@@ -2311,7 +2322,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='notice-go-project'){noticeOpen=false;selectedProjectId=button.dataset.target;tab='details';render();return}
  if(action==='notice-go-chat'){
   noticeOpen=false;selectedAssignmentId=button.dataset.target;
-  if(user.role==='developer')selectedProjectId=dashboard.assignments.find(a=>a.id===selectedAssignmentId)?.projectId||selectedProjectId;
+  if(sideOf(selectedAssignmentId)==='developer')selectedProjectId=dashboard.assignments.find(a=>a.id===selectedAssignmentId)?.projectId||selectedProjectId;
   tab='chat';render();return;
  }
  pending(async()=>{
@@ -2342,7 +2353,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='accept-invite'||action==='decline-invite'){await api.respondInvite(id,action==='accept-invite'?'accepted':'declined');await refresh();toast(action==='accept-invite'?'تم قبول الدعوة داخل TesterHub. أكمل الاشتراك في Google Play قبل بدء العداد.':'تم رفض الدعوة');return}
  if(action==='confirm-join'){await api.confirmJoin(id);await refresh();toast('تم تسجيل تأكيد انضمامك، وبدأ عداد 14 يوم');return}
  if(action==='write-report'){selectedAssignmentId=id;tab='report';render();return}
- if(action==='open-chat'){selectedAssignmentId=id;tab='chat';if(user.role==='developer')selectedProjectId=dashboard.assignments.find(a=>a.id===id)?.projectId||selectedProjectId;render();return}
+ if(action==='open-chat'){selectedAssignmentId=id;tab='chat';if(sideOf(id)==='developer')selectedProjectId=dashboard.assignments.find(a=>a.id===id)?.projectId||selectedProjectId;render();return}
  if(action==='review-report'){const decision=button.dataset.decision;const result=await api.reviewReport(id,decision)||{};await refresh();toast(decision==='accepted'?(result.awarded?'تم قبول التقرير وإضافة +'+formatNum(result.awarded)+' XP للمختبر':result.awardQueued?'تم قبول التقرير. الاتصال ضعيف، والنقاط تنضاف تلقائياً أول ما يرجع الاتصال':result.awardFailed?'تم قبول التقرير. النقاط تنضاف للمختبر عند فتحه صفحة النقاط':'تم قبول التقرير'):decision==='clarify'?'تم طلب التوضيح وإرسال رسالة للمختبر':'تم رفض التقرير');return}
  if(action==='mark-fixed'){await api.resolveLatestIssue(id);await refresh();tab='chat';toast('تم إبلاغ المختبر بأن المشكلة انحلّت');return}
  if(action==='project-details'){selectedProjectId=id;tab='details';render();return}
@@ -2350,7 +2361,7 @@ app.addEventListener('click',event=>{const button=event.target.closest('button')
  if(action==='league-kind'){await loadLeague(id==='month'?'month':'week');return}
  if(action==='refresh-tests'){await refresh();toast('تم تحديث الاختبارات');return}
  if(action==='switch-role'){await changeRole();return}
- if(action==='open-my-tests'){await changeRole();tab='tests';render();return}
+ if(action==='open-my-tests'){V2.testsView='testing';tab='tests';render();return}
  if(action==='refresh-gate'){await api.syncMyXp().catch(err=>console.warn('XP sync:',err));await refresh();const g=currentPublishGate(draftEditingId);toast(g.need?'باقي '+formatNum(g.need)+' تقارير مقبولة':'اكتمل العدد ✓');return}
  if(action==='complete-project'){
   const p=mineProjects().find(x=>x.id===id);if(!p)return;
@@ -2412,7 +2423,7 @@ app.addEventListener('change',event=>{const node=event.target;
 });
 app.addEventListener('submit',event=>{event.preventDefault();const form=event.target;
  if(form.id==='complete-profile-form')pending(async()=>{const f=new FormData(form);user=await accountService.completeProfile({name:f.get('name'),role:'tester',available:f.has('available')});await refresh()});
- if(form.id==='profile-form')pending(async()=>{const f=new FormData(form);user=await accountService.updateProfile({name:f.get('name'),...(user.role==='tester'?{participationPaused:f.has('paused')}: {})});await api.refreshLeagueName().catch(err=>console.warn('League name:',err));await refresh();toast('تم حفظ بيانات الحساب')});
+ if(form.id==='profile-form')pending(async()=>{const f=new FormData(form);user=await accountService.updateProfile({name:f.get('name'),participationPaused:f.has('paused')});await api.refreshLeagueName().catch(err=>console.warn('League name:',err));await refresh();toast('تم حفظ بيانات الحساب')});
  if(form.id==='auth-form')pending(async()=>{const f=new FormData(form),email=String(f.get('email')||'').trim(),password=String(f.get('password')||'');if(authMode==='login')user=await api.login(email,password);else user=await api.signup({name:String(f.get('name')||''),email,password,role:signupRole,available:!!f.get('available')});tab='home';await updateAdminAccess();await refresh();toast('أهلاً بك في TesterHub')});
  if(form.id==='daily-report-form')pending(async()=>{
   const f=new FormData(form),id=form.dataset.id||selectedAssignmentId;
@@ -2425,14 +2436,14 @@ app.addEventListener('submit',event=>{event.preventDefault();const form=event.ta
  if(form.id==='group-link-form')pending(async()=>{const id=form.dataset.id;await api.setProjectGroupLink(id,new FormData(form).get('group'));await refresh();selectedProjectId=id;tab='details';render();toast('تم حفظ رابط المجموعة')});
  if(form.id==='add-testers-form')pending(async()=>{const f=new FormData(form),selected=new Set(f.getAll('testerUid')),testers=dashboard.testers.filter(t=>t.available&&selected.has(t.uid));if(!f.get('confirmed'))throw Error('أكد أنك أضفت الإيميلات إلى Google Play Console');const id=form.dataset.id,result=await api.addProjectTesters(id,testers);await refresh();selectedProjectId=id;tab='details';render();toast('تم إرسال '+result.added+' دعوة جديدة')});
  if(form.id==='chat-form')pending(async()=>{
-  const f=new FormData(form);await api.sendMessage(selectedAssignmentId,String(f.get('message')||''),user.role);await refresh();tab='chat';toast(api.isDemo?'انحفظت الرسالة في المعاينة':'تم إرسال الرسالة للمطور أو المختبر');
+  const f=new FormData(form);await api.sendMessage(selectedAssignmentId,String(f.get('message')||''),sideOf(selectedAssignmentId));await refresh();tab='chat';toast(api.isDemo?'انحفظت الرسالة في المعاينة':'تم إرسال الرسالة للمطور أو المختبر');
  });
  if(form.id==='project-form')pending(async()=>{const f=new FormData(form),name=String(f.get('name')||'').trim(),link=String(f.get('link')||'').trim(),tasks=String(f.get('tasks')||''),group=String(f.get('group')||''),intent=event.submitter?.value||'publish',testers=preparedList().length?preparedList():group.trim()?eligibleTesters():[];let id;if(intent==='draft'){id=await api.saveProjectDraft({name,link,tasks,group},draftEditingId);toast('تم حفظ المسودة')}else{if(!testers.length)throw Error(eligibleTesters().length?'انسخ الإيميلات أو نزّل ملف CSV أولاً، أو أضف رابط مجموعة المختبرين':'لا يوجد مختبرون متاحون حالياً');if(!f.get('confirmed'))throw Error('أكد أنك أضفت الإيميلات إلى Google Play Console');if(draftEditingId){id=draftEditingId;await api.publishProjectDraft(id,{name,link,tasks,group},testers)}else id=await api.createProject({name,link,tasks,group},testers);preparedTesters=null;toast('تم إرسال '+formatNum(testers.length)+' دعوة للمختبرين')}draftEditingId=null;await refresh();selectedProjectId=id;tab='details';render()});
 
 });
 let reminderInFlight=false;
 async function maybeDailyReminder(){
- if(!user||user.role!=='tester'||!reminderPending()||reminderInFlight)return;
+ if(!user||!reminderPending()||reminderInFlight)return;
  const key=`${api.dayKey()}_${api.getReminderHour()}`;
  if(api.getReminderMarker()===key)return;
  reminderInFlight=true;

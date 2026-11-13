@@ -111,16 +111,19 @@ test('assigned task appears in daily report and saved report keeps its snapshot'
  await page.locator('#project-link').fill('https://play.google.com/apps/testing/test');
  await page.locator('[name="confirmed"]').check();
  await page.locator('#project-form button[value="publish"]').click();
- // Pending invitations live on Home; «اختباراتي» lists only accepted tests.
+ // V2: the invitation is a card on Home; its sheet walks the three steps, then today's report.
  await page.evaluate(async()=>{user=await api.switchDemo('tester');await refresh();tab='home';render()});
- const card=page.locator('.app-card',{hasText:'Search Test'});
- await card.locator('[data-action="accept-invite"]').click();
- await card.locator('[data-action="confirm-join"]').click();
- await card.locator('[data-action="write-report"]').click();
- await expect(page.locator('.daily-test .daily-task')).toContainText('ابحث عن منتج وافتح تفاصيله');
- await page.locator('#daily-report-form label.ok').click();
- await page.locator('#test-note').fill('بحثت عن منتج وفتحت صفحة التفاصيل بنجاح');
- await page.locator('#daily-report-form button[type="submit"]').click();
+ await page.locator('.v2-appcard',{hasText:'Search Test'}).click();
+ const sheet=page.locator('.v2-sheet');
+ await sheet.locator('[data-action="accept-invite"]').click();
+ await sheet.locator('[data-action="confirm-join"]').click();
+ await expect(sheet.locator('.v2-notice')).toContainText('ابحث عن منتج وافتح تفاصيله');
+ await sheet.locator('[data-v2="report-open"]').click();
+ await sheet.locator('[data-v2="rep-tried"]').click();
+ await sheet.locator('[data-v2="rep-res"][data-k="ok"]').click();
+ await sheet.locator('#v2-note').fill('بحثت عن منتج وفتحت صفحة التفاصيل بنجاح');
+ await sheet.locator('[data-v2="rep-send"]').click();
+ await expect(page.locator('.v2-sheet')).toHaveCount(0);
  expect(await page.evaluate(()=>dashboard.reports.find(r=>r.tested==='ابحث عن منتج وافتح تفاصيله')?.notes)).toContain('بحثت عن منتج');
 
 });
@@ -143,22 +146,24 @@ test('tester setup separates opt-in and store; confirmed setup stays collapsed a
   user=await api.switchDemo('tester');await refresh();tab='home';render();
   window.openedLinks=[];window.open=url=>window.openedLinks.push(url);
  });
- const card=page.locator('.app-card',{hasText:'Journey App'});
- await card.locator('[data-action="accept-invite"]').click();
- await card.locator('[data-action="open-link"]').click();
- await card.locator('[data-action="open-store"]').click();
- expect(await page.evaluate(()=>window.openedLinks)).toEqual(['https://play.google.com/apps/testing/com.example.journey','https://play.google.com/store/apps/details?id=com.example.journey']);
+ await page.locator('.v2-appcard',{hasText:'Journey App'}).click();
+ const sheet=page.locator('.v2-sheet');
+ await sheet.locator('[data-action="accept-invite"]').click();
+ await sheet.locator('[data-action="open-link"]').click();
+ expect(await page.evaluate(()=>window.openedLinks)).toEqual(['https://play.google.com/apps/testing/com.example.journey']);
  expect(await page.evaluate(()=>primaryAssignments().find(a=>a.name==='Journey App').joinedDay)).toBeNull();
- await card.locator('[data-action="confirm-join"]').click();
- await expect(card.locator('[data-action="confirm-join"]')).toHaveCount(0);
- await expect(card.locator('details [data-action="open-link"]')).not.toBeVisible();
- await expect(card.locator('[data-action="write-report"]')).toBeVisible();
+ await sheet.locator('[data-action="confirm-join"]').click();
+ await expect(sheet.locator('[data-action="confirm-join"]')).toHaveCount(0);
+ await expect(sheet.locator('[data-v2="report-open"]')).toBeVisible();
  await page.reload();await expect(page.locator('#launch-splash')).toHaveCount(0);
  await page.evaluate(()=>{tab='tests';render()});
+ const card=page.locator('.v2-test',{hasText:'Journey App'});
  await expect(card.locator('[data-action="confirm-join"]')).toHaveCount(0);
- await expect(card).toContainText('صفحة التطبيق بالمتجر');
- await expect(card.locator('details [data-action="open-link"]')).not.toBeVisible();
- await card.locator('summary').click();await expect(card.locator('details [data-action="open-link"]')).toBeVisible();
+ await expect(card.locator('[data-v2="report-open"]')).toBeVisible();
+ // After joining, «فتح التطبيق» goes to the store page, never the opt-in link again.
+ await page.evaluate(()=>{window.openedLinks=[];window.open=url=>window.openedLinks.push(url)});
+ await card.locator('[data-action="open-app"]').click();
+ expect(await page.evaluate(()=>window.openedLinks)).toEqual(['https://play.google.com/store/apps/details?id=com.example.journey']);
 });
 
 test('test queue puts daily work before history and disables cooldown reports',async({page})=>{
@@ -172,7 +177,8 @@ test('test queue puts daily work before history and disables cooldown reports',a
    {id:'due',testerUid:user.uid,name:'Due Test',joinedDay:api.dayKey(),checkins:[]}
   ];tab='tests';render();
  });
- await expect(page.locator('.app-card h4')).toHaveText(['Due Test','Cooldown Test','Old Test']);
- await expect(page.locator('.app-card',{hasText:'Cooldown Test'}).locator('[data-action="write-report"]')).toBeDisabled();
- await expect(page.locator('.app-card',{hasText:'Due Test'}).locator('[data-action="write-report"]')).toBeEnabled();
+ await expect(page.locator('.v2-test .v2-h3')).toHaveText(['Due Test','Cooldown Test','Old Test']);
+ await expect(page.locator('.v2-test',{hasText:'Cooldown Test'}).locator('[data-v2="report-open"]')).toHaveCount(0);
+ await expect(page.locator('.v2-test',{hasText:'Cooldown Test'})).toContainText('انتظر موعد التقرير الجاي');
+ await expect(page.locator('.v2-test',{hasText:'Due Test'}).locator('[data-v2="report-open"]')).toBeEnabled();
 });

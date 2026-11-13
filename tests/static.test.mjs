@@ -11,7 +11,7 @@ test('HTML and RTL UI',()=>{assert.match(html,/<html lang="ar" dir="rtl">/);asse
 test('PWA manifest and icons',()=>{const m=JSON.parse(load('manifest.webmanifest'));assert.equal(m.display,'standalone');for(const ic of m.icons)assert.ok(existsSync(join(base,ic.src.split('?')[0])));});
 test('service worker registered',()=>{assert.match(html,/serviceWorker\.register/);assert.match(load('sw.js'),/install/)});
 test('Firebase config linked to TestHubiq',()=>{assert.match(html,/window\.TESTERHUB_FIREBASE_CONFIG/);assert.match(load('firebase-config.js'),/testhubiq-c7711/);});
-test('real Firebase Auth and role-based dashboards',()=>{assert.match(html,/createUserWithEmailAndPassword/);assert.match(html,/where\('ownerUid','==',user.uid\)/);assert.match(html,/where\('testerUid','==',user.uid\)/);});
+test('real Firebase Auth and role-based dashboards',()=>{assert.match(html,/createUserWithEmailAndPassword/);assert.match(html,/pick\('ownerUid','projects'\)/);assert.match(html,/pick\('testerUid','assignments'\)/);});
 test('daily reports and chat use Firebase reads and writes',()=>{assert.match(html,/writeBatch\(db\)/);assert.match(html,/collection\(db,'reports'\)/);assert.match(html,/collection\(db,'messages'\)/);});
 test('daily report is bound to checkins atomically by rules',()=>{assert.match(rules,/getAfter\(/);assert.match(rules,/match \/reports\//);assert.match(rules,/match \/messages\//);});
 test('no service credentials packaged',()=>{assert.doesNotMatch(html,/BEGIN PRIVATE KEY/);assert.doesNotMatch(load('firebase-config.js'),/BEGIN PRIVATE KEY/);});
@@ -23,7 +23,7 @@ test('Firebase initialization waits for Auth instance (not SDK namespace)',()=>{
 
 test('tester IDs are populated from Firestore users document IDs',()=>{
  assert.match(html,/const testerProfile=\(doc\)=>\(\{uid:doc\.id,\.\.\.doc\.data\(\)\}\)/);
- assert.match(html,/testers:t\.docs\.map\(testerProfile\)/);
+ assert.match(html,/return docs\.map\(testerProfile\)\.filter\(x=>x\.uid!==active\.uid\)/);
  const expression=html.match(/const testerProfile=(.*);/)[1];
  const {runInNewContext}=vm;
  const tester=runInNewContext('('+expression+')')({id:'test-uid-42',data:()=>({name:'مختبر',role:'tester',email:'tester@example.org',available:true})});
@@ -74,14 +74,11 @@ test('daily check-in does not perform forbidden nonexistent report reads',()=>{
  assert.match(rules,/allow create: if verified\(\)/);
 });
 
-test('mobile native-style drawer has navigation controls',()=>{
- assert.match(html,/function appMenu\(\)/);
- assert.match(html,/data-action="open-menu"/);
- assert.match(html,/data-action="menu-tab"/);
- assert.match(html,/data-action="close-menu"/);
- assert.match(html,/drawerOpen=false;tab=button\.dataset\.target/);
- assert.match(html,/margin-top:0!important/);
- assert.match(html,/\.drawer-overlay\{/);
+test('V2: one header with brand and bell, four bottom sections, no menu drawer',()=>{
+ assert.match(html,/function siteHeader\(\)\{const n=noticeBadgeCount\(\);return `<header class="v2-top">/);
+ assert.doesNotMatch(html.slice(html.indexOf('function siteHeader('),html.indexOf('function appMenu(')),/open-menu/);
+ assert.match(html,/const SECTIONS=\[\['home','apps','التطبيقات'\],\['groups','testers','المجموعات'\],\['tests','tests','اختباراتي'\],\['profile','user','حسابي'\]\];/);
+ assert.match(html,/const screens=\{home:v2Home,groups:v2Groups,tests:v2Tests,profile:v2Account,/);
 });
 
 test('animated application splash is integrated with startup',()=>{
