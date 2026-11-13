@@ -245,11 +245,18 @@ async function v2EnsureTesters(){
  if(dashboard.testersLoaded)return;
  const list=await api.loadTesters();dashboard={...dashboard,testers:list,testersLoaded:true};
 }
+// Re-rendering the open sheet must never wipe what is being typed in it.
+function v2KeepTyped(){
+ const s=V2.sheet;if(!s)return;
+ const val=id=>document.getElementById(id)?.value;
+ if(s.kind==='add'){if(val('v2-an')!=null)s.name=val('v2-an');if(val('v2-au')!=null)s.link=val('v2-au');if(val('v2-at')!=null)s.tasks=val('v2-at')}
+ if(s.kind==='report'&&val('v2-note')!=null)s.notes=val('v2-note');
+}
 
 // ---------- Events. Returns true when the click was handled here. ----------
 function v2Click(button){
  const k=button.dataset.v2;
- if(button.dataset.tab==='new'&&!k){V2.sheet={kind:'add',step:1};pending(async()=>{await v2EnsureTesters();render();v2SheetFocus()});return true}
+ if(button.dataset.tab==='new'&&!k){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2KeepTyped();render()});return true}
  if(!k)return false;
  if(k.startsWith('pack-'))return packClick(button);
  const s=V2.sheet;
@@ -275,7 +282,7 @@ function v2Click(button){
   pending(async()=>{const result=await api.submitDailyReport(s.id,{outcome:s.outcome,notes,retestOf:retest?.id||''});V2.sheet=null;selectedAssignmentId=s.id;await refresh();toast(result?.alreadySaved?'تقرير اليوم محفوظ من قبل':'انرسل التقرير · ‎+10 XP بعد قبوله')});
   return true;
  }
- if(k==='add-open'){V2.sheet={kind:'add',step:1};pending(async()=>{await v2EnsureTesters();render();v2SheetFocus()});return true}
+ if(k==='add-open'){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2KeepTyped();render()});return true}
  if(k==='add-back'&&s){if(s.step===2)s.tasks=document.getElementById('v2-at')?.value??s.tasks;s.step--;render();return true}
  if(k==='add-next'&&s){
   if(s.step===1){

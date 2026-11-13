@@ -629,7 +629,7 @@ function liveList(active,name,fromServer){
 }
 const liveSnap=list=>({docs:list.map(x=>({id:x.id,data:()=>x})),size:list.length});
 async function getDashboard({fromServer=false}={}){
- if(isDemo){const d=demoState(),uid=d.role==='tester'?'t1':'d1',x=d.xp||{};return {projects:d.projects,assignments:d.assignments,testers:d.testers,reports:d.reports??[],messages:d.messages??[],settings:d.settings,xp:{totals:x.totals?.[uid]||null,ledgers:Object.fromEntries(Object.entries(x.ledgers||{}).filter(([,v])=>v.testerUid===uid))},publish:{totals:x.totals?.[uid]||null,slot:d.publishSlot||null},packs:await loadPacks(await currentUser())}}
+ if(isDemo){const d=demoState(),uid=d.role==='tester'?'t1':'d1',x=d.xp||{};return {projects:d.projects,assignments:d.assignments,testers:d.testers,testersLoaded:true,reports:d.reports??[],messages:d.messages??[],settings:d.settings,xp:{totals:x.totals?.[uid]||null,ledgers:Object.fromEntries(Object.entries(x.ledgers||{}).filter(([,v])=>v.testerUid===uid))},publish:{totals:x.totals?.[uid]||null,slot:d.publishSlot||null},packs:await loadPacks(await currentUser())}}
  const user=await currentUser();if(!user||user.profileMissing||!user.emailVerified||user.suspended)return {projects:[],assignments:[],testers:[],settings:{reminderHour:20}};
  const {collection,query,where,getDocs,getDocsFromServer}=storeFns;
  const read=fromServer?getDocsFromServer:getDocs;
