@@ -70,7 +70,7 @@ test('the third warning removes the member, and the pack ends after day 16', asy
 test('daily reports on any app earn 1 coin each from 2026-11-13, in the next run, once, rejected ones never', async () => {
  await db.doc('appConfig/features').set({packs: true});
  const report = (id, testerUid, date, ms, extra = {}) => db.doc('reports/' + id).set({testerUid, ownerUid: 'dev', date, outcome: 'ok', submittedAt: Timestamp.fromMillis(ms), ...extra});
- const at = (d, h = 10) => Date.parse(d + 'T0' + h + ':00:00Z');
+ const at = (d, h = 10) => Date.parse(d + 'T' + String(h).padStart(2, '0') + ':00:00Z');
  await report('old_1', 't1', '2026-11-12', at('2026-11-12'));   // before the start: nothing
  await report('a_13', 't1', '2026-11-13', at('2026-11-13', 1));
  await report('b_13', 't1', '2026-11-13', at('2026-11-13', 2));   // a second app the same day
