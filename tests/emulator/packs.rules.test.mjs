@@ -119,12 +119,28 @@ test('the pointer and packs cannot be moved or created outside a full join', asy
 
 test('leaving before the start frees the seat; after the start it is not possible', async () => {
  await fill(2);
- const leave = uid => { const f = db(uid), b = writeBatch(f); b.update(doc(f, 'packs', 'p1'), {memberCount: 1}); b.delete(doc(f, 'packs', 'p1', 'members', uid)); b.set(doc(f, 'packSeats', uid), {packId: '', updatedAt: serverTimestamp()}); b.update(doc(f, 'coins', uid), {spent: 0, freeUsed: false, updatedAt: serverTimestamp()}); b.delete(doc(f, 'packApps', 'p1_' + uid)); return b.commit(); };
+ const leave = (uid, left = ['p1']) => { const f = db(uid), b = writeBatch(f); b.update(doc(f, 'packs', 'p1'), {memberCount: 1}); b.delete(doc(f, 'packs', 'p1', 'members', uid)); b.set(doc(f, 'packSeats', uid), {packId: '', left, updatedAt: serverTimestamp()}); b.update(doc(f, 'coins', uid), {spent: 0, freeUsed: false, updatedAt: serverTimestamp()}); b.delete(doc(f, 'packApps', 'p1_' + uid)); return b.commit(); };
+ await assertFails(leave('u2', []), 'leaving without recording it');
  await assertSucceeds(leave('u2'));
- // The free entry came back with the seat.
- await assertSucceeds(joinBatch('u2', {count: 1, coins: {spent: 0, freeUsed: false}}), 'can join again, still free');
+ // Who left a pack cannot come back to it, even with the seat free and the free entry back.
+ const back = () => { const f = db('u2'), b = writeBatch(f); b.update(doc(f, 'packs', 'p1'), {memberCount: 2}); b.set(doc(f, 'packs', 'p1', 'members', 'u2'), member('u2', 2)); b.set(doc(f, 'packSeats', 'u2'), {packId: 'p1', left: [], updatedAt: serverTimestamp()}); b.update(doc(f, 'coins', 'u2'), {spent: 0, freeUsed: true, updatedAt: serverTimestamp()}); b.set(doc(f, 'packApps', 'p1_u2'), card('p1', 'u2')); return b.commit(); };
+ await assertFails(back(), 'erasing the record to come back');
+ const again = () => { const f = db('u2'), b = writeBatch(f); b.update(doc(f, 'packs', 'p1'), {memberCount: 2}); b.set(doc(f, 'packs', 'p1', 'members', 'u2'), member('u2', 2)); b.set(doc(f, 'packSeats', 'u2'), {packId: 'p1', left: ['p1'], updatedAt: serverTimestamp()}); b.update(doc(f, 'coins', 'u2'), {spent: 0, freeUsed: true, updatedAt: serverTimestamp()}); b.set(doc(f, 'packApps', 'p1_u2'), card('p1', 'u2')); return b.commit(); };
+ await assertFails(again(), 'the same pack again for free');
+ // Coming back costs 150 coins, the free entry stays unused.
+ await admin(d => updateDoc(doc(d, 'coins', 'u2'), {earned: 200}));
+ const paidBack = (spent, freeUsed, paid = 150) => { const f = db('u2'), b = writeBatch(f); b.update(doc(f, 'packs', 'p1'), {memberCount: 2}); b.set(doc(f, 'packs', 'p1', 'members', 'u2'), member('u2', 2, {paid})); b.set(doc(f, 'packSeats', 'u2'), {packId: 'p1', left: ['p1'], updatedAt: serverTimestamp()}); b.update(doc(f, 'coins', 'u2'), {spent, freeUsed, updatedAt: serverTimestamp()}); b.set(doc(f, 'packApps', 'p1_u2'), card('p1', 'u2')); return b.commit(); };
+ await assertFails(paidBack(0, true, 0), 'using the free entry to come back');
+ await assertFails(paidBack(150, true), 'burning the free entry too');
+ await assertSucceeds(paidBack(150, false));
+ const paidLeave = () => { const f = db('u2'), b = writeBatch(f); b.update(doc(f, 'packs', 'p1'), {memberCount: 1}); b.delete(doc(f, 'packs', 'p1', 'members', 'u2')); b.set(doc(f, 'packSeats', 'u2'), {packId: '', left: ['p1', 'p1'], updatedAt: serverTimestamp()}); b.update(doc(f, 'coins', 'u2'), {spent: 0, freeUsed: false, updatedAt: serverTimestamp()}); b.delete(doc(f, 'packApps', 'p1_u2')); return b.commit(); };
+ await assertSucceeds(paidLeave(), 'leaving again gives the 150 back');
+ // Another pack is fine, and the entry is still free.
+ await admin(d => setDoc(doc(d, 'packs', 'p9'), {number: 9, status: 'open', size: 16, days: 16, memberCount: 0, createdAt: serverTimestamp()}));
+ const other = () => { const f = db('u2'), b = writeBatch(f); b.update(doc(f, 'packs', 'p9'), {memberCount: 1}); b.set(doc(f, 'packs', 'p9', 'members', 'u2'), member('u2', 1)); b.set(doc(f, 'packSeats', 'u2'), {packId: 'p9', left: ['p1', 'p1'], updatedAt: serverTimestamp()}); b.update(doc(f, 'coins', 'u2'), {spent: 0, freeUsed: true, updatedAt: serverTimestamp()}); b.set(doc(f, 'packApps', 'p9_u2'), card('p9', 'u2')); return b.commit(); };
+ await assertSucceeds(other());
  await admin(d => updateDoc(doc(d, 'packs', 'p1'), {status: 'running', startDay: today()}));
- await assertFails(leave('u2'));
+ await assertFails(leave('u1')); // after the start nobody leaves
 });
 
 test('daily confirmations: per app, today only, never shrinking, never for yourself or others', async () => {
@@ -195,7 +211,7 @@ test('coins attacks: no typing in earned, no lowering spent, no second free entr
 test('leaving before the start gives back exactly what the entry cost', async () => {
  await setCoins('u1', {earned: 300, spent: 0, freeUsed: true});
  await assertSucceeds(joinBatch('u1', {count: 0, coins: {spent: 0, freeUsed: true}}));
- const leave = spent => { const f = db('u1'), b = writeBatch(f); b.update(doc(f, 'packs', 'p1'), {memberCount: 0}); b.delete(doc(f, 'packs', 'p1', 'members', 'u1')); b.set(doc(f, 'packSeats', 'u1'), {packId: '', updatedAt: serverTimestamp()}); b.update(doc(f, 'coins', 'u1'), {spent, freeUsed: true, updatedAt: serverTimestamp()}); b.delete(doc(f, 'packApps', 'p1_u1')); return b.commit(); };
+ const leave = spent => { const f = db('u1'), b = writeBatch(f); b.update(doc(f, 'packs', 'p1'), {memberCount: 0}); b.delete(doc(f, 'packs', 'p1', 'members', 'u1')); b.set(doc(f, 'packSeats', 'u1'), {packId: '', left: ['p1'], updatedAt: serverTimestamp()}); b.update(doc(f, 'coins', 'u1'), {spent, freeUsed: true, updatedAt: serverTimestamp()}); b.delete(doc(f, 'packApps', 'p1_u1')); return b.commit(); };
  await assertFails(leave(-150), 'a refund bigger than the cost');
  await assertSucceeds(leave(0));
 });

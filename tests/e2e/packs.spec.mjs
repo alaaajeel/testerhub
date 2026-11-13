@@ -88,6 +88,14 @@ test('joining: the Google Group first, a new app (name, developer, icon, link, d
  await page.locator('[data-v2="pack-leave"]').click();
  await expect(page.locator('#toast')).toContainText('طلعت');
  expect(await page.evaluate(()=>demoState().packs.coins.d1.freeUsed)).toBe(false);
+ // Coming back to the same pack costs 150 coins; the free entry stays for another pack.
+ await page.locator('.v2-seg [data-k="open"]').click();
+ await expect(page.locator('.v2-hero [data-v2="pack-join-open"]')).toContainText('ارجع للمجموعة · 150 عملة');
+ await expect(page.evaluate(()=>packJoin({appName:'رجعة',devName:'مطور',appLink:'https://play.google.com/apps/testing/com.back',groupAdded:true}))).rejects.toThrow(/150/);
+ await page.evaluate(async()=>{const d=demoState();d.packs.coins.d1.earned=200;save(d)});
+ await page.evaluate(async()=>{await packJoin({appName:'رجعة',devName:'مطور',appLink:'https://play.google.com/apps/testing/com.back',groupAdded:true});await packRefresh()});
+ const c=JSON.parse(await page.evaluate(()=>JSON.stringify(demoState().packs.coins.d1)));
+ expect(c).toMatchObject({spent:150,freeUsed:false});
 });
 
 test('coins: the next entry costs 150 and the join button says what is missing',async({page})=>{
@@ -144,4 +152,14 @@ test('an app name with HTML stays text in the pack',async({page})=>{
  await expect(page.locator('.v2-pack-app').first()).toContainText('<img src=x');
  await expect(page.locator('.v2-pack-app img')).toHaveCount(0);
  expect(await page.evaluate(()=>window.pwned)).toBeUndefined();
+});
+
+test('taken seats show the members\' app icons',async({page})=>{
+ await open(page,'developer');
+ await page.evaluate(async()=>{const d=demoState();d.packs.apps.find(c=>c.packId==='p2').icon='data:image/png;base64,iVBORw0KGgo=';save(d);await refresh();V2.groupView='open';render()});
+ const seats=page.locator('.v2-hero .v2-seats i');
+ await expect(seats).toHaveCount(16);
+ await expect(page.locator('.v2-hero .v2-seats i.v2-seat-icon img')).toHaveCount(1);
+ await expect(page.locator('.v2-hero .v2-seats i.f')).toHaveCount(11);
+ await expect(page.locator('.v2-hero .v2-seats i.v2-seat-letter')).toHaveCount(10);
 });

@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {judgeDay, coinsForDay, PASS, MAX_STRIKES} from '../scripts/packs-job.mjs';
+import {judgeDay, coinsForDay, coinsForReports, REPORT_COINS_FROM, PASS, MAX_STRIKES} from '../scripts/packs-job.mjs';
 // V2 exchange packs: the daily verdict, and how the app and the rules agree with it.
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const packs=readFileSync(new URL('../src/v2/packs.js',import.meta.url),'utf8');
@@ -49,4 +49,8 @@ test('the rules: behind the switch, strikes only by the job, today only, list on
 test('coins: one per confirmed app of another active member, never for your own or a removed one',()=>{
  const m=members(4);m[3].status='out';
  assert.equal(JSON.stringify(coinsForDay(m,{u1:['u2','u3','u1','u4','u2'],u2:[],u4:['u1']})),'{"u1":2}');
+});
+test('daily reports on old and new apps earn coins from today, rejected ones never',()=>{
+ assert.equal(REPORT_COINS_FROM,'2026-11-13');
+ assert.equal(JSON.stringify(coinsForReports([{testerUid:'a'},{testerUid:'a'},{testerUid:'b',reviewStatus:'rejected'},{testerUid:'c',reviewStatus:'accepted'}])),'{"a":2,"c":1}');
 });

@@ -244,7 +244,14 @@ function v2AddSheet(s){
  }
  return `<div class="v2-row v2-between"><b>أضف تطبيقك</b><span class="v2-small v2-muted">${v2n(s.step)}/3</span></div>${v2Dots(s.step)}${body}<button type="button" class="v2-btn v2-btn-ghost v2-btn-block" style="margin-top:8px" data-v2="${s.step>1?'add-back':'close'}">${s.step>1?'رجوع':'إلغاء'}</button>`;
 }
-function v2SheetFocus(){setTimeout(()=>document.querySelector('.v2-sheet input,.v2-sheet textarea,.v2-sheet button:not([disabled])')?.focus({preventScroll:true}),40)}
+// Focus the first field when a step opens, unless the person is already typing somewhere in the sheet.
+function v2SheetFocus(){setTimeout(()=>{const a=document.activeElement;if(a&&a.closest?.('.v2-sheet')&&a.matches('input,textarea'))return;document.querySelector('.v2-sheet input,.v2-sheet textarea,.v2-sheet button:not([disabled])')?.focus({preventScroll:true})},40)}
+// Re-render the open sheet without losing what is typed, or where the caret is.
+function v2RerenderKeeping(){
+ const a=document.activeElement,id=a?.closest?.('.v2-sheet')?a.id:'',start=a?.selectionStart,end=a?.selectionEnd;
+ v2KeepTyped();render();
+ if(id){const n=document.getElementById(id);if(n){n.focus({preventScroll:true});try{n.setSelectionRange(start,end)}catch{}}}
+}
 function v2Err(text){const e=document.getElementById('v2-err');if(e)e.textContent=text}
 async function v2EnsureTesters(){
  if(dashboard.testersLoaded)return;
@@ -262,7 +269,7 @@ function v2KeepTyped(){
 // ---------- Events. Returns true when the click was handled here. ----------
 function v2Click(button){
  const k=button.dataset.v2;
- if(button.dataset.tab==='new'&&!k){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2KeepTyped();render()});return true}
+ if(button.dataset.tab==='new'&&!k){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2RerenderKeeping()});return true}
  if(!k)return false;
  if(k.startsWith('pack-'))return packClick(button);
  const s=V2.sheet;
@@ -286,10 +293,10 @@ function v2Click(button){
   const notes=String(document.getElementById('v2-note')?.value||'').trim();s.notes=notes;
   if(notes.length<10){v2Err('اكتب جملة قصيرة عن تجربتك، 10 أحرف على الأقل');return true}
   const a=primaryAssignments().find(x=>x.id===s.id),retest=a&&typeof retestTarget==='function'?retestTarget(a):null;
-  pending(async()=>{const result=await api.submitDailyReport(s.id,{outcome:s.outcome,notes,retestOf:retest?.id||''});V2.sheet=null;selectedAssignmentId=s.id;await refresh();toast(result?.alreadySaved?'تقرير اليوم محفوظ من قبل':'انرسل التقرير · ‎+10 XP بعد قبوله')});
+  pending(async()=>{const result=await api.submitDailyReport(s.id,{outcome:s.outcome,notes,retestOf:retest?.id||''});V2.sheet=null;selectedAssignmentId=s.id;await refresh();toast(result?.alreadySaved?'تقرير اليوم محفوظ من قبل':'انرسل التقرير · ‎+10 XP بعد قبوله'+(features.packs||api.isDemo?' · وعملة خلال ربع ساعة':''))});
   return true;
  }
- if(k==='add-open'){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2KeepTyped();render()});return true}
+ if(k==='add-open'){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2RerenderKeeping()});return true}
  if(k==='add-back'&&s){if(s.step===2)s.tasks=document.getElementById('v2-at')?.value??s.tasks;s.step--;render();return true}
  if(k==='add-next'&&s){
   if(s.step===1){

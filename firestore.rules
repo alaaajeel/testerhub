@@ -593,11 +593,14 @@ service cloud.firestore {
     function spentBefore(uid) { return exists(coinsDoc(uid)) ? get(coinsDoc(uid)).data.get('spent', 0) : 0; }
     function freeBefore(uid) { return exists(coinsDoc(uid)) && get(coinsDoc(uid)).data.get('freeUsed', false) == true; }
     // Joining pays 0 (first time) or 150, and the member record states what was paid (refunded if they leave early).
-    function paidJoin(uid, pid) {
+    // Coming back to a pack you left always costs 150 coins, even when the free entry is still unused.
+    function paidJoin(uid, pid, left) {
       return existsAfter(coinsDoc(uid))
         && getAfter(packMember(pid, uid)).data.paid == getAfter(coinsDoc(uid)).data.spent - spentBefore(uid)
-        && ((!freeBefore(uid) && getAfter(coinsDoc(uid)).data.freeUsed == true && getAfter(packMember(pid, uid)).data.paid == 0)
-          || (freeBefore(uid) && getAfter(packMember(pid, uid)).data.paid == 150));
+        && (pid in left
+          ? getAfter(packMember(pid, uid)).data.paid == 150 && getAfter(coinsDoc(uid)).data.get('freeUsed', false) == freeBefore(uid)
+          : (!freeBefore(uid) && getAfter(coinsDoc(uid)).data.freeUsed == true && getAfter(packMember(pid, uid)).data.paid == 0)
+            || (freeBefore(uid) && getAfter(packMember(pid, uid)).data.paid == 150));
     }
     match /packMeta/{metaId} {
       allow get: if verified();
@@ -695,13 +698,16 @@ service cloud.firestore {
     match /packSeats/{uid} {
       allow get: if self(uid);
       allow list, delete: if false;
+      // left: packs this person joined and then left. Coming back to one of them costs 150 coins.
       allow create, update: if self(uid) && verified()
-        && request.resource.data.keys().hasOnly(['packId','updatedAt'])
+        && request.resource.data.keys().hasOnly(['packId','left','updatedAt'])
         && request.resource.data.updatedAt == request.time
         && (request.resource.data.packId == ''
           ? exists(packSeat(uid)) && exists(packMember(resource.data.packId, uid)) && !existsAfter(packMember(resource.data.packId, uid))
+            && request.resource.data.get('left', []) == resource.data.get('left', []).concat([resource.data.packId])
           : existsAfter(packMember(request.resource.data.packId, uid)) && !exists(packMember(request.resource.data.packId, uid))
-            && paidJoin(uid, request.resource.data.packId));
+            && request.resource.data.get('left', []) == (resource == null ? [] : resource.data.get('left', []))
+            && paidJoin(uid, request.resource.data.packId, request.resource.data.get('left', [])));
     }
     // Earned coins are written only by the daily job. A member can only spend: on an entry (150, the first is free),
     // on showing an app at the top (30), and gets an entry back by leaving before the pack starts.

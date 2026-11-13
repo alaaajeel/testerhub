@@ -1,9 +1,8 @@
-name: Exchange packs (daily warnings)
-# Judges each finished day of every running pack. Safe to run more than once a day: days already judged are skipped.
+name: Exchange packs (coins and warnings)
+# Every 15 minutes: pays new coins, and judges each finished day of every running pack. Safe to run any number of times.
 on:
   schedule:
-    - cron: '17 0 * * *'
-    - cron: '17 6 * * *'
+    - cron: '4,19,34,49 * * * *'
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,7 +13,7 @@ jobs:
   judge:
     if: github.repository == 'alaaajeel/testerhub'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - id: secret
         env:
