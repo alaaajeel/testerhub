@@ -574,11 +574,14 @@ service cloud.firestore {
     function opening(pid) { return get(/databases/$(database)/documents/openings/$(pid)); }
     // ---- V2 exchange packs (Testers Community style), behind appConfig/features.packs ----
     // 16 members, 16 days. One open pack at a time (packMeta/current); the 16th joiner starts it and opens the next
-    // in the same batch. Daily confirmations are per app; warnings are computed only by the trusted daily job.
+    // in the same batch. Testers reach every app through the TesterHub Google Group. Daily confirmations are per app;
+    // warnings and earned coins are written only by the trusted daily job.
+    // Coins: the first entry is free once; another entry costs 150; showing an app at the top of «التطبيقات» costs 30 for 3 days.
     function packDoc(id) { return /databases/$(database)/documents/packs/$(id); }
     function packMember(id, uid) { return /databases/$(database)/documents/packs/$(id)/members/$(uid); }
     function packSeat(uid) { return /databases/$(database)/documents/packSeats/$(uid); }
     function packMetaDoc() { return /databases/$(database)/documents/packMeta/current; }
+    function coinsDoc(uid) { return /databases/$(database)/documents/coins/$(uid); }
     function inPack(id) { return signedIn() && exists(packMember(id, request.auth.uid)); }
     // A member may join a new pack only when their last one is over or they are out of it.
     function seatFree(uid) {
@@ -586,6 +589,15 @@ service cloud.firestore {
         || get(packSeat(uid)).data.packId == ''
         || get(packDoc(get(packSeat(uid)).data.packId)).data.status == 'done'
         || get(packMember(get(packSeat(uid)).data.packId, uid)).data.status == 'out';
+    }
+    function spentBefore(uid) { return exists(coinsDoc(uid)) ? get(coinsDoc(uid)).data.get('spent', 0) : 0; }
+    function freeBefore(uid) { return exists(coinsDoc(uid)) && get(coinsDoc(uid)).data.get('freeUsed', false) == true; }
+    // Joining pays 0 (first time) or 150, and the member record states what was paid (refunded if they leave early).
+    function paidJoin(uid, pid) {
+      return existsAfter(coinsDoc(uid))
+        && getAfter(packMember(pid, uid)).data.paid == getAfter(coinsDoc(uid)).data.spent - spentBefore(uid)
+        && ((!freeBefore(uid) && getAfter(coinsDoc(uid)).data.freeUsed == true && getAfter(packMember(pid, uid)).data.paid == 0)
+          || (freeBefore(uid) && getAfter(packMember(pid, uid)).data.paid == 150));
     }
     match /packMeta/{metaId} {
       allow get: if verified();
@@ -639,17 +651,23 @@ service cloud.firestore {
           && getAfter(packDoc(packId)).data.memberCount == get(packDoc(packId)).data.memberCount + 1
           && seatFree(uid)
           && getAfter(packSeat(uid)).data.packId == packId
-          && request.resource.data.keys().hasOnly(['uid','name','email','appName','appLink','order','strikes','status','consent','joinedAt'])
+          && request.resource.data.keys().hasOnly(['uid','name','email','appName','devName','icon','description','appLink','groupAdded','order','strikes','status','consent','paid','joinedAt'])
           && request.resource.data.uid == uid
           && request.resource.data.name == me().data.name
           && request.resource.data.email == request.auth.token.email
           && request.resource.data.appName is string && request.resource.data.appName.size() >= 2 && request.resource.data.appName.size() <= 70
+          && request.resource.data.devName is string && request.resource.data.devName.size() >= 2 && request.resource.data.devName.size() <= 60
+          && (!('icon' in request.resource.data) || (request.resource.data.icon is string && request.resource.data.icon.size() <= 40000
+            && request.resource.data.icon.matches('data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+')))
+          && (!('description' in request.resource.data) || (request.resource.data.description is string && request.resource.data.description.size() <= 300))
           && request.resource.data.appLink is string && request.resource.data.appLink.size() <= 300
           && request.resource.data.appLink.matches('https://play[.]google[.]com/.+')
+          && request.resource.data.groupAdded == true
           && request.resource.data.order == getAfter(packDoc(packId)).data.memberCount
           && request.resource.data.strikes == 0
           && request.resource.data.status == 'active'
           && request.resource.data.consent == true
+          && request.resource.data.paid in [0, 150]
           && request.resource.data.joinedAt == request.time;
         allow delete: if self(uid) && get(packDoc(packId)).data.status == 'open'
           && getAfter(packDoc(packId)).data.memberCount == get(packDoc(packId)).data.memberCount - 1
@@ -682,7 +700,66 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && (request.resource.data.packId == ''
           ? exists(packSeat(uid)) && exists(packMember(resource.data.packId, uid)) && !existsAfter(packMember(resource.data.packId, uid))
-          : existsAfter(packMember(request.resource.data.packId, uid)) && !exists(packMember(request.resource.data.packId, uid)));
+          : existsAfter(packMember(request.resource.data.packId, uid)) && !exists(packMember(request.resource.data.packId, uid))
+            && paidJoin(uid, request.resource.data.packId));
+    }
+    // Earned coins are written only by the daily job. A member can only spend: on an entry (150, the first is free),
+    // on showing an app at the top (30), and gets an entry back by leaving before the pack starts.
+    match /coins/{uid} {
+      allow get: if self(uid);
+      allow list, delete: if false;
+      allow create: if self(uid) && verified() && featureOn('packs')
+        && request.resource.data.keys().hasOnly(['earned','spent','freeUsed','updatedAt'])
+        && request.resource.data.earned == 0 && request.resource.data.spent == 0
+        && request.resource.data.freeUsed == true
+        && request.resource.data.updatedAt == request.time;
+      allow update: if self(uid) && verified()
+        && request.resource.data.keys().hasOnly(['earned','spent','freeUsed','updatedAt'])
+        && request.resource.data.get('earned', 0) == resource.data.get('earned', 0)
+        && request.resource.data.spent is int
+        && request.resource.data.get('earned', 0) - request.resource.data.spent >= 0
+        && request.resource.data.updatedAt == request.time
+        && (request.resource.data.spent >= resource.data.get('spent', 0)
+            && (request.resource.data.freeUsed == true || resource.data.get('freeUsed', false) == false)
+          || refundOnLeave(uid));
+    }
+    function refundOnLeave(uid) {
+      return exists(packSeat(uid)) && get(packSeat(uid)).data.packId != ''
+        && get(packDoc(get(packSeat(uid)).data.packId)).data.status == 'open'
+        && exists(packMember(get(packSeat(uid)).data.packId, uid))
+        && !existsAfter(packMember(get(packSeat(uid)).data.packId, uid))
+        && request.resource.data.spent == resource.data.get('spent', 0) - get(packMember(get(packSeat(uid)).data.packId, uid)).data.paid
+        && request.resource.data.freeUsed == (get(packMember(get(packSeat(uid)).data.packId, uid)).data.paid == 0 ? false : resource.data.get('freeUsed', false));
+    }
+    // Public cards of the apps in packs: every member of TesterHub sees them on «التطبيقات», boosted ones first.
+    match /packApps/{cardId} {
+      allow get, list: if verified();
+      allow create: if verified() && featureOn('packs')
+        && cardId == getAfter(packSeat(request.auth.uid)).data.packId + '_' + request.auth.uid
+        && existsAfter(packMember(getAfter(packSeat(request.auth.uid)).data.packId, request.auth.uid))
+        && !exists(packMember(getAfter(packSeat(request.auth.uid)).data.packId, request.auth.uid))
+        && request.resource.data.keys().hasOnly(['packId','ownerUid','appName','devName','icon','description','appLink','active','boosted','boostedAt','createdAt'])
+        && request.resource.data.packId == getAfter(packSeat(request.auth.uid)).data.packId
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.appName == getAfter(packMember(request.resource.data.packId, request.auth.uid)).data.appName
+        && request.resource.data.devName == getAfter(packMember(request.resource.data.packId, request.auth.uid)).data.devName
+        && request.resource.data.appLink == getAfter(packMember(request.resource.data.packId, request.auth.uid)).data.appLink
+        && request.resource.data.get('icon', '') == getAfter(packMember(request.resource.data.packId, request.auth.uid)).data.get('icon', '')
+        && request.resource.data.get('description', '') == getAfter(packMember(request.resource.data.packId, request.auth.uid)).data.get('description', '')
+        && request.resource.data.active == true
+        && request.resource.data.boosted == false
+        && request.resource.data.boostedAt == request.time
+        && request.resource.data.createdAt == request.time;
+      // Boost: 30 coins for 3 days at the top (from boostedAt), paid in the same batch, never stacked.
+      allow update: if verified() && featureOn('packs') && resource.data.ownerUid == request.auth.uid && resource.data.active == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['boosted','boostedAt'])
+        && request.resource.data.boosted == true
+        && request.resource.data.boostedAt == request.time
+        && (resource.data.boosted == false || resource.data.boostedAt + duration.value(3, 'd') < request.time)
+        && getAfter(coinsDoc(request.auth.uid)).data.spent == get(coinsDoc(request.auth.uid)).data.get('spent', 0) + 30;
+      // Removed with the member when they leave before the start.
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid
+        && !existsAfter(packMember(resource.data.packId, request.auth.uid));
     }
     match /appConfig/{configId} {
       allow get: if verified();

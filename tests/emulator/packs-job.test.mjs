@@ -12,7 +12,7 @@ after(() => deleteApp(app));
 const now = new Date('2026-11-20T03:00:00Z');
 const UIDS = ['a', 'b', 'c', 'd'];
 beforeEach(async () => {
- for (const col of ['packs', 'packMeta', 'appConfig']) {
+ for (const col of ['packs', 'packMeta', 'appConfig', 'coins', 'packApps']) {
   const snap = await db.collection(col).get();
   for (const d of snap.docs) await db.recursiveDelete(d.ref);
  }
@@ -34,16 +34,19 @@ test('opens the first pack once', async () => {
  assert.equal((await db.doc('packMeta/current').get()).data().openPackId, 'p1');
  assert.equal((await db.doc('packs/p1').get()).data().status, 'open');
 });
-test('day 1 is for installing; later days warn whoever confirmed under 70%, once per day', async () => {
- // Started 2026-11-17: days 2 (11-18) and 3 (11-19) are finished by 11-20.
+test('day 1 is for installing; later days warn whoever confirmed under 70%, once per day; every confirmed app earns a coin', async () => {
+ // Started 2026-11-17: days 1 (11-17), 2 (11-18) and 3 (11-19) are finished by 11-20.
  await seedRunning('2026-11-17');
+ await confirm('d', '2026-11-17', ['a']);   // day 1: a coin, never a warning
  for (const d of ['2026-11-18', '2026-11-19']) {
   await confirm('a', d, ['b', 'c', 'd']);
   await confirm('b', d, ['a', 'c']);       // 2 of 3 = 67% < 70% → warning
   await confirm('c', d, ['a', 'b', 'd']);
  }                                          // d confirms nothing → warning
  const s = await runPacks({db, now});
- assert.equal(s.judged, 2);assert.equal(s.warnings, 4);
+ assert.equal(s.judged, 3);assert.equal(s.warnings, 4);
+ const coins = async uid => (await db.doc('coins/' + uid).get()).data()?.earned || 0;
+ assert.deepEqual([await coins('a'), await coins('b'), await coins('c'), await coins('d')], [6, 4, 6, 1]);
  const strikes = async uid => (await db.doc('packs/p1/members/' + uid).get()).data().strikes;
  assert.deepEqual([await strikes('a'), await strikes('b'), await strikes('c'), await strikes('d')], [0, 2, 0, 2]);
  // Running again the same day judges nothing twice.
@@ -59,6 +62,7 @@ test('the third warning removes the member, and the pack ends after day 16', asy
  assert.equal(s.removed, 1);assert.equal(s.finished, 1);
  const d = (await db.doc('packs/p1/members/d').get()).data();
  assert.equal(d.status, 'out');assert.equal(d.strikes, 3);
+ assert.equal((await db.doc('packApps/p1_a').get()).data().active, false, 'a finished pack leaves «التطبيقات»');
  const p = (await db.doc('packs/p1').get()).data();
  assert.equal(p.status, 'done');assert.equal(p.endedDay, '2026-11-16');
 });
