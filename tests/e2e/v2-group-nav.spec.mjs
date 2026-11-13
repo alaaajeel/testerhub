@@ -31,6 +31,10 @@ test('developer app form defaults to Google Group but still preserves actual tes
  await expect(page.locator('#project-form [data-action="copy-group-email"]')).toContainText('نسخ');
  await expect(page.locator('#project-form [name="confirmed"]')).toBeVisible();
  await expect(page.locator('#project-form [data-action="copy-emails"]')).toBeVisible();
+ await expect(page.locator('#project-form [data-action="prepare-group-testers"]')).toBeVisible();
+ await page.locator('#project-form [data-action="prepare-group-testers"]').click();
+ await expect(page.locator('.prepared')).toContainText('جهّزت');
+ 
 });
 
 test('bottom navigation remains anchored when inner content scrolls on a small phone',async({page})=>{
