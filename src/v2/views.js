@@ -44,9 +44,11 @@ function v2Catalog(){
   const age=Date.now()-v2Ms(o.updatedAt);
   items.push({kind:'open',id:o.id,name:o.name,dev:o.ownerName||'',slots:Math.max(1,Number(o.slots)||V2_NEED),request:requests.get(o.id)||null,isNew:Number.isFinite(age)&&age<3*86400000});
  }
- return items;
+ // Apps in exchange packs: public to every member of the TesterHub Google Group; boosted ones go first.
+ const packApps=(dashboard.packs?.apps||[]).filter(c=>!seen.has('pack:'+c.id)).map(c=>({kind:'packapp',id:c.id,name:c.appName,dev:c.devName||'',card:c,boosted:typeof packBoosted==='function'&&packBoosted(c),isNew:Date.now()-packMs(c.createdAt||c.boostedAt)<3*86400000}));
+ return [...packApps.filter(x=>x.boosted),...items,...packApps.filter(x=>!x.boosted)];
 }
-function v2Needs(x){return x.kind==='open'||(x.kind==='mine'&&x.status==='recruiting'&&x.testers<x.need)}
+function v2Needs(x){return x.kind==='open'||x.kind==='packapp'||(x.kind==='mine'&&x.status==='recruiting'&&x.testers<x.need)}
 function v2Home(){
  const q=V2.q.trim(),all=v2Catalog();
  const list=all.filter(x=>{
@@ -72,14 +74,17 @@ function v2AppCard(x){
   const a=x.a,done=v2DoneToday(a);
   status=a.invitationStatus==='pending'?v2Tag('t-blue','دعوة جديدة'):!a.joinedDay?v2Tag('t-amber','كمّل الانضمام'):v2Expired(a)?v2Tag('t-green','انتهى'):done?v2Tag('t-green','تم اليوم'):v2Tag('t-amber','مطلوب اليوم');
   line=`<span>${v2n((a.checkins||[]).length)} تقرير يومي</span>`;pct=Math.min(100,x.day/14*100);right=a.joinedDay?`اليوم ${v2n(x.day)} من 14`:'ما بدأ بعد';
+ }else if(x.kind==='packapp'){
+  status=x.boosted?v2Tag('t-amber','مميّز'):x.card.ownerUid===user.uid?v2Tag('t-blue','تطبيقك'):v2Tag('t-blue','مجموعات التبادل');
+  line=`<span>${clean(String(x.card.description||'مفتوح لأعضاء مجموعة TesterHub').slice(0,60))}</span>`;pct=0;right='';
  }else{
   const r=x.request;
   status=r?.status==='waiting'?v2Tag('t-amber','بالانتظار'):r?.status==='approved'?v2Tag('t-green','انقبلت'):x.isNew?v2Tag('t-blue','جديد'):v2Tag('t-blue','يحتاج مختبرين');
   line=`<span>يحتاج <b>${v2n(x.slots)}</b> مختبر</span>`;pct=0;right='مفتوح هسه';
  }
  return `<button type="button" class="v2-card v2-appcard" data-v2="open-item" data-kind="${x.kind}" data-id="${clean(x.id)}" aria-label="${clean(x.name)} — تفاصيل">
-  <span class="v2-row">${v2Icon(x.name,x.id)}<span class="v2-grow"><span class="v2-row v2-between"><b class="v2-h3">${clean(x.name)}</b>${status}</span><span class="v2-meta">${clean(x.dev||'')}${x.dev?' · ':''}اختبار مغلق</span></span></span>
-  <span><span class="v2-row v2-between v2-small" style="margin-bottom:6px">${line}<span class="v2-muted">${right}</span></span>${v2Bar(pct)}</span>
+  <span class="v2-row">${x.kind==='packapp'?packIcon(x.card,x.card.ownerUid):v2Icon(x.name,x.id)}<span class="v2-grow"><span class="v2-row v2-between"><b class="v2-h3">${clean(x.name)}</b>${status}</span><span class="v2-meta">${clean(x.dev||'')}${x.dev?' · ':''}اختبار مغلق</span></span></span>
+  <span><span class="v2-row v2-between v2-small" style="margin-bottom:6px">${line}<span class="v2-muted">${right}</span></span>${x.kind==='packapp'?'':v2Bar(pct)}</span>
  </button>`;
 }
 
@@ -144,7 +149,7 @@ function v2Account(){
  const links=[['rewards','دوري المساهمين'],['announcements','مركز الإشعارات'],['help','مركز المساعدة'],...(api.isDemo?[]:[['support','رسائل الإدارة'+(unreadSupport().length?' ('+v2n(unreadSupport().length)+')':'')]]),...(mineProjects().length?[['testers','المختبرون المتاحون']]:[])];
  return `<section class="v2-card" style="margin-top:6px">
   <div class="v2-row">${photo?`<img class="v2-avatar" src="${clean(photo)}" alt="" width="56" height="56">`:`<span class="v2-appicon v2-avatar" aria-hidden="true">${clean(String(m.name||'؟').trim().charAt(0)||'؟')}</span>`}<div class="v2-grow"><b class="v2-h3">${clean(m.name)}</b><div class="v2-small v2-muted email-ltr" style="text-align:right">${clean(m.email||'')}</div></div><span class="v2-tag t-blue">المستوى ${v2n(level)}</span></div>
-  <div class="v2-row" style="margin-top:14px"><div class="v2-stat"><b>${v2n(xp)}</b><span class="v2-small v2-muted">XP</span></div><div class="v2-stat"><b>${v2n(primaryAssignments().length)}</b><span class="v2-small v2-muted">أختبرها</span></div><div class="v2-stat"><b>${v2n(mineProjects().length)}</b><span class="v2-small v2-muted">تطبيقاتي</span></div></div>
+  <div class="v2-row" style="margin-top:14px"><div class="v2-stat"><b>${v2n(xp)}</b><span class="v2-small v2-muted">XP</span></div><div class="v2-stat"><b>${v2n(primaryAssignments().length)}</b><span class="v2-small v2-muted">أختبرها</span></div><div class="v2-stat"><b>${v2n(dashboard.packs?.coins?.balance||0)}</b><span class="v2-small v2-muted">عملة</span></div></div>
  </section>
  ${adminAuthorized?`<a class="v2-btn v2-btn-primary v2-btn-block" style="margin-top:12px" href="./admin.html">${ico('shield',18)} لوحة إدارة المنصة</a>`:''}
  <h2 class="v2-h2">الإعدادات</h2>
@@ -169,7 +174,7 @@ const v2StepRow=(n,t,d,st)=>`<div class="v2-step ${st}"><span class="v2-num">${s
 function v2Sheet(){
  const s=V2.sheet;if(!s||!user)return '';
  let body='';
- try{body=s.kind==='test'?v2TestSheet(s):s.kind==='open'?v2OpenSheet(s):s.kind==='report'?v2ReportSheet(s):s.kind==='add'?v2AddSheet(s):s.kind==='pack'?packSheet(s):''}catch(err){console.warn('Sheet:',err);body=''}
+ try{body=s.kind==='test'?v2TestSheet(s):s.kind==='open'?v2OpenSheet(s):s.kind==='report'?v2ReportSheet(s):s.kind==='add'?v2AddSheet(s):s.kind==='pack'?packSheet(s):s.kind==='pack-app'?packAppSheet(s):''}catch(err){console.warn('Sheet:',err);body=''}
  if(!body){V2.sheet=null;return ''}
  // Slides up once when it opens; the next steps re-render in place without replaying it.
  const first=!s.shown;s.shown=true;
@@ -251,6 +256,7 @@ function v2KeepTyped(){
  const val=id=>document.getElementById(id)?.value;
  if(s.kind==='add'){if(val('v2-an')!=null)s.name=val('v2-an');if(val('v2-au')!=null)s.link=val('v2-au');if(val('v2-at')!=null)s.tasks=val('v2-at')}
  if(s.kind==='report'&&val('v2-note')!=null)s.notes=val('v2-note');
+ if(s.kind==='pack'&&typeof packKeepTyped==='function')packKeepTyped(s);
 }
 
 // ---------- Events. Returns true when the click was handled here. ----------
@@ -268,6 +274,7 @@ function v2Click(button){
  if(k==='open-item'){
   const kind=button.dataset.kind,id=button.dataset.id;
   if(kind==='mine'){selectedProjectId=id;tab='details';render();return true}
+  if(kind==='packapp'){V2.sheet={kind:'pack-app',id};render();v2SheetFocus();return true}
   V2.sheet={kind,id};render();v2SheetFocus();return true;
  }
  if(k==='report-open'){V2.sheet={kind:'report',id:button.dataset.id,step:1,outcome:null,notes:null};render();v2SheetFocus();return true}

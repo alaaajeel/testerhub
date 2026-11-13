@@ -35,7 +35,8 @@ function joinBatch(uid, {pack = 'p1', count, extra = {}, startNext = true, coins
  b.set(doc(f, 'packSeats', uid), {packId: pack, updatedAt: serverTimestamp()});
  if (coins === undefined) b.set(doc(f, 'coins', uid), {earned: 0, spent: 0, freeUsed: true, updatedAt: serverTimestamp()});
  else b.update(doc(f, 'coins', uid), {spent: (coins.spent || 0) + paid, freeUsed: true, updatedAt: serverTimestamp()});
- b.set(doc(f, 'packApps', pack + '_' + uid), card(pack, uid, extra.appName ? {appName: extra.appName} : {}));
+ const mirror = Object.fromEntries(['appName', 'devName', 'icon', 'description', 'appLink'].filter(k => k in extra).map(k => [k, extra[k]]));
+ b.set(doc(f, 'packApps', pack + '_' + uid), card(pack, uid, mirror));
  if (n === 16 && startNext) {
   b.update(doc(f, 'packMeta', 'current'), {openPackId: 'p2', number: 2, updatedAt: serverTimestamp()});
   b.set(doc(f, 'packs', 'p2'), {number: 2, status: 'open', size: 16, days: 16, memberCount: 0, createdAt: serverTimestamp()});

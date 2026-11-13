@@ -43,40 +43,91 @@ test('an app is confirmed only after it was opened from here and the page was aw
  await expect(page.locator('.v2-pack-app').nth(1).locator('[data-v2="pack-confirm"]')).toBeDisabled();
 });
 
-test('joining the open pack takes three steps and takes the next seat; leaving before the start frees it',async({page})=>{
+test('joining: the Google Group first, a new app (name, developer, icon, link, description), then adding the group to it',async({page})=>{
  await open(page,'developer');
  await page.locator('.v2-seg [data-k="open"]').click();
  const hero=page.locator('.v2-hero');
  await expect(hero).toContainText('11 من 16 مقعد');
  await expect(hero.locator('.v2-seats i.f')).toHaveCount(11);
+ await expect(hero.locator('[data-v2="pack-join-open"]')).toContainText('مجاناً');
  await hero.locator('[data-v2="pack-join-open"]').click();
  const sheet=page.locator('.v2-sheet');
+ // 1: the Google Group.
+ await expect(sheet.locator('a[href="https://groups.google.com/g/testerhubiq"]')).toBeVisible();
  await expect(sheet.locator('[data-v2="pack-next"]')).toBeDisabled();
- await sheet.locator('[data-v2="pack-pick"][data-id="other"]').click();
+ await sheet.locator('[data-v2="pack-group-joined"]').click();
+ await sheet.locator('[data-v2="pack-next"]').click();
+ // 2: a new app, not one of the account's apps.
+ await expect(sheet.locator('#pk-dev')).toHaveValue('مطور تجريبي');
  await sheet.locator('#pk-name').fill('تطبيقي');
  await sheet.locator('#pk-link').fill('https://example.com/app');
  await sheet.locator('[data-v2="pack-next"]').click();
  await expect(sheet.locator('#v2-err')).toContainText('play.google.com');
  await sheet.locator('#pk-link').fill('https://play.google.com/apps/testing/com.example.mine');
+ await sheet.locator('#pk-desc').fill('تطبيق تجريبي للمجموعة');
+ await page.evaluate(()=>{V2.sheet.icon='data:image/png;base64,iVBORw0KGgo='});
  await sheet.locator('[data-v2="pack-next"]').click();
- await expect(sheet.locator('[data-v2="pack-next"]')).toBeDisabled();
+ // 3: add the group to the app in Play Console, commit, and take the seat.
+ await expect(sheet).toContainText('testerhubiq@googlegroups.com');
+ await expect(sheet).toContainText('مقعدك رقم 12 من 16');
+ await expect(sheet).toContainText('دخولك الأول مجاني');
+ await expect(sheet.locator('[data-v2="pack-join"]')).toBeDisabled();
+ await sheet.locator('[data-v2="pack-group-added"]').click();
+ await expect(sheet.locator('[data-v2="pack-join"]')).toBeDisabled();
  await sheet.locator('[data-v2="pack-consent"]').click();
- await sheet.locator('[data-v2="pack-next"]').click();
- await expect(sheet).toContainText('رقم 12 من 16');
  await sheet.locator('[data-v2="pack-join"]').click();
  await expect(page.locator('#toast')).toContainText('انضميت');
  await expect(page.locator('.v2-hero')).toContainText('12 من 16 مقعد');
- await expect(page.locator('.v2-hero')).toContainText('ترتيبك 12');
+ const me=JSON.parse(await page.evaluate(()=>JSON.stringify(demoState().packs.members.p2.find(m=>m.uid==='d1'))));
+ expect(me).toMatchObject({appName:'تطبيقي',devName:'مطور تجريبي',appLink:'https://play.google.com/apps/testing/com.example.mine',description:'تطبيق تجريبي للمجموعة',groupAdded:true,paid:0});
+ // The app is public on «التطبيقات» for every member of the Google Group.
+ await page.locator('.nav [data-tab="home"]').click();
+ await expect(page.locator('.v2-appcard[data-id="p2_d1"]')).toContainText('تطبيقي');
+ // Leaving before the start gives back the free entry.
+ await page.locator('.nav [data-tab="groups"]').click();
  await page.locator('[data-v2="pack-leave"]').click();
  await expect(page.locator('#toast')).toContainText('طلعت');
- await page.locator('.v2-seg [data-k="open"]').click();
- await expect(page.locator('.v2-hero')).toContainText('11 من 16 مقعد');
+ expect(await page.evaluate(()=>demoState().packs.coins.d1.freeUsed)).toBe(false);
+});
+
+test('coins: the next entry costs 150 and the join button says what is missing',async({page})=>{
+ await open(page,'developer');
+ await page.evaluate(async()=>{const d=demoState();d.packs.coins.d1={earned:120,spent:0,freeUsed:true};save(d);await refresh();V2.groupView='open';render()});
+ await expect(page.locator('.v2-coins')).toContainText('120');
+ await page.locator('[data-v2="pack-join-open"]').click();
+ const sheet=page.locator('.v2-sheet');
+ await sheet.locator('[data-v2="pack-group-joined"]').click();await sheet.locator('[data-v2="pack-next"]').click();
+ await sheet.locator('#pk-name').fill('تطبيقي');await sheet.locator('#pk-link').fill('https://play.google.com/apps/testing/com.x');await sheet.locator('[data-v2="pack-next"]').click();
+ await sheet.locator('[data-v2="pack-group-added"]').click();await sheet.locator('[data-v2="pack-consent"]').click();
+ await expect(sheet).toContainText('تحتاج 30 عملة إضافية');
+ await expect(sheet.locator('[data-v2="pack-join"]')).toBeDisabled();
+ await expect(page.evaluate(()=>packJoin({appName:'x1',devName:'مطور',appLink:'https://play.google.com/apps/testing/com.x',groupAdded:true}))).rejects.toThrow(/150/);
+ await page.evaluate(async()=>{const d=demoState();d.packs.coins.d1.earned=200;save(d);await refresh();render()});
+ await expect(sheet.locator('[data-v2="pack-join"]')).toBeEnabled();
+ await sheet.locator('[data-v2="pack-join"]').click();
+ await expect(page.locator('#toast')).toContainText('انضميت');
+ expect(await page.evaluate(()=>demoState().packs.coins.d1.spent)).toBe(150);
+});
+
+test('boost: 30 coins puts the app first on «التطبيقات» for 3 days, never twice at once',async({page})=>{
+ await open(page);
+ await expect(page.locator('.v2-coins').first()).toContainText('64');
+ await page.locator('[data-v2="pack-boost"]').click();
+ await expect(page.locator('#toast')).toContainText('بأعلى «التطبيقات»');
+ await expect(page.locator('.v2-my-card')).toContainText('مميّز');
+ expect(await page.evaluate(()=>dashboard.packs.coins.balance)).toBe(34);
+ await expect(page.evaluate(()=>packBoost())).rejects.toThrow(/مميّز هسه/);
+ await page.locator('.nav [data-tab="home"]').click();
+ const first=page.locator('.v2-appcard').first();
+ await expect(first).toContainText('مميّز');
+ const names=await page.locator('.v2-appcard[data-kind="packapp"]').evaluateAll(n=>n.slice(0,2).map(x=>x.textContent));
+ expect(names.join(' ')).toContain('تطبيقي التجريبي');
 });
 
 test('the 16th member starts the pack and the next one opens',async({page})=>{
  await open(page,'developer');
  await page.evaluate(()=>{const d=demoState();const P=d.packs;for(let i=0;i<4;i++){P.list.p2.memberCount++;P.members.p2.push({uid:'x'+i,name:'x',email:'x@e.com',appName:'X'+i,appLink:'https://play.google.com/apps/testing/x',order:P.list.p2.memberCount,strikes:0,status:'active'})}save(d)});
- await page.evaluate(async()=>{await packJoin({appName:'الأخير',appLink:'https://play.google.com/apps/testing/com.last'});await packRefresh()});
+ await page.evaluate(async()=>{await packJoin({appName:'الأخير',devName:'مطور',appLink:'https://play.google.com/apps/testing/com.last',groupAdded:true});await packRefresh()});
  const P=await page.evaluate(()=>JSON.stringify({p2:demoState().packs.list.p2,meta:demoState().packs.meta}));
  const {p2,meta}=JSON.parse(P);
  expect(p2.status).toBe('running');expect(p2.memberCount).toBe(16);
