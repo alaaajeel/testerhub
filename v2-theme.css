@@ -1,0 +1,231 @@
+/* TesterHub V2 visual theme — based on the owner's supplied HTML preview.
+   Presentation only: keep existing Firebase Auth, Firestore, reports, permissions and actions. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+
+.device #app {
+  --ink: #0B1B3F;
+  --navy: #0B1B3F;
+  --blue: #0551CF;
+  --green: #08875C;
+  --muted: #6B7894;
+  --pale: #F3F6FB;
+  --line: #E3E9F4;
+  --shadow: 0 6px 20px rgba(11,27,63,.07);
+  background: #F3F6FB;
+  color: #0B1B3F;
+  font-family: 'IBM Plex Sans Arabic', Tahoma, sans-serif;
+}
+.device #app button,
+.device #app input,
+.device #app textarea,
+.device #app select { font-family: inherit; }
+.device #app button:focus-visible,
+.device #app a:focus-visible,
+.device #app input:focus-visible,
+.device #app textarea:focus-visible { outline: 3px solid #079CF0; outline-offset: 2px; }
+
+/* Preview: restrained light app bar, followed by a separate gradient hero card. */
+.device #app header.hero {
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  overflow: visible;
+  border-radius: 0;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  background: #F3F6FB !important;
+  color: #0B1B3F;
+  box-shadow: none;
+}
+.device #app header.hero::before,
+.device #app header.hero::after { display: none; }
+.device #app header.hero .header {
+  min-height: 64px;
+  padding: 10px 16px 6px;
+  background: #F3F6FB;
+  display: flex;
+  align-items: center;
+}
+.device #app header.hero .header .logo {
+  font-size: 19px;
+  color: #0B1B3F;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.device #app .header-brand-icon { width: 34px; height: 34px; box-shadow: none; border-radius: 10px; }
+.device #app header.hero .round-ico {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #E3E9F4;
+  border-radius: 14px;
+  background: #fff;
+  color: #0B1B3F;
+  box-shadow: none;
+}
+.device #app header.hero .round-ico svg { stroke: currentColor; }
+.device #app .bell-count { background: #B42842; color: #fff; }
+.device #app header.hero .hello {
+  position: relative;
+  isolation: isolate;
+  min-height: 132px;
+  margin: 5px 16px 12px !important;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg,#0020B1,#0551CF 55%,#079CF0);
+  box-shadow: 0 6px 20px rgba(11,27,63,.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  color: #fff;
+  overflow: hidden;
+}
+.device #app header.hero .hello::after {
+  content: '';
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  left: -42px;
+  bottom: -90px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.08);
+  z-index: -1;
+}
+.device #app header.hero .hello h2 { color: #fff; font-size: 21px; line-height: 1.5; margin: 0 0 8px; }
+.device #app header.hero .hello p { color: #D7E6FF; font-size: 13px; line-height: 1.8; margin: 0; }
+.device #app .page {
+  padding: 5px 16px 22px !important;
+  margin-top: 0 !important;
+  background: #F3F6FB !important;
+  color: #0B1B3F;
+}
+
+/* Same surface / text / progress visual language as the supplied preview. */
+.device #app .surface {
+  background: #fff;
+  border: 1px solid #E3E9F4;
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 6px 20px rgba(11,27,63,.07);
+  margin-bottom: 12px;
+}
+.device #app .surface.feature { background: #fff; }
+.device #app .section-title { color: #0B1B3F; font-size: 18px; font-weight: 700; margin: 18px 2px 10px; }
+.device #app .lead { color: #0B1B3F; font-weight: 700; font-size: 16px; }
+.device #app .small,
+.device #app .tiny,
+.device #app .app-row-main .tiny { color: #6B7894; }
+.device #app .cta {
+  min-height: 46px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 14px;
+  background: #08875C;
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: none;
+}
+.device #app .cta.blue,
+.device #app .cta.primary-report { background: #0551CF; color: white; }
+.device #app .cta.outline { background: #EAF1FF; color: #0551CF; border: 0; }
+.device #app .cta:disabled { opacity: .45; cursor: not-allowed; }
+.device #app .flag {
+  background: #E3F7EF;
+  color: #08875C;
+  border-radius: 999px;
+  border: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.device #app .chip,
+.device #app .badge {
+  border-radius: 999px;
+  background: #EAF1FF;
+  color: #0551CF;
+  border: 1px solid #E3E9F4;
+}
+.device #app .app-mark { border-radius: 16px; width: 56px; height: 56px; flex: 0 0 56px; box-shadow: none; }
+.device #app .progress { height: 8px; background: #E7EDF7; border-radius: 99px; overflow: hidden; }
+.device #app .progress i { border-radius: 99px; background: linear-gradient(90deg,#08875C,#2BC48A); }
+.device #app .app-card { display: block; }
+.device #app .app-card h4 { color: #0B1B3F; }
+.device #app .test-summary,
+.device #app .assignment-actions { gap: 9px; }
+.device #app .daily-test { border-radius: 18px; }
+.device #app .tab-empty { border-color: #E3E9F4; border-radius: 18px; }
+.device #app .segmented { background: #E6ECF6; border-radius: 14px; padding: 4px; }
+.device #app .segmented button.active { background: #fff; color: #0B1B3F; border-radius: 11px; box-shadow: 0 2px 8px rgba(11,27,63,.08); }
+.device #app .steps3 li { border-color: #E3E9F4; border-radius: 14px; }
+.device #app .group-card { border-color: #E3E9F4; }
+
+/* Developer's app collection: cards, icon, status, tester count, activity bar. */
+.device #app .v2-project-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  align-items: stretch;
+  gap: 12px;
+  text-align: start;
+  padding: 16px;
+}
+.device #app .v2-project-card .v2-project-top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+}
+.device #app .v2-project-card .app-row-main { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 2px; }
+.device #app .v2-project-card .app-row-main strong { font-size: 16px; color: #0B1B3F; }
+.device #app .v2-project-card .v2-project-top .flag,
+.device #app .v2-project-card .v2-project-top .chip { margin-inline-start: auto; flex: 0 0 auto; }
+.device #app .v2-project-card .v2-project-progress { display: flex; flex-direction: column; width: 100%; gap: 5px; }
+.device #app .v2-project-card .v2-project-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #6B7894; }
+.device #app .v2-project-card .progress { display: block; width: 100%; margin: 0; }
+.device #app .v2-project-card .app-row-go { display: none; }
+
+/* Fixed bottom navigation visually matches the reference and retains all real routes. */
+.device #app nav.nav {
+  height: calc(71px + env(safe-area-inset-bottom,0px));
+  padding: 6px 6px calc(10px + env(safe-area-inset-bottom,0px));
+  border-top: 1px solid #E3E9F4;
+  background: rgba(255,255,255,.96);
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  box-shadow: 0 -6px 16px rgba(11,27,63,.025);
+  backdrop-filter: blur(8px);
+}
+.device #app nav.nav button {
+  position: relative;
+  min-height: 52px;
+  gap: 3px;
+  border-radius: 12px;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6B7894;
+}
+.device #app nav.nav button span { font-size: 12px; }
+.device #app nav.nav button svg { width: 24px; height: 24px; stroke-width: 1.9; }
+.device #app nav.nav button.active { color: #0551CF; }
+.device #app nav.nav button.active::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  width: 28px;
+  height: 3px;
+  background: #0551CF;
+  border-radius: 0 0 3px 3px;
+}
+@media(min-width:830px) {
+  .device #app { max-width: 440px; }
+}
+@media(max-width:830px) {
+  .device #app { border-radius: 0; }
+  .device #app .page { padding-inline: 16px !important; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .device #app *, .device #app *::before, .device #app *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
