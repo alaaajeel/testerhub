@@ -12,7 +12,7 @@ after(() => deleteApp(app));
 const now = new Date('2026-11-20T03:00:00Z');
 const UIDS = ['a', 'b', 'c', 'd'];
 beforeEach(async () => {
- for (const col of ['packs', 'packMeta', 'appConfig', 'coins', 'packApps']) {
+ for (const col of ['packs', 'packMeta', 'appConfig', 'coins', 'packApps', 'reports', 'coinsState']) {
   const snap = await db.collection(col).get();
   for (const d of snap.docs) await db.recursiveDelete(d.ref);
  }
@@ -65,4 +65,22 @@ test('the third warning removes the member, and the pack ends after day 16', asy
  assert.equal((await db.doc('packApps/p1_a').get()).data().active, false, 'a finished pack leaves «التطبيقات»');
  const p = (await db.doc('packs/p1').get()).data();
  assert.equal(p.status, 'done');assert.equal(p.endedDay, '2026-11-16');
+});
+
+test('daily reports on any app earn 1 coin each from 2026-11-13, each day once, rejected ones never', async () => {
+ await db.doc('appConfig/features').set({packs: true});
+ const report = (id, testerUid, date, extra = {}) => db.doc('reports/' + id).set({testerUid, ownerUid: 'dev', date, outcome: 'ok', ...extra});
+ await report('old_1', 't1', '2026-11-12');                    // before the start: nothing
+ await report('a_13', 't1', '2026-11-13');
+ await report('b_13', 't1', '2026-11-13');                     // a second app the same day
+ await report('c_13', 't2', '2026-11-13', {reviewStatus: 'rejected'});
+ await report('a_19', 't2', '2026-11-19');
+ await report('a_20', 't2', '2026-11-20');                     // today: paid tomorrow
+ const s = await runPacks({db, now});
+ assert.equal(s.reportCoins, 3);
+ const earned = async uid => (await db.doc('coins/' + uid).get()).data()?.earned || 0;
+ assert.equal(await earned('t1'), 2);assert.equal(await earned('t2'), 1);
+ await runPacks({db, now});
+ assert.equal(await earned('t1'), 2, 'never paid twice');
+ assert.equal((await db.doc('coinsState/reports').get()).data().through, '2026-11-19');
 });

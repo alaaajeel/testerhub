@@ -88,6 +88,11 @@ test('joining: the Google Group first, a new app (name, developer, icon, link, d
  await page.locator('[data-v2="pack-leave"]').click();
  await expect(page.locator('#toast')).toContainText('طلعت');
  expect(await page.evaluate(()=>demoState().packs.coins.d1.freeUsed)).toBe(false);
+ // Who left cannot come back to the same pack.
+ await page.locator('.v2-seg [data-k="open"]').click();
+ await expect(page.locator('.v2-hero button')).toContainText('طلعت من هاي المجموعة');
+ await expect(page.locator('.v2-hero button')).toBeDisabled();
+ await expect(page.evaluate(()=>packJoin({appName:'رجعة',devName:'مطور',appLink:'https://play.google.com/apps/testing/com.back',groupAdded:true}))).rejects.toThrow(/ما تگدر ترجعلها/);
 });
 
 test('coins: the next entry costs 150 and the join button says what is missing',async({page})=>{
@@ -144,4 +149,14 @@ test('an app name with HTML stays text in the pack',async({page})=>{
  await expect(page.locator('.v2-pack-app').first()).toContainText('<img src=x');
  await expect(page.locator('.v2-pack-app img')).toHaveCount(0);
  expect(await page.evaluate(()=>window.pwned)).toBeUndefined();
+});
+
+test('taken seats show the members\' app icons',async({page})=>{
+ await open(page,'developer');
+ await page.evaluate(async()=>{const d=demoState();d.packs.apps.find(c=>c.packId==='p2').icon='data:image/png;base64,iVBORw0KGgo=';save(d);await refresh();V2.groupView='open';render()});
+ const seats=page.locator('.v2-hero .v2-seats i');
+ await expect(seats).toHaveCount(16);
+ await expect(page.locator('.v2-hero .v2-seats i.v2-seat-icon img')).toHaveCount(1);
+ await expect(page.locator('.v2-hero .v2-seats i.f')).toHaveCount(11);
+ await expect(page.locator('.v2-hero .v2-seats i.v2-seat-letter')).toHaveCount(10);
 });

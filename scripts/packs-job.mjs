@@ -5,6 +5,8 @@
 // public app cards are hidden. It also opens the first pack.
 
 export const PACK_SIZE = 16, PACK_DAYS = 16, PASS = 0.7, MAX_STRIKES = 3;
+// Daily reports on any app (the old invitations and the new apps alike) also earn 1 coin each, from this day on.
+export const REPORT_COINS_FROM = '2026-11-13';
 const DAY_MS = 86400000;
 const dayKey = date => date.toISOString().slice(0, 10);
 const addDays = (key, n) => dayKey(new Date(Date.parse(key + 'T00:00:00Z') + n * DAY_MS));
@@ -18,6 +20,12 @@ export function coinsForDay(members, confirmed) {
     const n = new Set((confirmed[uid] || []).filter(x => x !== uid && active.has(x))).size;
     if (n) out[uid] = n;
   }
+  return out;
+}
+// Pure: coins for one day of daily reports — one per report, none for a rejected one.
+export function coinsForReports(reports) {
+  const out = {};
+  for (const r of reports) if (r.testerUid && r.reviewStatus !== 'rejected') out[r.testerUid] = (out[r.testerUid] || 0) + 1;
   return out;
 }
 export function judgeDay(members, confirmed) {
@@ -50,6 +58,20 @@ export async function runPacks({db, now = new Date()}) {
     await batch.commit();summary.opened++;
   }
   const yesterday = addDays(dayKey(now), -1);
+  // Daily reports: every finished day once, from REPORT_COINS_FROM. A cursor keeps each day paid exactly once.
+  const cursor = db.doc('coinsState/reports'), seen = await cursor.get();
+  let reportDay = seen.exists && seen.data().through ? addDays(seen.data().through, 1) : REPORT_COINS_FROM;
+  while (reportDay <= yesterday) {
+    const snap = await db.collection('reports').where('date', '==', reportDay).get();
+    const batch = db.batch();
+    for (const [uid, n] of Object.entries(coinsForReports(snap.docs.map(d => d.data())))) {
+      batch.set(db.doc('coins/' + uid), {earned: FieldValue.increment(n), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      summary.reportCoins = (summary.reportCoins || 0) + n;
+    }
+    batch.set(cursor, {through: reportDay, updatedAt: FieldValue.serverTimestamp()});
+    await batch.commit();
+    reportDay = addDays(reportDay, 1);
+  }
   const running = await db.collection('packs').where('status', '==', 'running').get();
   for (const packSnap of running.docs) {
     const pack = packSnap.data();

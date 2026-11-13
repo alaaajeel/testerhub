@@ -71,7 +71,7 @@ async function loadPacks(active){
  if(isDemo){
   const d=packDemo(),P=d.packs,open=P.list[P.meta.openPackId],seat=P.seats[active.uid]||'';
   const pack=seat?P.list[seat]:null,members=pack?P.members[seat]:[],days=pack?Object.values(P.days[seat]||{}).filter(x=>x.date===packDay()):[];
-  return {enabled:true,open,mine:pack?packView(pack,members,days,active.uid):null,coins:packCoins(P.coins[active.uid]),apps:packSortApps(P.apps)};
+  return {enabled:true,open,mine:pack?packView(pack,members,days,active.uid):null,coins:packCoins(P.coins[active.uid]),apps:packSortApps(P.apps),left:P.left?.[active.uid]||[]};
  }
  if(!features.packs)return empty;
  const {doc,getDoc,getDocs,collection,query,where,orderBy,limit}=storeFns;
@@ -85,7 +85,7 @@ async function loadPacks(active){
   const base={enabled:true,coins:packCoins(coins?.exists?.()?coins.data():null),apps:packSortApps(cards.docs.map(x=>({id:x.id,...x.data()})))};
   const openId=meta.exists()?meta.data().openPackId:'';
   const open=openId?await getDoc(doc(db,'packs',openId)).then(s=>s.exists()?{id:s.id,...s.data()}:null):null;
-  const seatId=seat?.exists?.()?seat.data().packId:'';
+  const seatId=seat?.exists?.()?seat.data().packId:'';base.left=seat?.exists?.()?seat.data().left||[]:[];
   if(!seatId)return {...base,open,mine:null};
   const pack=seatId===openId?open:await getDoc(doc(db,'packs',seatId)).then(s=>s.exists()?{id:s.id,...s.data()}:null);
   if(!pack)return {...base,open,mine:null};
@@ -119,6 +119,7 @@ async function packJoin(input){
  if(isDemo){
   const d=packDemo(),P=d.packs,id=P.meta.openPackId,pack=P.list[id],c=(P.coins[active.uid]??={earned:0,spent:0,freeUsed:false}),cost=c.freeUsed?PACK_COST:0;
   if(P.seats[active.uid]&&P.list[P.seats[active.uid]]?.status!=='done')throw Error('انت عضو بمجموعة أصلاً');
+  if((P.left?.[active.uid]||[]).includes(id))throw Error('طلعت من هاي المجموعة، فما تگدر ترجعلها. انتظر المجموعة الجاية');
   if((c.earned||0)-(c.spent||0)<cost)throw Error('رصيدك ما يكفي: الدخول يكلف '+PACK_COST+' عملة');
   c.spent=(c.spent||0)+cost;c.freeUsed=true;
   pack.memberCount++;const m={uid:active.uid,name:active.name,email:active.email,...app,groupAdded:true,order:pack.memberCount,strikes:0,status:'active',consent:true,paid:cost};
@@ -137,10 +138,11 @@ async function packJoin(input){
    if((Number(c?.earned)||0)-(Number(c?.spent)||0)<cost)throw Error('رصيدك ما يكفي: الدخول يكلف '+PACK_COST+' عملة');
    const {openPackId:id,number}=meta.data(),snap=await getDoc(doc(db,'packs',id));
    if(!snap.exists()||snap.data().status!=='open')throw Error('المجموعة اكتملت، حدّث الصفحة');
+   if((dashboard.packs?.left||[]).includes(id))throw Error('طلعت من هاي المجموعة، فما تگدر ترجعلها. انتظر المجموعة الجاية');
    const n=(snap.data().memberCount||0)+1,b=writeBatch(db),extra={...(app.icon?{icon:app.icon}:{}),...(app.description?{description:app.description}:{})};
    b.update(doc(db,'packs',id),n<PACK_SIZE?{memberCount:n}:{memberCount:n,status:'running',startDay:packDay(),startedAt:serverTimestamp()});
    b.set(doc(db,'packs',id,'members',active.uid),{uid:active.uid,name:active.name,email:active.email,appName:app.appName,devName:app.devName,appLink:app.appLink,...extra,groupAdded:true,order:n,strikes:0,status:'active',consent:true,paid:cost,joinedAt:serverTimestamp()});
-   b.set(doc(db,'packSeats',active.uid),{packId:id,updatedAt:serverTimestamp()});
+   b.set(doc(db,'packSeats',active.uid),{packId:id,updatedAt:serverTimestamp()},{merge:true});
    if(!c)b.set(doc(db,'coins',active.uid),{earned:0,spent:0,freeUsed:true,updatedAt:serverTimestamp()});
    else b.update(doc(db,'coins',active.uid),{spent:(Number(c.spent)||0)+cost,freeUsed:true,updatedAt:serverTimestamp()});
    b.set(doc(db,'packApps',id+'_'+active.uid),{packId:id,ownerUid:active.uid,appName:app.appName,devName:app.devName,appLink:app.appLink,...extra,active:true,boosted:false,boostedAt:serverTimestamp(),createdAt:serverTimestamp()});
@@ -154,12 +156,12 @@ async function packLeave(){
  const active=await currentUser(),mine=dashboard.packs?.mine;
  if(!mine||mine.pack.status!=='open')throw Error('تگدر تطلع بس قبل ما تبدي المجموعة');
  const paid=Number(mine.me?.paid)||0;
- if(isDemo){const d=packDemo(),P=d.packs,id=mine.pack.id,c=P.coins[active.uid];P.members[id]=P.members[id].filter(m=>m.uid!==active.uid);P.list[id].memberCount--;P.seats[active.uid]='';if(c){c.spent-=paid;if(!paid)c.freeUsed=false}P.apps=P.apps.filter(x=>x.id!==id+'_'+active.uid);save(d);return}
+ if(isDemo){const d=packDemo(),P=d.packs,id=mine.pack.id,c=P.coins[active.uid];P.members[id]=P.members[id].filter(m=>m.uid!==active.uid);P.list[id].memberCount--;P.seats[active.uid]='';((P.left??={})[active.uid]??=[]).push(id);if(c){c.spent-=paid;if(!paid)c.freeUsed=false}P.apps=P.apps.filter(x=>x.id!==id+'_'+active.uid);save(d);return}
  const {doc,getDoc,writeBatch,serverTimestamp}=storeFns,id=mine.pack.id;
  const [snap,coinSnap]=await Promise.all([getDoc(doc(db,'packs',id)),getDoc(doc(db,'coins',active.uid))]),c=coinSnap.data()||{},b=writeBatch(db);
  b.update(doc(db,'packs',id),{memberCount:snap.data().memberCount-1});
  b.delete(doc(db,'packs',id,'members',active.uid));
- b.set(doc(db,'packSeats',active.uid),{packId:'',updatedAt:serverTimestamp()});
+ b.set(doc(db,'packSeats',active.uid),{packId:'',left:storeFns.arrayUnion(id),updatedAt:serverTimestamp()},{merge:true});
  b.update(doc(db,'coins',active.uid),{spent:(Number(c.spent)||0)-paid,freeUsed:paid?c.freeUsed===true:false,updatedAt:serverTimestamp()});
  b.delete(doc(db,'packApps',id+'_'+active.uid));
  await b.commit();
@@ -196,7 +198,15 @@ function packOpen(memberUid){
 // ---------- Screens ----------
 const packCoinChip=()=>{const c=dashboard.packs?.coins;return c?`<span class="v2-tag t-amber v2-coins" title="عملات المجموعات">🪙 ${v2n(c.balance)} عملة</span>`:''};
 const packHow=()=>`<h2 class="v2-h2">شلون تشتغل المجموعة</h2><div class="v2-card">${[['انضم لمجموعة Google مرة وحدة','testerhubiq — بنفس حساب Google Play اللي تختبر بيه. هي اللي توصلك لكل التطبيقات.'],['ضيف المجموعة لتطبيقك','بـ Play Console تضيف بريد المجموعة مرة وحدة، بدل ما تنسخ إيميلات.'],['16 عضو، 16 يوم','كل عضو يختبر تطبيقات الـ 15 الباقين يومياً، وهم يختبرون تطبيقه.'],['عملات وإنذارات تلقائية','كل تطبيق تأكده = عملة. أقل من 70% باليوم = إنذار، و3 إنذارات = تطلع.'],['أول دخول مجاني','بعدها كل دخول بـ '+PACK_COST+' عملة، وتمييز تطبيقك بأعلى «التطبيقات» بـ '+BOOST_COST+' عملة لـ '+BOOST_DAYS+' أيام.']].map(([t,d],i)=>`<div class="v2-check-item"><span class="v2-num">${v2n(i+1)}</span><div><b>${t}</b><p class="v2-small v2-muted" style="margin:2px 0 0">${d}</p></div></div>`).join('')}</div>`;
-const packSeats=(filled,size=PACK_SIZE)=>`<div class="v2-seats" aria-hidden="true">${Array.from({length:size},(_,i)=>`<i class="${i<filled?'f':''}"></i>`).join('')}</div>`;
+// Seats: each taken seat shows that member's app icon (from the public cards), the rest stay empty.
+function packSeats(filled,packId,size=PACK_SIZE){
+ const cards=(dashboard.packs?.apps||[]).filter(c=>c.packId===packId).sort((a,b)=>packMs(a.createdAt||a.boostedAt)-packMs(b.createdAt||b.boostedAt));
+ return `<div class="v2-seats" aria-hidden="true">${Array.from({length:size},(_,i)=>{const c=cards[i];
+  if(i>=filled)return '<i></i>';
+  if(c&&packIconOk(c.icon))return `<i class="f v2-seat-icon"><img src="${clean(c.icon)}" alt=""></i>`;
+  if(c)return `<i class="f v2-seat-letter" style="background:${v2Color(c.ownerUid)}">${clean(String(c.appName||'؟').trim().charAt(0))}</i>`;
+  return '<i class="f"></i>'}).join('')}</div>`;
+}
 function packOff(){return `<section class="v2-card v2-hero"><span class="v2-tag v2-tag-glass">مجموعات التبادل</span><h3 style="margin:12px 0 4px">تنتظر التفعيل</h3><p class="v2-muted v2-small" style="margin:0">تنفتح أول ما تتفعّل من لوحة الإدارة. تگدر هسه تنضم لمجموعة Google وتجهّز.</p><a class="v2-btn v2-btn-white" style="margin-top:12px" href="${OFFICIAL_GROUP.url}" target="_blank" rel="noopener noreferrer">انضم لمجموعة Google</a></section>${packHow()}`}
 // My app in the pack: its public card on «التطبيقات», and the boost.
 function packMyCard(){
@@ -212,10 +222,10 @@ function v2MyGroup(){
  const {pack,me,others}=mine;
  if(me?.status==='out')return `${coins}<div class="v2-notice n-amber">طلعت من المجموعة #${v2n(pack.number)} بعد ${v2n(PACK_STRIKES)} إنذارات. تگدر تدخل المجموعة المفتوحة الجاية بـ ${v2n(PACK_COST)} عملة.</div><button type="button" class="v2-btn v2-btn-primary v2-btn-block" style="margin-top:12px" data-v2="gview" data-k="open">المجموعة المفتوحة</button>`;
  if(pack.status==='done')return `${coins}<div class="v2-card v2-empty-card"><b>خلصت المجموعة #${v2n(pack.number)} ✓</b><p class="v2-small v2-muted">16 يوم كاملة. تگدر تدخل مجموعة جديدة بتطبيق ثاني بـ ${v2n(PACK_COST)} عملة.</p><button type="button" class="v2-btn v2-btn-primary" data-v2="gview" data-k="open">المجموعة المفتوحة</button></div>`;
- if(pack.status==='open')return `${coins}<section class="v2-card v2-hero"><div class="v2-row v2-between"><span class="v2-tag v2-tag-glass">مجموعة #${v2n(pack.number)}</span><span class="v2-small v2-muted">بانتظار الاكتمال</span></div><h3 style="margin:12px 0 2px">${v2n(pack.memberCount)} من ${v2n(PACK_SIZE)} مقعد</h3><p class="v2-muted v2-small" style="margin:0">ترتيبك ${v2n(me?.order||0)}. تبدي أول ما تكتمل، ونبلغك.</p>${packSeats(pack.memberCount)}</section>
+ if(pack.status==='open')return `${coins}<section class="v2-card v2-hero"><div class="v2-row v2-between"><span class="v2-tag v2-tag-glass">مجموعة #${v2n(pack.number)}</span><span class="v2-small v2-muted">بانتظار الاكتمال</span></div><h3 style="margin:12px 0 2px">${v2n(pack.memberCount)} من ${v2n(PACK_SIZE)} مقعد</h3><p class="v2-muted v2-small" style="margin:0">ترتيبك ${v2n(me?.order||0)}. تبدي أول ما تكتمل، ونبلغك.</p>${packSeats(pack.memberCount,pack.id)}</section>
   ${packMyCard()}
   <h2 class="v2-h2">تطبيقات المجموعة</h2><div class="v2-card">${mine.members.map(m=>`<div class="v2-check-item">${packIcon(m,m.uid,40)}<div class="v2-grow"><b>${clean(m.appName)}</b><div class="v2-small v2-muted">${clean(m.uid===user.uid?'تطبيقك':m.devName||m.name)}</div></div></div>`).join('')}</div>
-  <button type="button" class="v2-btn v2-btn-ghost v2-btn-block v2-danger" style="margin-top:12px" data-v2="pack-leave">أطلع من المجموعة${me?.paid?` (ترجعلك ${v2n(me.paid)} عملة)`:' (يرجعلك الدخول المجاني)'}</button>`;
+  <button type="button" class="v2-btn v2-btn-ghost v2-btn-block v2-danger" style="margin-top:12px" data-v2="pack-leave">أطلع من المجموعة${me?.paid?` (ترجعلك ${v2n(me.paid)} عملة)`:' (يرجعلك الدخول المجاني)'}</button><p class="v2-small v2-muted" style="text-align:center;margin:8px 0 0">إذا طلعت ما تگدر ترجع لهاي المجموعة؛ تدخل الجاية.</p>`;
  const total=others.length,done=others.filter(m=>mine.confirmed.has(m.uid)).length,need=packNeeded(total),strikes=me?.strikes||0;
  return `${coins}<section class="v2-card v2-hero"><div class="v2-row v2-between"><span class="v2-tag v2-tag-glass">مجموعة #${v2n(pack.number)} · ${v2n(mine.members.length)} عضو</span><span class="v2-small v2-muted">اليوم ${v2n(mine.day)} من ${v2n(PACK_DAYS)}</span></div>
   <h3 style="margin:12px 0 4px">اختبرت ${v2n(done)} من ${v2n(total)} تطبيق اليوم</h3>
@@ -241,8 +251,8 @@ function v2OpenGroup(){
  <section class="v2-card v2-hero"><div class="v2-row v2-between"><span class="v2-tag v2-tag-glass">مجموعة #${v2n(o.number)}</span><span class="v2-small v2-muted">مفتوحة هسه</span></div>
   <h3 style="margin:12px 0 2px">${v2n(o.memberCount)} من ${v2n(PACK_SIZE)} مقعد</h3>
   <p class="v2-muted v2-small" style="margin:0">${free?`باقي ${v2n(free)} ${free===1?'مقعد':'مقاعد'}. تبدي أول ما تكتمل.`:'اكتملت. تنفتح الجاية تلقائياً.'}</p>
-  ${packSeats(o.memberCount)}
-  ${inThis?`<span class="v2-tag" style="background:#fff;color:var(--green)">انضميت — ترتيبك ${v2n(mine.me?.order||0)}</span>`:busy?`<button type="button" class="v2-btn v2-btn-white v2-btn-block" disabled>انت بمجموعة أصلاً</button>`:`<button type="button" class="v2-btn v2-btn-white v2-btn-block" data-v2="pack-join-open">انضم بـ 3 خطوات${cost?` · ${v2n(cost)} عملة`:' · مجاناً'}</button>`}</section>
+  ${packSeats(o.memberCount,o.id)}
+  ${inThis?`<span class="v2-tag" style="background:#fff;color:var(--green)">انضميت — ترتيبك ${v2n(mine.me?.order||0)}</span>`:(P.left||[]).includes(o.id)?`<button type="button" class="v2-btn v2-btn-white v2-btn-block" disabled>طلعت من هاي المجموعة — انتظر الجاية</button>`:busy?`<button type="button" class="v2-btn v2-btn-white v2-btn-block" disabled>انت بمجموعة أصلاً</button>`:`<button type="button" class="v2-btn v2-btn-white v2-btn-block" data-v2="pack-join-open">انضم بـ 3 خطوات${cost?` · ${v2n(cost)} عملة`:' · مجاناً'}</button>`}</section>
  ${packHow()}`;
 }
 // Three steps: the Google Group, the new app, then adding the group to the app and the seat.
