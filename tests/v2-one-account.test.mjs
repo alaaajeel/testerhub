@@ -70,5 +70,5 @@ test('V2 files are shipped and cached for offline use',()=>{
  const sw=readFileSync(new URL('../sw.js',import.meta.url),'utf8');
  assert.match(html,/<script src="\.\/src\/v2\/views\.js"><\/script>/);
  assert.match(html,/<link rel="stylesheet" href="\.\/src\/v2\/theme\.css" \/>/);
- assert.match(sw,/'\.\/src\/v2\/views\.js','\.\/src\/v2\/theme\.css'/);
+ assert.match(sw,/'\.\/src\/v2\/views\.js','\.\/src\/v2\/packs\.js','\.\/src\/v2\/theme\.css'/);
 });

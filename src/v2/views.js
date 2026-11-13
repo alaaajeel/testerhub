@@ -44,9 +44,11 @@ function v2Catalog(){
   const age=Date.now()-v2Ms(o.updatedAt);
   items.push({kind:'open',id:o.id,name:o.name,dev:o.ownerName||'',slots:Math.max(1,Number(o.slots)||V2_NEED),request:requests.get(o.id)||null,isNew:Number.isFinite(age)&&age<3*86400000});
  }
- return items;
+ // Apps in exchange packs: public to every member of the TesterHub Google Group; boosted ones go first.
+ const packApps=(dashboard.packs?.apps||[]).filter(c=>!seen.has('pack:'+c.id)).map(c=>({kind:'packapp',id:c.id,name:c.appName,dev:c.devName||'',card:c,boosted:typeof packBoosted==='function'&&packBoosted(c),isNew:Date.now()-packMs(c.createdAt||c.boostedAt)<3*86400000}));
+ return [...packApps.filter(x=>x.boosted),...items,...packApps.filter(x=>!x.boosted)];
 }
-function v2Needs(x){return x.kind==='open'||(x.kind==='mine'&&x.status==='recruiting'&&x.testers<x.need)}
+function v2Needs(x){return x.kind==='open'||x.kind==='packapp'||(x.kind==='mine'&&x.status==='recruiting'&&x.testers<x.need)}
 function v2Home(){
  const q=V2.q.trim(),all=v2Catalog();
  const list=all.filter(x=>{
@@ -72,14 +74,17 @@ function v2AppCard(x){
   const a=x.a,done=v2DoneToday(a);
   status=a.invitationStatus==='pending'?v2Tag('t-blue','دعوة جديدة'):!a.joinedDay?v2Tag('t-amber','كمّل الانضمام'):v2Expired(a)?v2Tag('t-green','انتهى'):done?v2Tag('t-green','تم اليوم'):v2Tag('t-amber','مطلوب اليوم');
   line=`<span>${v2n((a.checkins||[]).length)} تقرير يومي</span>`;pct=Math.min(100,x.day/14*100);right=a.joinedDay?`اليوم ${v2n(x.day)} من 14`:'ما بدأ بعد';
+ }else if(x.kind==='packapp'){
+  status=x.boosted?v2Tag('t-amber','مميّز'):x.card.ownerUid===user.uid?v2Tag('t-blue','تطبيقك'):v2Tag('t-blue','مجموعات التبادل');
+  line=`<span>${clean(String(x.card.description||'مفتوح لأعضاء مجموعة TesterHub').slice(0,60))}</span>`;pct=0;right='';
  }else{
   const r=x.request;
   status=r?.status==='waiting'?v2Tag('t-amber','بالانتظار'):r?.status==='approved'?v2Tag('t-green','انقبلت'):x.isNew?v2Tag('t-blue','جديد'):v2Tag('t-blue','يحتاج مختبرين');
   line=`<span>يحتاج <b>${v2n(x.slots)}</b> مختبر</span>`;pct=0;right='مفتوح هسه';
  }
  return `<button type="button" class="v2-card v2-appcard" data-v2="open-item" data-kind="${x.kind}" data-id="${clean(x.id)}" aria-label="${clean(x.name)} — تفاصيل">
-  <span class="v2-row">${v2Icon(x.name,x.id)}<span class="v2-grow"><span class="v2-row v2-between"><b class="v2-h3">${clean(x.name)}</b>${status}</span><span class="v2-meta">${clean(x.dev||'')}${x.dev?' · ':''}اختبار مغلق</span></span></span>
-  <span><span class="v2-row v2-between v2-small" style="margin-bottom:6px">${line}<span class="v2-muted">${right}</span></span>${v2Bar(pct)}</span>
+  <span class="v2-row">${x.kind==='packapp'?packIcon(x.card,x.card.ownerUid):v2Icon(x.name,x.id)}<span class="v2-grow"><span class="v2-row v2-between"><b class="v2-h3">${clean(x.name)}</b>${status}</span><span class="v2-meta">${clean(x.dev||'')}${x.dev?' · ':''}اختبار مغلق</span></span></span>
+  <span><span class="v2-row v2-between v2-small" style="margin-bottom:6px">${line}<span class="v2-muted">${right}</span></span>${x.kind==='packapp'?'':v2Bar(pct)}</span>
  </button>`;
 }
 
@@ -88,25 +93,7 @@ function v2Groups(){
  return `<div class="v2-seg" role="tablist"><button type="button" class="${V2.groupView==='mine'?'on':''}" data-v2="gview" data-k="mine" role="tab" aria-selected="${V2.groupView==='mine'}">مجموعتي</button><button type="button" class="${V2.groupView==='open'?'on':''}" data-v2="gview" data-k="open" role="tab" aria-selected="${V2.groupView==='open'}">المجموعة المفتوحة</button></div>
  ${V2.groupView==='mine'?v2MyGroup():v2OpenGroup()}`;
 }
-function v2MyGroup(){
- const joined=typeof groupJoined==='function'&&groupJoined();
- return `<section class="v2-card v2-hero"><div class="v2-row v2-between"><span class="v2-tag v2-tag-glass">مجموعة Google · TesterHub</span><span class="v2-small v2-muted">${joined?'انضميت ✓':'خطوة وحدة'}</span></div>
-  <h3 style="margin:12px 0 4px">${joined?'انت عضو بمجموعة TesterHub':'انضم لمجموعة TesterHub مرة وحدة'}</h3>
-  <p class="v2-muted v2-small" style="margin:0 0 12px">المطور يضيف بريد المجموعة بـ Play Console، وكل الأعضاء يگدرون ينضمون لاختباره بدون نسخ إيميلات.</p>
-  <div class="v2-row"><a class="v2-btn v2-btn-white" href="${OFFICIAL_GROUP.url}" target="_blank" rel="noopener noreferrer">${joined?'فتح المجموعة':'انضم للمجموعة'}</a>${joined?'':`<button type="button" class="v2-btn v2-btn-glass" data-action="group-joined">انضميت ✓</button>`}</div></section>
- <div class="v2-card" style="margin-top:12px"><div class="v2-row v2-between"><div><b class="v2-h3">بريد المجموعة</b><p class="v2-small v2-muted" style="margin:4px 0 0">للمطور: ضيفه بقائمة Google Groups بالاختبار المغلق</p></div><button type="button" class="v2-btn v2-btn-soft v2-btn-sm" data-action="copy-group-email">نسخ</button></div><div class="v2-code email-ltr">${OFFICIAL_GROUP.email}</div></div>
- <h2 class="v2-h2">مجموعة التبادل</h2>
- <div class="v2-card v2-empty-card"><b>ما عندك مجموعة تبادل بعد</b><p class="v2-small v2-muted">16 عضو، كل واحد يختبر تطبيقات الباقين 16 يوم. تنفتح قريباً من «المجموعة المفتوحة».</p><button type="button" class="v2-btn v2-btn-soft" data-v2="gview" data-k="open">شوف المجموعة المفتوحة</button></div>`;
-}
-function v2OpenGroup(){
- const size=16;
- return `<section class="v2-card v2-hero"><div class="v2-row v2-between"><span class="v2-tag v2-tag-glass">مجموعة #1</span><span class="v2-small v2-muted">قريباً</span></div>
-  <h3 style="margin:12px 0 2px">0 من ${size} مقعد</h3><p class="v2-muted v2-small" style="margin:0">الطابور ينفتح لما تجهز قواعد الالتزام والتحقق.</p>
-  <div class="v2-seats" aria-hidden="true">${Array.from({length:size},()=>'<i></i>').join('')}</div>
-  <button type="button" class="v2-btn v2-btn-white v2-btn-block" disabled>الانضمام قريباً</button></section>
- <h2 class="v2-h2">شلون تشتغل المجموعة</h2>
- <div class="v2-card">${[['16 عضو، 16 يوم','كل عضو يختبر تطبيقات الـ 15 الباقين يومياً، وهم يختبرون تطبيقه.'],['مجموعة وحدة مفتوحة بالوقت','لما تكتمل تبدي، وتنفتح الجاية. الأولوية لأول الداخلين.'],['إنذار تلقائي','إذا ما أكدت تطبيقات اليوم ينحسب إنذار. 3 إنذارات = تطلع ومقعدك ينفتح للطابور.'],['إيميلك للأعضاء بس','وبموافقتك، حتى يضيفوك للاختبار المغلق.']].map(([t,d],i)=>`<div class="v2-check-item"><span class="v2-num">${v2n(i+1)}</span><div><b>${t}</b><p class="v2-small v2-muted" style="margin:2px 0 0">${d}</p></div></div>`).join('')}</div>`;
-}
+// «مجموعتي» and «المجموعة المفتوحة» are the exchange packs: see src/v2/packs.js.
 
 // ---------- اختباراتي ----------
 function v2Tests(){
@@ -162,7 +149,7 @@ function v2Account(){
  const links=[['rewards','دوري المساهمين'],['announcements','مركز الإشعارات'],['help','مركز المساعدة'],...(api.isDemo?[]:[['support','رسائل الإدارة'+(unreadSupport().length?' ('+v2n(unreadSupport().length)+')':'')]]),...(mineProjects().length?[['testers','المختبرون المتاحون']]:[])];
  return `<section class="v2-card" style="margin-top:6px">
   <div class="v2-row">${photo?`<img class="v2-avatar" src="${clean(photo)}" alt="" width="56" height="56">`:`<span class="v2-appicon v2-avatar" aria-hidden="true">${clean(String(m.name||'؟').trim().charAt(0)||'؟')}</span>`}<div class="v2-grow"><b class="v2-h3">${clean(m.name)}</b><div class="v2-small v2-muted email-ltr" style="text-align:right">${clean(m.email||'')}</div></div><span class="v2-tag t-blue">المستوى ${v2n(level)}</span></div>
-  <div class="v2-row" style="margin-top:14px"><div class="v2-stat"><b>${v2n(xp)}</b><span class="v2-small v2-muted">XP</span></div><div class="v2-stat"><b>${v2n(primaryAssignments().length)}</b><span class="v2-small v2-muted">أختبرها</span></div><div class="v2-stat"><b>${v2n(mineProjects().length)}</b><span class="v2-small v2-muted">تطبيقاتي</span></div></div>
+  <div class="v2-row" style="margin-top:14px"><div class="v2-stat"><b>${v2n(xp)}</b><span class="v2-small v2-muted">XP</span></div><div class="v2-stat"><b>${v2n(primaryAssignments().length)}</b><span class="v2-small v2-muted">أختبرها</span></div><div class="v2-stat"><b>${v2n(dashboard.packs?.coins?.balance||0)}</b><span class="v2-small v2-muted">عملة</span></div></div>
  </section>
  ${adminAuthorized?`<a class="v2-btn v2-btn-primary v2-btn-block" style="margin-top:12px" href="./admin.html">${ico('shield',18)} لوحة إدارة المنصة</a>`:''}
  <h2 class="v2-h2">الإعدادات</h2>
@@ -187,9 +174,11 @@ const v2StepRow=(n,t,d,st)=>`<div class="v2-step ${st}"><span class="v2-num">${s
 function v2Sheet(){
  const s=V2.sheet;if(!s||!user)return '';
  let body='';
- try{body=s.kind==='test'?v2TestSheet(s):s.kind==='open'?v2OpenSheet(s):s.kind==='report'?v2ReportSheet(s):s.kind==='add'?v2AddSheet(s):''}catch(err){console.warn('Sheet:',err);body=''}
+ try{body=s.kind==='test'?v2TestSheet(s):s.kind==='open'?v2OpenSheet(s):s.kind==='report'?v2ReportSheet(s):s.kind==='add'?v2AddSheet(s):s.kind==='pack'?packSheet(s):s.kind==='pack-app'?packAppSheet(s):''}catch(err){console.warn('Sheet:',err);body=''}
  if(!body){V2.sheet=null;return ''}
- return `<div class="v2-sheet-wrap" role="dialog" aria-modal="true" aria-label="${clean(s.title||'تفاصيل')}"><button type="button" class="v2-sheet-backdrop" data-v2="close" aria-label="إغلاق"></button><div class="v2-sheet"><div class="v2-grab"></div>${body}</div></div>`;
+ // Slides up once when it opens; the next steps re-render in place without replaying it.
+ const first=!s.shown;s.shown=true;
+ return `<div class="v2-sheet-wrap" role="dialog" aria-modal="true" aria-label="${clean(s.title||'تفاصيل')}"><button type="button" class="v2-sheet-backdrop" data-v2="close" aria-label="إغلاق"></button><div class="v2-sheet${first?' v2-sheet-in':''}"><div class="v2-grab"></div>${body}</div></div>`;
 }
 function v2TestSheet(s){
  const a=primaryAssignments().find(x=>x.id===s.id);if(!a)return '';
@@ -261,12 +250,21 @@ async function v2EnsureTesters(){
  if(dashboard.testersLoaded)return;
  const list=await api.loadTesters();dashboard={...dashboard,testers:list,testersLoaded:true};
 }
+// Re-rendering the open sheet must never wipe what is being typed in it.
+function v2KeepTyped(){
+ const s=V2.sheet;if(!s)return;
+ const val=id=>document.getElementById(id)?.value;
+ if(s.kind==='add'){if(val('v2-an')!=null)s.name=val('v2-an');if(val('v2-au')!=null)s.link=val('v2-au');if(val('v2-at')!=null)s.tasks=val('v2-at')}
+ if(s.kind==='report'&&val('v2-note')!=null)s.notes=val('v2-note');
+ if(s.kind==='pack'&&typeof packKeepTyped==='function')packKeepTyped(s);
+}
 
 // ---------- Events. Returns true when the click was handled here. ----------
 function v2Click(button){
  const k=button.dataset.v2;
- if(button.dataset.tab==='new'&&!k){V2.sheet={kind:'add',step:1};pending(async()=>{await v2EnsureTesters();render();v2SheetFocus()});return true}
+ if(button.dataset.tab==='new'&&!k){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2KeepTyped();render()});return true}
  if(!k)return false;
+ if(k.startsWith('pack-'))return packClick(button);
  const s=V2.sheet;
  if(k==='close'){V2.sheet=null;render();return true}
  if(k==='filter'){V2.filter=button.dataset.k;render();return true}
@@ -276,6 +274,7 @@ function v2Click(button){
  if(k==='open-item'){
   const kind=button.dataset.kind,id=button.dataset.id;
   if(kind==='mine'){selectedProjectId=id;tab='details';render();return true}
+  if(kind==='packapp'){V2.sheet={kind:'pack-app',id};render();v2SheetFocus();return true}
   V2.sheet={kind,id};render();v2SheetFocus();return true;
  }
  if(k==='report-open'){V2.sheet={kind:'report',id:button.dataset.id,step:1,outcome:null,notes:null};render();v2SheetFocus();return true}
@@ -290,7 +289,7 @@ function v2Click(button){
   pending(async()=>{const result=await api.submitDailyReport(s.id,{outcome:s.outcome,notes,retestOf:retest?.id||''});V2.sheet=null;selectedAssignmentId=s.id;await refresh();toast(result?.alreadySaved?'تقرير اليوم محفوظ من قبل':'انرسل التقرير · ‎+10 XP بعد قبوله')});
   return true;
  }
- if(k==='add-open'){V2.sheet={kind:'add',step:1};pending(async()=>{await v2EnsureTesters();render();v2SheetFocus()});return true}
+ if(k==='add-open'){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2KeepTyped();render()});return true}
  if(k==='add-back'&&s){if(s.step===2)s.tasks=document.getElementById('v2-at')?.value??s.tasks;s.step--;render();return true}
  if(k==='add-next'&&s){
   if(s.step===1){

@@ -19,26 +19,27 @@ test('every account has the same four sections, in order, and no role switch',as
  await expect(page.locator('.nav [data-tab="home"]')).toHaveClass(/active/);
 });
 
+const OWN='.v2-appcard:not([data-kind="packapp"])';
 test('home: hero with today\'s work, search, four filters and one card per app',async({page})=>{
  await open(page,'tester');
  await expect(page.locator('.v2-hero')).toContainText('هلا مختبر');
  await expect(page.locator('.v2-chip')).toHaveText(['الكل','يحتاج مختبرين','جديد','أختبرها']);
- await expect(page.locator('.v2-appcard')).toHaveCount(3);
+ await expect(page.locator(OWN)).toHaveCount(3);
  await page.locator('#v2-q').fill('Fit');
- await expect(page.locator('.v2-appcard')).toHaveCount(1);
+ await expect(page.locator(OWN)).toHaveCount(1);
  await expect(page.locator('#v2-q')).toBeFocused();
  await page.locator('#v2-q').fill('لا يوجد');
  await expect(page.locator('.v2-empty')).toContainText('ماكو تطبيقات بهذا البحث');
  await page.locator('#v2-q').fill('');
  await page.locator('.v2-chip[data-k="mine"]').click();
  await expect(page.locator('.v2-chip[data-k="mine"]')).toHaveAttribute('aria-selected','true');
- await expect(page.locator('.v2-appcard')).toHaveCount(3);
+ await expect(page.locator(OWN)).toHaveCount(3);
  await expect(page.locator('.v2-fab')).toBeVisible();
 });
 
 test('one account: my apps and the apps I test sit together',async({page})=>{
  await open(page,'developer');
- const cards=page.locator('.v2-appcard');
+ const cards=page.locator(OWN);
  await expect(cards).toHaveCount(3);
  await expect(cards.first()).toContainText('MediaPro');
  await expect(cards.first()).toContainText('20 من 12 مختبر');
@@ -119,15 +120,14 @@ test('tester: an invitation sheet shows where they are in the three steps',async
  await expect(page.locator('.v2-sheet [data-v2="report-open"]')).toBeVisible();
 });
 
-test('«المجموعات» is honest: the exchange group is marked as coming, with nothing to press',async({page})=>{
+test('«المجموعات» is the exchange packs: «مجموعتي» and «المجموعة المفتوحة»',async({page})=>{
  await open(page,'tester');
  await page.locator('.nav [data-tab="groups"]').click();
  await expect(page.locator('.v2-seg button')).toHaveText(['مجموعتي','المجموعة المفتوحة']);
- await expect(page.locator('.v2-card:not(.v2-hero)',{hasText:'بريد المجموعة'})).toContainText('testerhubiq@googlegroups.com');
+ await expect(page.locator('.v2-hero')).toContainText('مجموعة #1');
  await page.locator('.v2-seg [data-k="open"]').click();
- await expect(page.locator('.v2-hero')).toContainText('قريباً');
+ await expect(page.locator('.v2-hero')).toContainText('من 16 مقعد');
  await expect(page.locator('.v2-seats i')).toHaveCount(16);
- await expect(page.locator('.v2-hero button')).toBeDisabled();
 });
 
 test('«اختباراتي» has both sides: what I test and my own apps',async({page})=>{
@@ -170,9 +170,9 @@ test('the new screens and sheets fit a phone without sideways scrolling',async({
 test('an app name with HTML stays text on the new cards and sheets',async({page})=>{
  await open(page,'tester');
  await page.evaluate(async()=>{const d=demoState();d.assignments.find(a=>a.testerUid==='t1').name='<img src=x onerror="window.pwned=1">';save(d);await refresh();tab='home';render()});
- await expect(page.locator('.v2-appcard').first()).toContainText('<img src=x');
- await page.locator('.v2-appcard').first().click();
+ await expect(page.locator(OWN).first()).toContainText('<img src=x');
+ await page.locator(OWN).first().click();
  await expect(page.locator('.v2-sheet')).toContainText('<img src=x');
- await expect(page.locator('.page img, .v2-sheet img')).toHaveCount(0);
+ await expect(page.locator('.page img:not(.v2-appicon), .v2-sheet img')).toHaveCount(0);
  expect(await page.evaluate(()=>window.pwned)).toBeUndefined();
 });
