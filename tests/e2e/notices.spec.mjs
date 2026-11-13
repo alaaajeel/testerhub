@@ -10,22 +10,22 @@ async function openApp(page,role='tester',notices=[]){
 }
 const n=(id,extra={})=>({id,kind:'announcement',audience:'all',broadcast:true,targetUid:'',title:'عنوان '+id,body:'نص '+id,active:true,createdAt:ago(1),...extra});
 
-test('a tester sees unread admin notices on the bell, and opening it marks them read',async({page})=>{
- await openApp(page,'tester',[n('a1',{kind:'update',title:'تحديث جديد للمنصة'}),n('a2',{audience:'testers',kind:'instruction',title:'تعليمات للمختبرين'}),n('a3',{audience:'developers',title:'للمطورين فقط'})]);
+test('one account sees unread admin notices for both sides on the bell, and opening it marks them read',async({page})=>{
+ await openApp(page,'tester',[n('a1',{kind:'update',title:'تحديث جديد للمنصة'}),n('a2',{audience:'testers',kind:'instruction',title:'تعليمات للمختبرين'}),n('a3',{audience:'developers',title:'للمطورين'})]);
  const before=await page.evaluate(()=>noticeBadgeCount());
- expect(await page.evaluate(()=>unreadAdminNotices().length)).toBe(2);
+ expect(await page.evaluate(()=>unreadAdminNotices().length)).toBe(3);
  await page.locator('[data-action="notice"]').click();
  const sheet=page.locator('.notices-sheet');
  await expect(sheet.locator('.notice-section-title',{hasText:'إعلانات الإدارة'})).toBeVisible();
- await expect(sheet.locator('.admin-notice')).toHaveCount(2);
- await expect(sheet.locator('.admin-notice.unread')).toHaveCount(2);
+ await expect(sheet.locator('.admin-notice')).toHaveCount(3);
+ await expect(sheet.locator('.admin-notice.unread')).toHaveCount(3);
  await expect(sheet).toContainText('تحديث جديد للمنصة');
  await expect(sheet).toContainText('تعليمات مهمة');
- await expect(sheet).not.toContainText('للمطورين فقط');
+ await expect(sheet).toContainText('للمطورين');
  expect(await page.evaluate(()=>demoState().noticeReadAt.t1)).toBeGreaterThan(0);
  await page.locator('.notices-header [data-action="close-notices"]').click();
  expect(await page.evaluate(()=>unreadAdminNotices().length)).toBe(0);
- expect(before).toBeGreaterThanOrEqual(2);
+ expect(before).toBeGreaterThanOrEqual(3);
  // Everything listed when the bell opened is now seen.
  expect(await page.evaluate(()=>noticeBadgeCount())).toBe(0);
 });
@@ -50,11 +50,11 @@ test('a private notice reaches only its target',async({page})=>{
  await expect(page.locator('.notices-sheet')).not.toContainText('رسالة خاصة لك');
 });
 
-test('developers see developer and all-user notices',async({page})=>{
+test('the same account sees notices sent to developers and to testers',async({page})=>{
  await openApp(page,'developer',[n('d1',{audience:'developers',title:'تحديث للمطورين'}),n('d2',{audience:'testers',title:'للمختبرين'})]);
  await page.locator('[data-action="notice"]').click();
  await expect(page.locator('.notices-sheet')).toContainText('تحديث للمطورين');
- await expect(page.locator('.notices-sheet')).not.toContainText('للمختبرين');
+ await expect(page.locator('.notices-sheet')).toContainText('للمختبرين');
 });
 
 test('notices fit a phone screen',async({page})=>{

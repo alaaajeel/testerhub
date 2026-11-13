@@ -37,9 +37,10 @@ test('public names are opt-in, limited to the profile name, and removable by the
  assert.match(html,/data-change="league-name" \$\{show\?'checked':''\}/);
  assert.doesNotMatch(from('function leagueRow(','function leagueSection('),/email/);
 });
-test('both roles reach the league; no money or prize wording',()=>{
- assert.match(html,/\['rewards','دوري المساهمين'\],\['profile','حسابي'\]\]:\[\['home'/);
- assert.match(html,/chat:chatPage,support:supportPage,(help:helpPage,)?rewards,announcements:announcementsPage,profile\}/);
+test('every account reaches the league; no money or prize wording',()=>{
+ const v2=readFileSync(new URL('../src/v2/views.js',import.meta.url),'utf8');
+ assert.match(v2,/\['rewards','دوري المساهمين'\]/);
+ assert.match(html,/support:supportPage,help:helpPage,rewards,announcements:announcementsPage\}/);
  const page=from('function leagueSection(','function rewards(');
  assert.doesNotMatch(page,/دينار|دولار|USD|جائزة مالية|سحب/);
 });

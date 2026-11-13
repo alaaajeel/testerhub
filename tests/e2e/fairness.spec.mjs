@@ -108,12 +108,14 @@ test('today\'s report in 3 taps: open the app, «اشتغل بدون مشاكل�
   save(d);user=await api.switchDemo('tester');tab='home';await refresh();
   window.open=()=>{};
  },utcDaysAgo(1));
- const card=page.locator('.daily-test');
- await card.locator('[data-action="open-app"]').click();          // 1
- await card.locator('label.ok').click();                          // 2
- await expect(card.locator('#test-note')).toHaveValue(/«جرّب تسجيل الدخول»/);
- await card.locator('button[type="submit"]').click();             // 3
- await expect(page.locator('#toast')).toContainText('تم إرسال تقريرك');
+ await page.locator('.nav [data-tab="tests"]').click();
+ await page.locator('.v2-test',{hasText:'Tap App'}).locator('[data-v2="report-open"]').click();
+ const sheet=page.locator('.v2-sheet');
+ await sheet.locator('[data-v2="rep-tried"]').click();                    // 1
+ await sheet.locator('[data-v2="rep-res"][data-k="ok"]').click();         // 2
+ await expect(sheet.locator('#v2-note')).toHaveValue(/«جرّب تسجيل الدخول»/);
+ await sheet.locator('[data-v2="rep-send"]').click();                     // 3
+ await expect(page.locator('#toast')).toContainText('انرسل التقرير');
  const r=await page.evaluate(()=>demoState().reports.find(r=>r.assignmentId==='tap_t1'));
  expect(r.outcome).toBe('ok');expect(r.notes).toContain('جرّب تسجيل الدخول');
 });
@@ -127,14 +129,23 @@ test('the suggested note never overwrites what the tester typed, and a problem n
   d.assignments.unshift({id:'tap_t1',projectId:'tap',testerUid:'t1',ownerUid:'d1',name:'Tap App',link:'https://play.google.com/apps/testing/com.example.tap',tasks:['جرّب تسجيل الدخول'],invitationStatus:'accepted',joinedDay:joined,checkins:[]});
   save(d);user=await api.switchDemo('tester');tab='home';await refresh();
  },utcDaysAgo(1));
- const card=page.locator('.daily-test'),note=card.locator('#test-note');
- await card.locator('label.ok').click();
- await card.locator('label.issue').click();
+ await page.locator('.nav [data-tab="tests"]').click();
+ await page.locator('.v2-test',{hasText:'Tap App'}).locator('[data-v2="report-open"]').click();
+ const sheet=page.locator('.v2-sheet'),note=sheet.locator('#v2-note');
+ await sheet.locator('[data-v2="rep-tried"]').click();
+ await sheet.locator('[data-v2="rep-res"][data-k="ok"]').click();
+ await expect(note).toHaveValue(/جرّب تسجيل الدخول/);
+ await sheet.locator('[data-v2="rep-back"]').click();
+ await sheet.locator('[data-v2="rep-res"][data-k="issue"]').click();
  await expect(note).toHaveValue('');
  await expect(note).toBeFocused();
  await note.fill('زر الدخول ما يستجيب أول مرة');
- await card.locator('label.ok').click();
+ await sheet.locator('[data-v2="rep-back"]').click();
+ await sheet.locator('[data-v2="rep-res"][data-k="ok"]').click();
  await expect(note).toHaveValue('زر الدخول ما يستجيب أول مرة');
+ // A problem still needs the tester's own words.
+ await note.fill('');await sheet.locator('[data-v2="rep-send"]').click();
+ await expect(sheet.locator('#v2-err')).toContainText('10 أحرف');
 });
 
 test('an app name with HTML stays text in the gate card and the refusal',async({page})=>{

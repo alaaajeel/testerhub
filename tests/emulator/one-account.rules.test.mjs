@@ -40,7 +40,8 @@ test('consent, not the current view, decides who appears to developers', async (
  await assertFails(getDoc(doc(d, 'users', 'hidden')));
  await assertFails(getDoc(doc(d, 'users', 'c')));
  await assertFails(getDocs(collection(d, 'users')));
- await assertFails(getDocs(query(collection(db('a'), 'users'), where('available', '==', true))), 'only the developer view may browse');
+ // V2: one account. Any verified member may list who consented; hidden and unconsented stay out (above).
+ await assertSucceeds(getDocs(query(collection(db('a'), 'users'), where('available', '==', true))));
 });
 test('two people can exchange tests, whichever view the other is in', async () => {
  await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'users', 'a'), {role: 'developer'}));
@@ -63,15 +64,29 @@ test('an unverified account may switch view but gains nothing from it', async ()
  await assertFails(publishBatch(db('a', false), 'a', 'nope', project('a', ['b'])).commit());
  await assertFails(getDocs(query(collection(db('a', false), 'users'), where('available', '==', true))));
 });
-test('projects still need the developer view, and work survives switching away', async () => {
+test('V2: the stored role is not a gate; ownership is', async () => {
+ // 'a' is stored as a tester and may still publish its own app.
  await allowPublish(env, 'a');
- await assertFails(publishBatch(db('a'), 'a', 'nope', project('a', ['b'])).commit());
+ await assertSucceeds(publishBatch(db('a'), 'a', 'mine', project('a', ['b'])).commit());
+ // Nobody may publish in someone else's name or touch their app.
+ await assertFails(publishBatch(db('a'), 'b', 'forged', project('b', ['a'])).commit());
  await publish(env, db('b'), 'b', 'keep', project('b', ['a']));
  await updateDoc(doc(db('b'), 'users', 'b'), {role: 'tester'});
  await assertSucceeds(getDoc(doc(db('b'), 'projects', 'keep')));
- await assertFails(updateDoc(doc(db('b'), 'projects', 'keep'), {selectedTesterUids: ['a', 'c'], testersCount: 2}));
+ await assertFails(updateDoc(doc(db('a'), 'projects', 'keep'), {name: 'Stolen'}));
+ await assertFails(getDoc(doc(db('a'), 'projects', 'keep')));
 });
 test('the other view can be counted for the home reminder', async () => {
  await assertSucceeds(getDocs(query(collection(db('a'), 'assignments'), where('testerUid', '==', 'a'))));
  await assertSucceeds(getDocs(query(collection(db('a'), 'reports'), where('ownerUid', '==', 'a'), where('outcome', '==', 'issue'), where('status', '==', 'new'))));
+});
+test('V2 attack: a suspended or unverified account gains nothing from developer() = verified()', async () => {
+ await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'users', 'a'), {suspended: true, available: false}));
+ await allowPublish(env, 'a');
+ await assertFails(publishBatch(db('a'), 'a', 'susp', project('a', ['b'])).commit());
+ await assertFails(getDocs(query(collection(db('a'), 'users'), where('available', '==', true))));
+ await allowPublish(env, 'c');
+ await assertFails(publishBatch(db('c', false), 'c', 'unv', project('c', ['b'])).commit());
+ // Listing everyone (not only those who consented) stays closed to every member.
+ await assertFails(getDocs(collection(db('b'), 'users')));
 });

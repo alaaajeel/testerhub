@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {sendReportViaSheet} from './demo-helpers.mjs';
 // Phase 3 league in Chromium, using the on-device demo store. Read and write permissions are proven in
 // tests/emulator/league.rules.test.mjs.
 
@@ -24,7 +25,7 @@ async function seedLeague(page,{others=3,mine=null,names={}}={}){
   d.publicProfiles=names;save(d);
  },{others,mine,names});
  await page.evaluate(async()=>{user=await api.switchDemo('tester');tab='home';await refresh()});
- await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
+ await page.locator('.nav [data-tab="profile"]').click();await page.locator('.v2-linkrow[data-tab="rewards"]').click();
  await expect(page.locator('.league-list')).not.toContainText('جاري تحميل');
 }
 
@@ -98,24 +99,22 @@ test('a volunteer with no app of their own joins the league after an accepted re
   save(d);user=await api.switchDemo('tester');tab='home';await refresh();
  },utcDaysAgo(1));
  expect(await page.evaluate(()=>demoState().projects.some(p=>p.ownerUid==='t1'))).toBe(false);
- await page.locator('#daily-report-form label.ok').click();
- await page.locator('#daily-report-form textarea').fill('جرّبت التسجيل وفتح الحساب واشتغل');
- await page.locator('#daily-report-form button[type="submit"]').click();
- await expect(page.locator('.daily-test.saved')).toBeVisible();
+ await sendReportViaSheet(page,'League App',{outcome:'ok',notes:'جرّبت التسجيل وفتح الحساب واشتغل'});
+ await expect(page.locator('.v2-test .v2-saved')).toBeVisible();
  await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();selectedProjectId='lg';tab='details';render()});
  await page.locator('.report-record').first().locator('[data-decision="accepted"]').click();
  await expect(page.locator('#toast')).toContainText('XP');
  await page.evaluate(async()=>{user=await api.switchDemo('tester');tab='home';await refresh()});
- await page.locator('.nav [data-tab="profile"]').click();await page.locator('.shortcuts [data-tab="rewards"]').click();
+ await page.locator('.nav [data-tab="profile"]').click();await page.locator('.v2-linkrow[data-tab="rewards"]').click();
  await expect(page.locator('.league-row.mine')).toContainText('١٠ XP');
  await expect(page.locator('.badge-row')).toContainText('أول تقرير مقبول');
 });
 
-test('developers reach the same league from the menu',async({page})=>{
+test('every account reaches the same league from «حسابي»',async({page})=>{
  await openPreview(page);await seedLeague(page,{mine:10});
  await page.evaluate(async()=>{user=await api.switchDemo('developer');tab='home';await refresh()});
- await page.locator('[data-action="open-menu"]').click();
- await page.locator('[data-action="menu-tab"][data-target="rewards"]').click();
+ await page.locator('.nav [data-tab="profile"]').click();
+ await page.locator('.v2-linkrow[data-tab="rewards"]').click();
  await expect(page.locator('.league')).toContainText('دوري المساهمين');
  await expect(page.locator('.league-row').first()).toBeVisible();
 });

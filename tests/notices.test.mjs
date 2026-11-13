@@ -17,9 +17,8 @@ const list=[
  {id:'gone',audience:'all',active:false,createdAt:at('2026-11-04T10:00:00Z')},
  {id:'mine',audience:'user',targetUid:'t1',active:true,createdAt:at('2026-11-05T10:00:00Z')}
 ];
-test('members see broadcasts for their current side plus their own notices, newest first, never withdrawn ones',()=>{
- assert.deepEqual(n.noticesFor(list,'tester').map(x=>x.id),['mine','test','all']);
- assert.deepEqual(n.noticesFor(list,'developer').map(x=>x.id),['mine','dev','all']);
+test('one account sees broadcasts to both sides plus its own notices, newest first, never withdrawn ones',()=>{
+ assert.deepEqual(n.noticesFor(list).map(x=>x.id),['mine','dev','test','all']);
  assert.deepEqual(Object.keys(n.NOTICE_KINDS),['announcement','update','instruction']);
 });
 test('the app reads broadcasts and its own notices with separate, rule-provable queries',()=>{

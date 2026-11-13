@@ -18,7 +18,9 @@ service cloud.firestore {
     function verified() { return signedIn() && request.auth.token.email_verified == true && me().data.get('suspended',false) != true; }
     function self(uid) { return signedIn() && request.auth.uid == uid; }
     function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
-    function developer() { return verified() && me().data.role == 'developer'; }
+    // V2: one account both publishes and tests. The stored role was always self-editable (a view switch),
+    // so it never was a privilege; any verified member may own apps. Ownership is checked per document.
+    function developer() { return verified(); }
     function profile(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
     function project(pid) { return get(/databases/$(database)/documents/projects/$(pid)); }
     function assignment(id) { return get(/databases/$(database)/documents/assignments/$(id)); }

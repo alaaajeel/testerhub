@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {openReportSheet,sendReportViaSheet} from './demo-helpers.mjs';
 // Phase 1 daily testing in Chromium. The preview tests use the on-device demo store; the Firestore test
 // uses in-browser Firebase doubles. Real security behavior is covered by tests/emulator/daily-report.rules.test.mjs.
 
@@ -19,63 +20,63 @@ async function seedActiveTest(page,{checkins=[],lastCheckinAt}={}){
  },{joined:utcDaysAgo(2),checkins,lastCheckinAt});
 }
 
-test('tester sees today\'s test on home with the right app, day and task',async({page})=>{
+test('tester sees today\'s test on home and in «اختباراتي» with the right app, day and task',async({page})=>{
  await openPreview(page);await seedActiveTest(page);
- const card=page.locator('.daily-test');
- await expect(card).toHaveCount(1);
- await expect(card).toContainText('اختبار اليوم');
- await expect(card).toContainText('Daily App');
+ // Home: the hero counts today's work and the app has its card.
+ await expect(page.locator('.v2-hero')).toContainText('باقيلك 1 اختبار اليوم');
+ await expect(page.locator('.v2-appcard',{hasText:'Daily App'})).toContainText('مطلوب اليوم');
+ await page.locator('.nav [data-tab="tests"]').click();
+ const card=page.locator('.v2-test',{hasText:'Daily App'});
  await expect(card).toContainText('اليوم 3 من 14');
- await expect(card.locator('.daily-task')).toContainText('ابحث عن منتج');
- await expect(card.locator('[name="outcome"]')).toHaveCount(3);
- await expect(card.locator('textarea')).toHaveCount(1);
- await expect(card.locator('input[type="checkbox"]')).toHaveCount(0);
- await expect(card.locator('button[type="submit"]')).toHaveText(/إرسال التقرير/);
+ await expect(card).toContainText('ابحث عن منتج');
  await page.evaluate(()=>{window.openedLinks=[];window.open=url=>window.openedLinks.push(url)});
  await card.locator('[data-action="open-app"]').click();
  expect(await page.evaluate(()=>window.openedLinks)).toEqual(['https://play.google.com/store/apps/details?id=com.example.daily']);
  // Opening the app is not a report.
  expect(await page.evaluate(()=>demoState().reports.length)).toBe(0);
+ // The sheet: three steps, three outcomes, one note.
+ await card.locator('[data-v2="report-open"]').click();
+ const sheet=page.locator('.v2-sheet');
+ await expect(sheet).toContainText('1/3');
+ await expect(sheet).toContainText('ابحث عن منتج');
+ await sheet.locator('[data-v2="rep-tried"]').click();
+ await expect(sheet.locator('[data-v2="rep-res"]')).toHaveCount(3);
 });
 
 test('clear Arabic errors and nothing saved for an incomplete report',async({page})=>{
  await openPreview(page);await seedActiveTest(page);
- const form=page.locator('#daily-report-form');
- await form.locator('button[type="submit"]').click();
- await expect(page.locator('#toast')).toContainText('اختر شلون كانت التجربة');
- await form.locator('label.ok').click();
- await form.locator('textarea').fill('تمام');
- await form.locator('button[type="submit"]').click();
- await expect(page.locator('#toast')).toContainText('10 أحرف');
+ const sheet=await openReportSheet(page,'Daily App');
+ await sheet.locator('[data-v2="rep-tried"]').click();
+ await sheet.locator('[data-v2="rep-res"][data-k="issue"]').click();
+ await sheet.locator('#v2-note').fill('تمام');
+ await sheet.locator('[data-v2="rep-send"]').click();
+ await expect(sheet.locator('#v2-err')).toContainText('10 أحرف');
  expect(await page.evaluate(()=>demoState().reports.length)).toBe(0);
  expect(await page.evaluate(()=>demoState().assignments.find(a=>a.id==='daily_t1').checkins)).toEqual([]);
+ // The API itself still refuses a report without an outcome.
+ await expect(page.evaluate(()=>api.submitDailyReport('daily_t1',{notes:'ملاحظة كافية الطول هنا'}))).rejects.toThrow(/اختر شلون كانت التجربة/);
 });
 
 test('report saves once, shows the saved state and blocks a duplicate for the same day',async({page})=>{
  await openPreview(page);await seedActiveTest(page);
- const form=page.locator('#daily-report-form');
- await form.locator('label.ok').click();
- await form.locator('textarea').fill('جرّبت البحث عن منتج واشتغل بصورة طبيعية');
- await form.locator('button[type="submit"]').click();
- await expect(page.locator('#toast')).toContainText('تم إرسال تقريرك إلى المطور');
- const card=page.locator('.daily-test.saved');
- await expect(card).toContainText('تم حفظ تقرير اليوم');
- await expect(card).toContainText('اشتغل بدون مشاكل');
- await expect(card).toContainText('بانتظار المراجعة');
- await expect(page.locator('#daily-report-form')).toHaveCount(0);
+ await sendReportViaSheet(page,'Daily App',{outcome:'ok',notes:'جرّبت البحث عن منتج واشتغل بصورة طبيعية'});
+ await expect(page.locator('#toast')).toContainText('انرسل التقرير');
+ await expect(page.locator('.v2-sheet')).toHaveCount(0);
+ const card=page.locator('.v2-test',{hasText:'Daily App'});
+ await expect(card).toContainText('تم اليوم');
+ await expect(card.locator('.v2-saved')).toContainText('اشتغل بدون مشاكل');
+ await expect(card.locator('.v2-saved')).toContainText('بانتظار المراجعة');
+ await expect(card.locator('[data-v2="report-open"]')).toHaveCount(0);
  const saved=await page.evaluate(()=>demoState().reports);
  expect(saved).toHaveLength(1);
  expect(saved[0]).toMatchObject({assignmentId:'daily_t1',testerUid:'t1',ownerUid:'d1',outcome:'ok',status:'ok',tested:'ابحث عن منتج',notes:'جرّبت البحث عن منتج واشتغل بصورة طبيعية'});
- // A second submission for the same day returns the saved report instead of a new one.
  const again=await page.evaluate(()=>api.submitDailyReport('daily_t1',{outcome:'issue',notes:'محاولة تقرير ثاني لنفس اليوم'}));
  expect(again.alreadySaved).toBe(true);
  expect(await page.evaluate(()=>demoState().reports.length)).toBe(1);
  expect(await page.evaluate(()=>demoState().assignments.find(a=>a.id==='daily_t1').checkins.length)).toBe(1);
- // The saved state survives a reload, and the existing test list shows the day as done.
  await page.reload();await expect(page.locator('#launch-splash')).toHaveCount(0);
- await expect(page.locator('.daily-test.saved')).toContainText('تم حفظ تقرير اليوم');
  await page.locator('.nav [data-tab="tests"]').click();
- await expect(page.locator('.app-card',{hasText:'Daily App'}).locator('[data-action="write-report"]')).toBeDisabled();
+ await expect(page.locator('.v2-test',{hasText:'Daily App'}).locator('.v2-saved')).toContainText('اشتغل بدون مشاكل');
 });
 
 test('a tester cannot report on another tester\'s assignment',async({page})=>{
@@ -86,7 +87,10 @@ test('a tester cannot report on another tester\'s assignment',async({page})=>{
 
 test('report screen explains cooldown instead of offering a second form',async({page})=>{
  await openPreview(page);await seedActiveTest(page,{checkins:[utcDaysAgo(1)],lastCheckinAt:new Date(Date.now()-3600000).toISOString()});
- await expect(page.locator('.daily-test')).toHaveCount(0);
+ await page.locator('.nav [data-tab="tests"]').click();
+ const card=page.locator('.v2-test',{hasText:'Daily App'});
+ await expect(card.locator('[data-v2="report-open"]')).toHaveCount(0);
+ await expect(card).toContainText('انتظر موعد التقرير الجاي');
  await page.evaluate(()=>{selectedAssignmentId='daily_t1';tab='report';render()});
  await expect(page.locator('#daily-report-form')).toHaveCount(0);
  await expect(page.locator('.notice')).toContainText('أقل من 14 ساعة');
@@ -94,12 +98,8 @@ test('report screen explains cooldown instead of offering a second form',async({
 
 test('developer sees the blocked report, reviews it, and the tester text stays unchanged',async({page})=>{
  await openPreview(page);await seedActiveTest(page);
- const form=page.locator('#daily-report-form');
- await form.locator('label.blocked').click();
- await expect(page.locator('#test-note-label')).toHaveText('شنو جرّبت؟ وليش ما گدرت تكمل؟');
- await form.locator('textarea').fill('جرّبت أفتح البحث بس التطبيق يطلع خطأ بالتحميل');
- await form.locator('button[type="submit"]').click();
- await expect(page.locator('.daily-test.saved')).toContainText('ما گدرت أكمل');
+ await sendReportViaSheet(page,'Daily App',{outcome:'cant',notes:'جرّبت أفتح البحث بس التطبيق يطلع خطأ بالتحميل'});
+ await expect(page.locator('.v2-test',{hasText:'Daily App'}).locator('.v2-saved')).toContainText('ما گدرت أكمل');
 
  await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();selectedProjectId='daily';tab='details';render()});
  const record=page.locator('.report-record').first();
@@ -120,9 +120,10 @@ test('developer sees the blocked report, reviews it, and the tester text stays u
  await expect(page.locator('.report-record').first().locator('[data-decision="clarify"]')).toBeDisabled();
  expect(await page.evaluate(()=>demoState().messages.some(m=>m.assignmentId==='daily_t1'&&m.sender==='developer'&&m.text.includes('توضيح')))).toBe(true);
 
- await page.evaluate(async()=>{user=await api.switchDemo('tester');tab='home';await refresh()});
- await expect(page.locator('.daily-test.saved')).toContainText('مطلوب توضيح');
- await expect(page.locator('.daily-test.saved .notice')).toContainText('المطور طلب توضيحاً');
+ await page.evaluate(async()=>{user=await api.switchDemo('tester');tab='tests';await refresh()});
+ const mine=page.locator('.v2-test',{hasText:'Daily App'});
+ await expect(mine.locator('.v2-saved')).toContainText('مطلوب توضيح');
+ await expect(mine).toContainText('المطور طلب توضيحاً');
 
  await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();selectedProjectId='daily';tab='details';render()});
  await page.locator('.report-record').first().locator('[data-decision="accepted"]').click();
@@ -144,20 +145,21 @@ test('historical reports without review fields still render for the developer',a
  await expect(record).toContainText('بانتظار المراجعة');
 });
 
-test('mobile: no horizontal overflow and the submit button is not hidden by the bottom bar',async({page})=>{
+test('mobile: no horizontal overflow and the send button is not hidden by the bottom bar',async({page})=>{
  await openPreview(page);await seedActiveTest(page);
  expect(await page.evaluate(()=>document.documentElement.dir||document.dir)).toBe('rtl');
- const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
- expect(overflow).toBeLessThanOrEqual(0);
- const submit=page.locator('#daily-report-form button[type="submit"]');
- await submit.scrollIntoViewIfNeeded();
- const [box,nav]=await Promise.all([submit.boundingBox(),page.locator('.nav').boundingBox()]);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+ const sheet=await openReportSheet(page,'Daily App');
+ await sheet.locator('[data-v2="rep-tried"]').click();
+ for(const opt of await sheet.locator('.v2-opt').all())expect((await opt.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await sheet.locator('[data-v2="rep-res"][data-k="ok"]').click();
+ const send=sheet.locator('[data-v2="rep-send"]');
+ await send.scrollIntoViewIfNeeded();
+ const box=await send.boundingBox();
  expect(box.height).toBeGreaterThanOrEqual(44);
- if(nav)expect(box.y+box.height).toBeLessThanOrEqual(nav.y+1);
- for(const label of await page.locator('.outcome-choices label').all())expect((await label.boundingBox()).height).toBeGreaterThanOrEqual(44);
- // Developer review list must also fit without sideways scrolling.
- await page.locator('label.ok').click();await page.locator('#daily-report-form textarea').fill('جرّبت البحث واشتغل بصورة طبيعية');
- await submit.click();await expect(page.locator('.daily-test.saved')).toBeVisible();
+ expect(box.y+box.height).toBeLessThanOrEqual(page.viewportSize().height+1);
+ await sheet.locator('#v2-note').fill('جرّبت البحث واشتغل بصورة طبيعية');
+ await send.click();await expect(page.locator('.v2-test .v2-saved')).toBeVisible();
  await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();selectedProjectId='daily';tab='details';render()});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
  const actions=page.locator('.report-record').first().locator('.review-actions');
@@ -166,13 +168,19 @@ test('mobile: no horizontal overflow and the submit button is not hidden by the 
  if(navBox)expect(actionsBox.y+actionsBox.height).toBeLessThanOrEqual(navBox.y+1);
 });
 
-test('the bottom bar stays while choosing; «فتح التطبيق» is secondary and «إرسال التقرير» primary',async({page})=>{
+test('the sheet covers the bottom bar while open, and «إرسال التقرير» is the primary button',async({page})=>{
  await openPreview(page);await seedActiveTest(page);
- await page.locator('#daily-report-form label.ok').click();
- await page.locator('#daily-report-form textarea').focus();
+ const sheet=await openReportSheet(page,'Daily App');
+ await sheet.locator('[data-v2="rep-tried"]').click();
+ await sheet.locator('[data-v2="rep-res"][data-k="ok"]').click();
+ await expect(sheet.locator('[data-v2="rep-send"]')).toHaveClass(/v2-btn-primary/);
+ // The suggested note names today's task, and the tester may edit it.
+ await expect(sheet.locator('#v2-note')).toHaveValue(/ابحث عن منتج/);
+ await sheet.locator('[data-v2="rep-back"]').click();
+ await expect(sheet).toContainText('2/3');
+ await page.keyboard.press('Escape');
+ await expect(page.locator('.v2-sheet')).toHaveCount(0);
  await expect(page.locator('.nav')).toBeVisible();
- await expect(page.locator('[data-action="open-app"]')).toHaveClass(/outline/);
- await expect(page.locator('#daily-report-form button[type="submit"]')).not.toHaveClass(/outline/);
 });
 
 // Firestore path with in-browser doubles: the written documents and the retry-safe duplicate handling.
@@ -222,13 +230,11 @@ async function openWithFirestoreDoubles(page){
 test('Firestore: report, checkin and message are written together with the trusted fields',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const today=await openWithFirestoreDoubles(page);
- const card=page.locator('.daily-test');
- await expect(card).toContainText('Store App');
+ await page.locator('.nav [data-tab="tests"]').click();
+ const card=page.locator('.v2-test',{hasText:'Store App'});
  await expect(card).toContainText('اليوم 5 من 14');
- await card.locator('label.issue').click();
- await card.locator('textarea').fill('فتحت السلة وطلع خطأ عند إضافة منتج');
- await card.locator('button[type="submit"]').click();
- await expect(page.locator('.daily-test.saved')).toContainText('واجهت مشكلة');
+ await sendReportViaSheet(page,'Store App',{outcome:'issue',notes:'فتحت السلة وطلع خطأ عند إضافة منتج'});
+ await expect(card.locator('.v2-saved')).toContainText('واجهت مشكلة');
  const fs=await page.evaluate(()=>window.fs);
  const report=fs.docs[`reports/p1_t1_${today}`];
  expect(report).toMatchObject({assignmentId:'p1_t1',projectId:'p1',testerUid:'t1',ownerUid:'d1',date:today,tested:'Open the cart',outcome:'issue',status:'new',notes:'فتحت السلة وطلع خطأ عند إضافة منتج',submittedAt:{server:true}});
@@ -243,11 +249,8 @@ test('Firestore: report, checkin and message are written together with the trust
 test('Firestore: a weak network retries the read and still sends the report once',async({page})=>{
  const today=await openWithFirestoreDoubles(page);
  await page.evaluate(()=>{window.fs.failReads=2});
- const card=page.locator('.daily-test');
- await card.locator('label.ok').click();
- await card.locator('textarea').fill('فتحت السلة وأضفت منتج بدون مشاكل');
- await card.locator('button[type="submit"]').click();
- await expect(page.locator('#toast')).toContainText('تم إرسال تقريرك',{timeout:15000});
+ await sendReportViaSheet(page,'Store App',{outcome:'ok',notes:'فتحت السلة وأضفت منتج بدون مشاكل'});
+ await expect(page.locator('#toast')).toContainText('انرسل التقرير',{timeout:15000});
  const fs=await page.evaluate(()=>window.fs);
  expect(fs.failReads).toBe(0);
  expect(fs.writes.filter(w=>w.path===`reports/p1_t1_${today}`)).toHaveLength(1);
@@ -256,12 +259,9 @@ test('Firestore: a weak network retries the read and still sends the report once
 test('Firestore: a commit whose answer was lost shows the saved report, not an error or a duplicate',async({page})=>{
  const today=await openWithFirestoreDoubles(page);
  await page.evaluate(()=>{window.fs.lostAck=true});
- const card=page.locator('.daily-test');
- await card.locator('label.ok').click();
- await card.locator('textarea').fill('فتحت السلة وأضفت منتج بدون مشاكل');
- await card.locator('button[type="submit"]').click();
- await expect(page.locator('#toast')).toContainText('محفوظ مسبقاً');
- await expect(page.locator('.daily-test.saved')).toContainText('اشتغل بدون مشاكل');
+ await sendReportViaSheet(page,'Store App',{outcome:'ok',notes:'فتحت السلة وأضفت منتج بدون مشاكل'});
+ await expect(page.locator('#toast')).toContainText('محفوظ من قبل');
+ await expect(page.locator('.v2-test',{hasText:'Store App'}).locator('.v2-saved')).toContainText('اشتغل بدون مشاكل');
  const fs=await page.evaluate(()=>window.fs);
  expect(fs.writes.filter(w=>w.path===`reports/p1_t1_${today}`)).toHaveLength(1);
  expect(fs.docs['assignments/p1_t1'].checkins).toEqual([today]);

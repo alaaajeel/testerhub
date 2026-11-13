@@ -19,25 +19,34 @@ async function open(page,role='tester',setup=null){
 }
 const navShown=page=>page.locator('.nav').isVisible();
 
-test('tapping a report choice and scrolling keeps the bottom bar',async({page})=>{
+async function openSheet(page){
+ await page.locator('.nav [data-tab="tests"]').click();
+ await page.locator('[data-v2="report-open"]').first().click();
+ await page.locator('.v2-sheet [data-v2="rep-tried"]').click();
+ await page.locator('.v2-sheet [data-v2="rep-res"][data-k="ok"]').click();
+ return page.locator('.v2-sheet #v2-note');
+}
+test('scrolling a section keeps the bottom bar, and closing the report sheet brings it back',async({page})=>{
  await open(page);
- await expect(page.locator('#daily-report-form')).toBeVisible();
- await page.locator('#daily-report-form label').first().click();
+ await page.locator('.nav [data-tab="tests"]').click();
  expect(await navShown(page)).toBe(true);
  await page.mouse.wheel(0,800);await page.waitForTimeout(200);
  expect(await navShown(page)).toBe(true);
- // Focus in the text field without a keyboard taking space (desktop, hardware keyboard): bar stays.
- await page.locator('#daily-report-form textarea').focus();await page.waitForTimeout(450);
+ const note=await openSheet(page);
+ await note.focus();await page.waitForTimeout(450);
+ await page.keyboard.press('Escape');
+ await expect(page.locator('.v2-sheet')).toHaveCount(0);
  expect(await navShown(page)).toBe(true);
 });
 
 test('the bar steps aside only while the on-screen keyboard takes space, and comes back after',async({page})=>{
  await open(page);
  const size=page.viewportSize();
- await page.locator('#daily-report-form textarea').focus();
+ const note=await openSheet(page);
+ await note.focus();
  await page.setViewportSize({width:size.width,height:size.height-300});await page.waitForTimeout(450);
  expect(await navShown(page)).toBe(false);
- await page.locator('#daily-report-form textarea').blur();
+ await note.blur();
  await page.setViewportSize(size);await page.waitForTimeout(800);
  expect(await navShown(page)).toBe(true);
 });
@@ -92,26 +101,26 @@ test('developer: back from a tester\'s details returns to the app, then to the a
  await page.evaluate(()=>history.back());
  // V2: the apps list is the first section, «التطبيقات».
  await expect(page.locator('.nav [data-tab="home"]')).toHaveClass(/active/);
- await expect(page.locator('.app-rows')).toBeVisible();
+ await expect(page.locator('.v2-list .v2-appcard').first()).toBeVisible();
 });
 
 test('«اختباراتي» lists only accepted or started tests; home still lists every app',async({page})=>{
  await open(page,'tester',{joined:utcDaysAgo(2)});
- const homeNames=await page.locator('.app-card').allTextContents();
- for(const id of ['pending','accepted','active','legacy'])expect(homeNames.join(' ')).toContain('App '+id);
+ const homeNames=(await page.locator('.v2-appcard').allTextContents()).join(' ');
+ for(const id of ['pending','accepted','active','legacy'])expect(homeNames).toContain('App '+id);
+ expect(homeNames).not.toContain('App declined');
  await page.locator('.nav [data-tab="tests"]').click();
- const cards=page.locator('.page .app-card');
- const names=(await cards.allTextContents()).join(' ');
+ const names=(await page.locator('.page .v2-test').allTextContents()).join(' ');
  for(const id of ['accepted','active','legacy'])expect(names).toContain('App '+id);
  for(const id of ['pending','declined'])expect(names).not.toContain('App '+id);
- await expect(page.locator('.page')).toContainText('قبلت الدعوة · أكمل الانضمام');
+ await expect(page.locator('.v2-test',{hasText:'App accepted'})).toContainText('كمّل الانضمام');
 });
 
 test('«اختباراتي» with nothing accepted points back to home',async({page})=>{
  await open(page,'tester',{joined:utcDaysAgo(2)});
  await page.evaluate(async()=>{const d=demoState();d.assignments=d.assignments.filter(a=>a.testerUid!=='t1'||a.invitationStatus==='pending');save(d);await refresh();tab='tests';render()});
- await expect(page.locator('.tab-empty')).toContainText('ما وافقت على أي اختبار بعد');
- await page.locator('.tab-empty [data-tab="home"]').click();
+ await expect(page.locator('.v2-empty')).toContainText('ما وافقت على أي اختبار بعد');
+ await page.locator('.v2-empty [data-tab="home"]').click();
  await expect(page.locator('.nav [data-tab="home"]')).toHaveClass(/active/);
 });
 
@@ -119,19 +128,19 @@ test('opening the bell clears its number; something new brings it back',async({p
  await open(page,'tester',{joined:utcDaysAgo(2)});
  const count=()=>page.evaluate(()=>noticeBadgeCount());
  expect(await count()).toBeGreaterThan(0);
- await expect(page.locator('.bell-count')).toBeVisible();
+ await expect(page.locator('.v2-top .v2-dot')).toBeVisible();
  await page.locator('[data-action="notice"]').click();
  await expect(page.locator('.notices-sheet')).toBeVisible();
  await page.locator('.notices-header [data-action="close-notices"]').click();
  expect(await count()).toBe(0);
- await expect(page.locator('.bell-count')).toHaveCount(0);
+ await expect(page.locator('.v2-top .v2-dot')).toHaveCount(0);
  // Still cleared after a reload: what was seen is remembered on the device.
  await page.reload();await expect(page.locator('#launch-splash')).toHaveCount(0);
  expect(await count()).toBe(0);
  // A new invitation is new.
  await page.evaluate(async()=>{const d=demoState();d.projects.push({id:'fresh',name:'App fresh',link:'https://play.google.com/apps/testing/com.example.fresh',ownerUid:'d1',ownerName:'مطور',created:api.dayKey()});d.assignments.push({id:'fresh_t1',projectId:'fresh',testerUid:'t1',ownerUid:'d1',name:'App fresh',link:'https://play.google.com/apps/testing/com.example.fresh',invitationStatus:'pending',joinedDay:null,checkins:[]});save(d);await refresh()});
  expect(await count()).toBe(1);
- await expect(page.locator('.bell-count')).toBeVisible();
+ await expect(page.locator('.v2-top .v2-dot')).toBeVisible();
 });
 
 test('developer bell clears too',async({page})=>{
