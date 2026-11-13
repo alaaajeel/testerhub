@@ -8,7 +8,7 @@ const rules=readFileSync(new URL('../firestore.rules',import.meta.url),'utf8');
 const from=(a,b)=>html.slice(html.indexOf(a),html.indexOf(b,html.indexOf(a)));
 
 test('the feature is off unless the platform owner turns it on',()=>{
- assert.match(html,/let features=\{officialGroup:false\}/);
+ assert.match(html,/let features=\{officialGroup:false,packs:false\}/);
  assert.match(from('async function loadFeatures(','async function groupData('),/officialGroup===true/);
  assert.match(from('function testModeSection(','function officialGroupCard('),/if\(!features\.officialGroup/);
  assert.match(from('function officialGroupCard(','function projectDetails('),/if\(!features\.officialGroup\)return ''/);

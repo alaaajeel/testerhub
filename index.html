@@ -22,6 +22,7 @@
   <script src="./src/services/push.js"></script>
   <script src="./src/help/content.js"></script>
   <script src="./src/v2/views.js"></script>
+  <script src="./src/v2/packs.js"></script>
   
   
   
@@ -479,12 +480,12 @@ async function login(email,password){if(isDemo)throw Error('وضع المعاي�
 async function logout(){if(!isDemo)await authFns.signOut(auth)}
 // ---- Official Google Group and self-join (feature flag appConfig/features.officialGroup, off by default) ----
 const OFFICIAL_GROUP={url:'https://groups.google.com/g/testerhubiq',email:'testerhubiq@googlegroups.com'};
-let features={officialGroup:false},featuresFor='';
+let features={officialGroup:false,packs:false},featuresFor='';
 async function loadFeatures(uid){
  if(isDemo||featuresFor===uid)return features;
  featuresFor=uid;
- try{const s=await storeFns.getDoc(storeFns.doc(db,'appConfig','features'));features={officialGroup:!!(s.exists()&&s.data().officialGroup===true)}}
- catch(err){console.warn('Features:',err);features={officialGroup:false}}
+ try{const s=await storeFns.getDoc(storeFns.doc(db,'appConfig','features'));features={officialGroup:!!(s.exists()&&s.data().officialGroup===true),packs:!!(s.exists()&&s.data().packs===true)}}
+ catch(err){console.warn('Features:',err);features={officialGroup:false,packs:false}}
  return features;
 }
 async function groupData(active,read){
@@ -628,7 +629,7 @@ function liveList(active,name,fromServer){
 }
 const liveSnap=list=>({docs:list.map(x=>({id:x.id,data:()=>x})),size:list.length});
 async function getDashboard({fromServer=false}={}){
- if(isDemo){const d=demoState(),uid=d.role==='tester'?'t1':'d1',x=d.xp||{};return {projects:d.projects,assignments:d.assignments,testers:d.testers,reports:d.reports??[],messages:d.messages??[],settings:d.settings,xp:{totals:x.totals?.[uid]||null,ledgers:Object.fromEntries(Object.entries(x.ledgers||{}).filter(([,v])=>v.testerUid===uid))},publish:{totals:x.totals?.[uid]||null,slot:d.publishSlot||null}}}
+ if(isDemo){const d=demoState(),uid=d.role==='tester'?'t1':'d1',x=d.xp||{};return {projects:d.projects,assignments:d.assignments,testers:d.testers,testersLoaded:true,reports:d.reports??[],messages:d.messages??[],settings:d.settings,xp:{totals:x.totals?.[uid]||null,ledgers:Object.fromEntries(Object.entries(x.ledgers||{}).filter(([,v])=>v.testerUid===uid))},publish:{totals:x.totals?.[uid]||null,slot:d.publishSlot||null},packs:await loadPacks(await currentUser())}}
  const user=await currentUser();if(!user||user.profileMissing||!user.emailVerified||user.suspended)return {projects:[],assignments:[],testers:[],settings:{reminderHour:20}};
  const {collection,query,where,getDocs,getDocsFromServer}=storeFns;
  const read=fromServer?getDocsFromServer:getDocs;
@@ -647,7 +648,7 @@ const pick=(field,name)=>from(name+':'+field,query(collection(db,name),where(fie
  const totals=pt?.exists?.()?pt.data():null,projects=po.docs.map(tidy);
  // The list of available testers is only needed to add an app; it is read on demand (and cached 15 minutes).
  const testers=projects.length||directoryCache.docs?await loadTesters(user,read,fromServer):[];
- return {publish:{totals,slot:ps?.exists?.()?ps.data():null},projects,assignments:unionById(ao.docs.map(tidy),at.docs.map(tidy)),testers,testersLoaded:!!testers.length||!!directoryCache.docs,crossCount:0,support:liveList(user,'supportMessages',fromServer)??await supportThread(user,read),reports:unionById(ro.docs.map(tidy),rt.docs.map(tidy)),messages:unionById(mo.docs.map(tidy),mt.docs.map(tidy)),xp:{totals,ledgers:Object.fromEntries((xl?.docs||[]).map(d=>[d.id,d.data()]))},...selfJoin,settings:JSON.parse(previewStorage.getItem('testerhub_settings')||'{"reminderHour":20}')};
+ return {publish:{totals,slot:ps?.exists?.()?ps.data():null},projects,assignments:unionById(ao.docs.map(tidy),at.docs.map(tidy)),testers,testersLoaded:!!testers.length||!!directoryCache.docs,crossCount:0,support:liveList(user,'supportMessages',fromServer)??await supportThread(user,read),reports:unionById(ro.docs.map(tidy),rt.docs.map(tidy)),messages:unionById(mo.docs.map(tidy),mt.docs.map(tidy)),xp:{totals,ledgers:Object.fromEntries((xl?.docs||[]).map(d=>[d.id,d.data()]))},...selfJoin,packs:await loadPacks(user),settings:JSON.parse(previewStorage.getItem('testerhub_settings')||'{"reminderHour":20}')};
 }
 // One account: the owner's lists and the tester's lists can share a document (never the same app), so merge by id.
 function unionById(...lists){const seen=new Map();for(const list of lists)for(const x of list||[])if(x&&!seen.has(x.id))seen.set(x.id,x);return [...seen.values()]}

@@ -100,6 +100,12 @@
 #app.v2 .v2-code{display:block;margin-top:10px;padding:10px 12px;border-radius:12px;background:#F6F8FC;font-size:14px;word-break:break-all;direction:ltr;text-align:left}
 
 #app.v2 .v2-saved{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#F6F8FC;border-radius:12px;padding:10px 12px;margin-bottom:10px}
+#app.v2 .v2-strikes{display:flex;gap:6px}
+#app.v2 .v2-strikes span{width:26px;height:8px;border-radius:9px;background:#E3E9F4}
+#app.v2 .v2-strikes span.on{background:var(--amber)}
+#app.v2 .v2-check-item .v2-cbox{cursor:pointer}
+#app.v2 .v2-cbox:disabled{opacity:.55;cursor:not-allowed}
+#app.v2 .v2-check-item{align-items:center}
 /* Account */
 #app.v2 .v2-setting{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px solid var(--line)}
 #app.v2 .v2-setting:first-child{border-top:0}
@@ -122,7 +128,8 @@
 /* Sheets */
 #app.v2 .v2-sheet-wrap{position:absolute;inset:0;z-index:90;display:flex;align-items:flex-end;justify-content:center}
 #app.v2 .v2-sheet-backdrop{position:absolute;inset:0;border:0;background:rgba(11,27,63,.45);cursor:pointer;width:100%}
-#app.v2 .v2-sheet{position:relative;z-index:1;background:var(--bg);width:100%;max-height:90%;overflow:auto;border-radius:24px 24px 0 0;padding:10px 18px calc(24px + env(safe-area-inset-bottom,0px));animation:v2up .22s ease-out}
+#app.v2 .v2-sheet{position:relative;z-index:1;background:var(--bg);width:100%;max-height:90%;overflow:auto;border-radius:24px 24px 0 0;padding:10px 18px calc(24px + env(safe-area-inset-bottom,0px))}
+#app.v2 .v2-sheet.v2-sheet-in{animation:v2up .22s ease-out}
 @keyframes v2up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
 #app.v2 .v2-grab{width:42px;height:5px;border-radius:9px;background:#C5D0E2;margin:4px auto 10px}
 #app.v2 .v2-dots{display:flex;gap:6px;margin:6px 0 14px}
@@ -140,4 +147,4 @@
 #app.v2 .v2-cbox{width:28px;height:28px;border-radius:9px;border:2px solid #B9C6DC;display:grid;place-items:center;flex:0 0 28px;background:#fff;color:#fff;font-weight:700}
 #app.v2 .v2-cbox.on{background:var(--green);border-color:var(--green)}
 #app.v2 :focus-visible{outline:3px solid var(--sky);outline-offset:2px}
-@media(prefers-reduced-motion:reduce){#app.v2 .v2-sheet{animation:none}#app.v2 .v2-switch::after{transition:none}}
+@media(prefers-reduced-motion:reduce){#app.v2 .v2-sheet.v2-sheet-in{animation:none}#app.v2 .v2-switch::after{transition:none}}

@@ -302,12 +302,13 @@ async function helpAction(name,slug){
 }
 async function loadFeatures(){
  const snap=await getDoc(doc(state.db,'appConfig','features'));
- state.featureFlags={officialGroup:snap.exists()&&snap.data().officialGroup===true};
+ state.featureFlags={officialGroup:snap.exists()&&snap.data().officialGroup===true,packs:snap.exists()&&snap.data().packs===true};
  state.rows=[];state.hasMore=false;renderList();
 }
 function renderFeatures(){
  const on=!!state.featureFlags?.officialGroup;
- return '<article class="item"><div class="info"><strong>مجموعة TesterHubIQ الرسمية وطلبات المشاركة الذاتية</strong><small>يظهر للمختبر زر الانضمام لـ testerhubiq@googlegroups.com وفرص الاختبار المفتوحة، ويختار المطور «مجموعة Google» أو «الدعوات الفردية» لكل تطبيق، مع قائمة انتظار ومختبرين احتياطيين. الدعوات الحالية ما تتأثر.</small><small>الحالة: '+(on?'مفعّلة':'معطّلة')+'</small></div><div class="actions"><button class="btn '+(on?'soft':'')+'" type="button" data-action="toggle-feature" data-id="officialGroup">'+(on?'إيقاف':'تفعيل')+'</button></div></article>';
+ const packsOn=!!state.featureFlags?.packs;
+ return '<article class="item"><div class="info"><strong>مجموعة TesterHubIQ الرسمية وطلبات المشاركة الذاتية</strong><small>يظهر للمختبر زر الانضمام لـ testerhubiq@googlegroups.com وفرص الاختبار المفتوحة، ويختار المطور «مجموعة Google» أو «الدعوات الفردية» لكل تطبيق، مع قائمة انتظار ومختبرين احتياطيين. الدعوات الحالية ما تتأثر.</small><small>الحالة: '+(on?'مفعّلة':'معطّلة')+'</small></div><div class="actions"><button class="btn '+(on?'soft':'')+'" type="button" data-action="toggle-feature" data-id="officialGroup">'+(on?'إيقاف':'تفعيل')+'</button></div></article>'+'<article class="item"><div class="info"><strong>مجموعات التبادل (Pack)</strong><small>عن طريق مجموعة Google ‏testerhubiq: ‏16 عضو يختبرون تطبيقات بعض 16 يوم، مجموعة وحدة مفتوحة بالوقت، عملات (أول دخول مجاني، 150 للدخول، 30 للتمييز) وإنذارات تلقائية من مهمة يومية (تحتاج سر FIREBASE_SERVICE_ACCOUNT). الإيقاف يخفي القسم ويوقف الانضمام والتأكيد، وما ينحذف شي.</small><small>الحالة: '+(packsOn?'مفعّلة':'معطّلة')+'</small></div><div class="actions"><button class="btn '+(packsOn?'soft':'')+'" type="button" data-action="toggle-feature" data-id="packs">'+(packsOn?'إيقاف':'تفعيل')+'</button></div></article>';
 }
 async function toggleFeature(name){
  const next=!state.featureFlags?.[name];
