@@ -229,3 +229,64 @@
 @media(prefers-reduced-motion:reduce) {
   .device #app *, .device #app *::before, .device #app *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* Keep the navigation anchored inside the app viewport while only the page content scrolls. */
+.device #app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.device #app > .page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.device #app > .page::-webkit-scrollbar { display: none; }
+.device #app > nav.nav {
+  position: relative !important;
+  inset: auto !important;
+  flex: 0 0 calc(71px + env(safe-area-inset-bottom,0px));
+  align-self: stretch;
+  z-index: 12;
+  transform: none !important;
+}
+
+/* Google Group is the default Play Console recruitment option, not a verified membership service. */
+.device #app .official-google-group {
+  border: 1px solid #D4E2FB;
+  background: #FFF;
+}
+.device #app .official-google-group .lead { display: flex; align-items: center; gap: 8px; }
+.device #app .official-google-group .small { line-height: 1.9; margin-block: 10px; }
+.device #app .group-mail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 1px solid #D4E2FB;
+  background: #F5F8FE;
+  border-radius: 14px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+.device #app .group-mail code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  flex: 1 1 160px;
+  min-width: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  color: #0B1B3F;
+}
+.device #app .group-mail .cta { flex: 0 0 auto; }
+@media(max-width:830px) {
+  html,body,.layout,.phone-wrap,.device { overflow-x: hidden; }
+  .device #app > nav.nav { flex-shrink: 0 !important; }
+}
