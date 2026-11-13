@@ -1,0 +1,41 @@
+name: Exchange packs (daily warnings)
+# Judges each finished day of every running pack. Safe to run more than once a day: days already judged are skipped.
+on:
+  schedule:
+    - cron: '17 0 * * *'
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: exchange-packs
+  cancel-in-progress: false
+jobs:
+  judge:
+    if: github.repository == 'alaaajeel/testerhub'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - id: secret
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Packs job is not set up yet: add the FIREBASE_SERVICE_ACCOUNT secret."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.secret.outputs.configured == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.secret.outputs.configured == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --omit=dev --ignore-scripts
+        if: steps.secret.outputs.configured == 'true'
+      - run: node scripts/run-packs.mjs
+        if: steps.secret.outputs.configured == 'true'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

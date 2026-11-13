@@ -119,15 +119,14 @@ test('tester: an invitation sheet shows where they are in the three steps',async
  await expect(page.locator('.v2-sheet [data-v2="report-open"]')).toBeVisible();
 });
 
-test('«المجموعات» is honest: the exchange group is marked as coming, with nothing to press',async({page})=>{
+test('«المجموعات» is the exchange packs: «مجموعتي» and «المجموعة المفتوحة»',async({page})=>{
  await open(page,'tester');
  await page.locator('.nav [data-tab="groups"]').click();
  await expect(page.locator('.v2-seg button')).toHaveText(['مجموعتي','المجموعة المفتوحة']);
- await expect(page.locator('.v2-card:not(.v2-hero)',{hasText:'بريد المجموعة'})).toContainText('testerhubiq@googlegroups.com');
+ await expect(page.locator('.v2-hero')).toContainText('مجموعة #1');
  await page.locator('.v2-seg [data-k="open"]').click();
- await expect(page.locator('.v2-hero')).toContainText('قريباً');
+ await expect(page.locator('.v2-hero')).toContainText('من 16 مقعد');
  await expect(page.locator('.v2-seats i')).toHaveCount(16);
- await expect(page.locator('.v2-hero button')).toBeDisabled();
 });
 
 test('«اختباراتي» has both sides: what I test and my own apps',async({page})=>{
