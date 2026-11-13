@@ -46,8 +46,8 @@ test('back returns to the previous screen, closes panels, then asks for a second
  await page.goto('about:blank');
  await open(page);
  await page.locator('.nav [data-tab="tests"]').click();
- await page.locator('.nav [data-tab="rewards"]').click();
- await expect(page.locator('.nav [data-tab="rewards"]')).toHaveClass(/active/);
+ await page.locator('.nav [data-tab="groups"]').click();
+ await expect(page.locator('.nav [data-tab="groups"]')).toHaveClass(/active/);
  // The bell is a panel: back closes it first.
  await page.locator('[data-action="notice"]').click();
  await expect(page.locator('.notices-sheet')).toBeVisible();
@@ -82,14 +82,17 @@ test('a single back press after the hint expires warns again instead of leaving'
 
 test('developer: back from a tester\'s details returns to the app, then to the apps list',async({page})=>{
  await open(page,'developer');
- await page.locator('.nav [data-tab="apps"]').click();
+ await page.locator('.nav [data-tab="groups"]').click();
+ await page.locator('.nav [data-tab="home"]').click();
  await page.evaluate(()=>{selectedProjectId=dashboard.projects.find(p=>p.ownerUid==='d1'&&p.status!=='draft').id;tab='details';render()});
  await page.locator('.tester-row').first().click();
  await expect(page.locator('.tester-head')).toBeVisible();
  await page.evaluate(()=>history.back());
  await expect(page.locator('.section-title',{hasText:'المختبرون المشاركون'})).toBeVisible();
  await page.evaluate(()=>history.back());
- await expect(page.locator('.nav [data-tab="apps"]')).toHaveClass(/active/);
+ // V2: the apps list is the first section, «التطبيقات».
+ await expect(page.locator('.nav [data-tab="home"]')).toHaveClass(/active/);
+ await expect(page.locator('.app-rows')).toBeVisible();
 });
 
 test('«اختباراتي» lists only accepted or started tests; home still lists every app',async({page})=>{
