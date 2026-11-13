@@ -78,6 +78,25 @@ service cloud.firestore {
         && request.resource.data.grantedAt == request.time;
       allow delete: if adminAllowed();
     }
+    // ---- Fairness (V2 phase 2): test before you publish, and one live app per developer ----
+    // Accepted reports are counted from XP totals, which only grow through events the rules verified.
+    // A retest is also counted as a report, so retests are not added again.
+    function xpTotalsOf(uid) { return /databases/$(database)/documents/xpTotals/$(uid); }
+    function acceptedReports(uid) {
+      return exists(xpTotalsOf(uid)) ? get(xpTotalsOf(uid)).data.get('reports', 0) + get(xpTotalsOf(uid)).data.get('bugs', 0) : 0;
+    }
+    function publishSlot(uid) { return /databases/$(database)/documents/publishSlots/$(uid); }
+    // A project goes live (recruiting) only together with its owner's publish slot, written in the same request.
+    function canGoLive(pid) {
+      return getAfter(publishSlot(request.auth.uid)).data.projectId == pid
+        && getAfter(publishSlot(request.auth.uid)).data.updatedAt == request.time;
+    }
+    // When the current live app went live: the slot's time if the slot points at it, else when it was created.
+    function liveSince(pid) {
+      return exists(publishSlot(request.auth.uid)) && get(publishSlot(request.auth.uid)).data.projectId == pid
+        ? get(publishSlot(request.auth.uid)).data.updatedAt
+        : resource.data.get('createdAt', timestamp.value(0));
+    }
     match /users/{uid} {
       allow get: if adminAllowed() || staff('viewUsers') || (request.auth != null && request.auth.uid == uid) || (developer() && resource.data.available == true);
       allow list: if adminAllowed() || staff('viewUsers') || (developer() && resource.data.available == true);
@@ -136,6 +155,7 @@ service cloud.firestore {
           ? (request.resource.data.testersCount == 0 && request.resource.data.selectedTesterUids == [] && request.resource.data.link.size() <= 2000)
           : (request.resource.data.get('status','recruiting') == 'recruiting' && request.resource.data.testersCount > 0))
         && request.resource.data.testersCount <= 400
+        && (request.resource.data.get('status','recruiting') == 'draft' || canGoLive(projectId))
         && request.resource.data.createdAt == request.time;
       allow update: if developer() && resource.data.ownerUid == request.auth.uid
         && resource.data.get('status','recruiting') == 'draft'
@@ -153,7 +173,8 @@ service cloud.firestore {
         && request.resource.data.testersCount is int
         && (request.resource.data.status == 'draft'
           ? (request.resource.data.testersCount == 0 && request.resource.data.selectedTesterUids == [])
-          : (request.resource.data.status == 'recruiting' && request.resource.data.testersCount > 0 && request.resource.data.testersCount <= 400));
+          : (request.resource.data.status == 'recruiting' && request.resource.data.testersCount > 0 && request.resource.data.testersCount <= 400
+            && canGoLive(projectId)));
       allow update: if developer() && resource.data.ownerUid == request.auth.uid
         && resource.data.get('status','recruiting') == 'recruiting'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groupLink'])
@@ -174,6 +195,13 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['testMode'])
         && request.resource.data.testMode in ['group','invites']
         && featureOn('officialGroup');
+      // Ends recruiting once the 14-day closed test had time to run, which frees the owner's live slot.
+      // Testers who already started keep reporting; only new invitations stop.
+      allow update: if developer() && resource.data.ownerUid == request.auth.uid
+        && resource.data.get('status','recruiting') == 'recruiting'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'completed'
+        && request.time >= liveSince(projectId) + duration.value(14, 'd');
       // First step of deletion. An owner cannot use it to escape an admin archive.
       allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'deleting'
@@ -195,6 +223,26 @@ service cloud.firestore {
         );
       allow delete: if adminAllowed() || staff('deleteProjects') || (developer() && resource.data.ownerUid == request.auth.uid
         && resource.data.get('status','') == 'deleting');
+    }
+    // One document per developer: which app is live, and how many accepted reports publishing has used.
+    // Each new app needs 3 more accepted reports than the last one, and the previous app must no longer be live.
+    // Apps that were live before this existed keep running untouched.
+    match /publishSlots/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, delete: if false;
+      allow create, update: if developer() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['projectId','acceptedAtPublish','updatedAt'])
+        && request.resource.data.projectId is string
+        && request.resource.data.projectId.size() > 0 && request.resource.data.projectId.size() <= 128
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.acceptedAtPublish is int
+        && request.resource.data.acceptedAtPublish == (resource == null ? 0 : resource.data.get('acceptedAtPublish', 0)) + 3
+        && request.resource.data.acceptedAtPublish <= acceptedReports(uid)
+        && getAfter(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.ownerUid == uid
+        && getAfter(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.get('status','recruiting') == 'recruiting'
+        && (resource == null
+          || !exists(/databases/$(database)/documents/projects/$(resource.data.projectId))
+          || get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.get('status','recruiting') != 'recruiting');
     }
     // Left by the short-lived application flow; readable and removable only for cleanup.
     match /applications/{applicationId} {

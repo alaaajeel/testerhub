@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {grantPublishInDemo} from './demo-helpers.mjs';
 // Browser integration doubles. Actual Firebase behavior is tested separately with emulators.
 async function setup(page,{profile=null,loggedIn=false}={}) {
  await page.addInitScript(({profile,loggedIn})=>{
@@ -79,6 +80,7 @@ test('add-app form shows no tester names or emails and copies the whole eligible
 test('developer saves draft, edits it, then invites exactly the prepared list',async({page})=>{
  await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
  await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
+ await page.evaluate(grantPublishInDemo);
  await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();tab='new';render()});
  await page.locator('#project-name').fill('Draft Test');
  await page.locator('#project-form button[value="draft"]').click();
@@ -100,6 +102,7 @@ test('developer saves draft, edits it, then invites exactly the prepared list',a
 test('assigned task appears in daily report and saved report keeps its snapshot',async({page})=>{
  await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
  await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
+ await page.evaluate(grantPublishInDemo);
  await page.evaluate(async()=>{user=await api.switchDemo('developer');await refresh();tab='new';render()});
  await page.evaluate(()=>{navigator.clipboard.writeText=async()=>{}});
  await page.locator('#project-form [data-action="copy-emails"]').click();
@@ -133,6 +136,7 @@ test('retry after lost message acknowledgement reuses document id',async({page})
 test('tester setup separates opt-in and store; confirmed setup stays collapsed after reload',async({page})=>{
  await page.route('**/firebase-config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.TESTERHUB_FIREBASE_CONFIG = {};'}));
  await page.goto('/');await expect(page.locator('#launch-splash')).toHaveCount(0);
+ await page.evaluate(grantPublishInDemo);
  await page.evaluate(async()=>{
   user=await api.switchDemo('developer');await refresh();
   await api.createProject({name:'Journey App',link:'https://play.google.com/apps/testing/com.example.journey',tasks:'جرّب تسجيل الدخول بحسابك'},[{uid:'t1',role:'tester',available:true,email:'tester01@example.com'}]);

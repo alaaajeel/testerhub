@@ -1,6 +1,7 @@
 import {before, after, beforeEach, test} from 'node:test';
 import {readFileSync} from 'node:fs';
 import {initializeTestEnvironment, assertSucceeds, assertFails} from '@firebase/rules-unit-testing';
+import {allowPublish, publish, publishBatch} from './publish-helper.mjs';
 import {doc, setDoc, getDoc, getDocs, updateDoc, collection, query, where, serverTimestamp} from 'firebase/firestore';
 let env;
 before(async () => { env = await initializeTestEnvironment({projectId: 'demo-testerhub', firestore: {rules: readFileSync('firestore.rules', 'utf8')}}); });
@@ -43,27 +44,29 @@ test('consent, not the current view, decides who appears to developers', async (
 });
 test('two people can exchange tests, whichever view the other is in', async () => {
  await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'users', 'a'), {role: 'developer'}));
- await assertSucceeds(setDoc(doc(db('a'), 'projects', 'pa'), project('a', ['b'])));
+ await assertSucceeds(publish(env, db('a'), 'a', 'pa', project('a', ['b'])));
  await assertSucceeds(setDoc(doc(db('a'), 'assignments', 'pa_b'), invite('pa', 'a', 'b')));
- await assertSucceeds(setDoc(doc(db('b'), 'projects', 'pb'), project('b', ['a'])));
+ await assertSucceeds(publish(env, db('b'), 'b', 'pb', project('b', ['a'])));
  await assertSucceeds(setDoc(doc(db('b'), 'assignments', 'pb_a'), invite('pb', 'b', 'a')));
 });
 test('nobody can invite themself to their own test', async () => {
- await assertSucceeds(setDoc(doc(db('b'), 'projects', 'self'), project('b', ['b'])));
+ await assertSucceeds(publish(env, db('b'), 'b', 'self', project('b', ['b'])));
  await assertFails(setDoc(doc(db('b'), 'assignments', 'self_b'), invite('self', 'b', 'b')));
 });
 test('someone who hid their email cannot be invited', async () => {
- await setDoc(doc(db('b'), 'projects', 'p'), project('b', ['hidden']));
+ await publish(env, db('b'), 'b', 'p', project('b', ['hidden']));
  await assertFails(setDoc(doc(db('b'), 'assignments', 'p_hidden'), invite('p', 'b', 'hidden')));
 });
 test('an unverified account may switch view but gains nothing from it', async () => {
  await assertSucceeds(updateDoc(doc(db('a', false), 'users', 'a'), {role: 'developer'}));
- await assertFails(setDoc(doc(db('a', false), 'projects', 'nope'), project('a', ['b'])));
+ await allowPublish(env, 'a');
+ await assertFails(publishBatch(db('a', false), 'a', 'nope', project('a', ['b'])).commit());
  await assertFails(getDocs(query(collection(db('a', false), 'users'), where('available', '==', true))));
 });
 test('projects still need the developer view, and work survives switching away', async () => {
- await assertFails(setDoc(doc(db('a'), 'projects', 'nope'), project('a', ['b'])));
- await setDoc(doc(db('b'), 'projects', 'keep'), project('b', ['a']));
+ await allowPublish(env, 'a');
+ await assertFails(publishBatch(db('a'), 'a', 'nope', project('a', ['b'])).commit());
+ await publish(env, db('b'), 'b', 'keep', project('b', ['a']));
  await updateDoc(doc(db('b'), 'users', 'b'), {role: 'tester'});
  await assertSucceeds(getDoc(doc(db('b'), 'projects', 'keep')));
  await assertFails(updateDoc(doc(db('b'), 'projects', 'keep'), {selectedTesterUids: ['a', 'c'], testersCount: 2}));
