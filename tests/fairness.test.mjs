@@ -70,8 +70,8 @@ test('«اشتغل بدون مشاكل» fills a note about today\'s task that p
 test('rules: the slot is private, never listed or deleted, and live apps need it',()=>{
  const slot=rules.slice(rules.indexOf('match /publishSlots/{uid}'),rules.indexOf('match /applications/'));
  assert.match(slot,/allow list, delete: if false;/);
- assert.match(slot,/acceptedAtPublish == \(resource == null \? 0 : resource\.data\.get\('acceptedAtPublish', 0\)\) \+ 3/);
- assert.match(slot,/acceptedAtPublish <= acceptedReports\(uid\)/);
+ assert.match(slot,/acceptedAtPublish == \(resource == null \? 0 : resource\.data\.get\('acceptedAtPublish', 0\)\) \+ \(hasPublishExemption\(uid\) \? 0 : 3\)/);
+ assert.match(slot,/hasPublishExemption\(uid\) \|\| request\.resource\.data\.acceptedAtPublish <= acceptedReports\(uid\)/);
  const projects=rules.slice(rules.indexOf('match /projects/{projectId}'),rules.indexOf('match /publishSlots/{uid}'));
  assert.equal((projects.match(/canGoLive\(projectId\)/g)||[]).length,2,'create and draft-publish both need the slot');
  assert.match(projects,/request\.time >= liveSince\(projectId\) \+ duration\.value\(14, 'd'\)/);
