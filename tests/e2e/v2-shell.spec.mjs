@@ -81,29 +81,30 @@ test('adding an app is a three-step sheet that checks each step',async({page})=>
  expect(p).toMatchObject({ownerUid:'d1',status:'recruiting',tasks:['جرّب تسجيل الدخول']});
 });
 
-test('admin-exempt developer sees the waiver and an enabled publish button without three reports',async({page})=>{
+test('every developer can publish without reports once existing live apps end',async({page})=>{
  await open(page,'developer');
  await page.evaluate(async()=>{
   const d=demoState();
   for(const p of d.projects)if(p.ownerUid==='d1')p.status='completed';
   d.xp={...(d.xp||{}),totals:{...(d.xp?.totals||{}),d1:{reports:0,bugs:0}}};
-  d.publishSlot=null;
-  save(d);
-  await refresh();
-  dashboard.publish.exempt=true;tab='home';render();
+  d.publishSlot=null;save(d);
+  await refresh();tab='home';render();
  });
  expect(await page.evaluate(()=>currentPublishGate().ok)).toBe(true);
  await page.locator('.v2-fab').click();
  const sheet=page.locator('.v2-sheet');
- await expect(sheet).toContainText('إعفاء إداري من شرط 3 تقارير');
- await sheet.locator('#v2-an').fill('Waiver app');
+ await expect(sheet).not.toContainText('3 تقارير');
+ await sheet.locator('#v2-an').fill('Free Publish App');
  await sheet.locator('#v2-au').fill('https://play.google.com/apps/testing/com.example.waiver');
  await sheet.locator('[data-v2="add-next"]').click();
  await sheet.locator('#v2-at').fill('جرّب تسجيل الدخول');
  await sheet.locator('[data-v2="add-next"]').click();
- await expect(sheet).toContainText('الإعفاء من شرط التقارير مفعّل');
  await sheet.locator('[data-v2="add-confirm"]').click();
  await expect(sheet.locator('[data-v2="add-publish"]')).toBeEnabled();
+ await sheet.locator('[data-v2="add-publish"]').click();
+ await expect(page.locator('#toast')).toContainText('انتشر تطبيقك');
+ const slot=await page.evaluate(()=>demoState().publishSlot);
+ expect(slot.acceptedAtPublish).toBe(0);
 });
 
 test('the add sheet explains when publishing is not open yet, and still saves a draft',async({page})=>{
