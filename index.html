@@ -629,7 +629,7 @@ function liveList(active,name,fromServer){
 }
 const liveSnap=list=>({docs:list.map(x=>({id:x.id,data:()=>x})),size:list.length});
 async function getDashboard({fromServer=false}={}){
- if(isDemo){const d=demoState(),uid=d.role==='tester'?'t1':'d1',x=d.xp||{};return {projects:d.projects,assignments:d.assignments,testers:d.testers,testersLoaded:true,reports:d.reports??[],messages:d.messages??[],settings:d.settings,xp:{totals:x.totals?.[uid]||null,ledgers:Object.fromEntries(Object.entries(x.ledgers||{}).filter(([,v])=>v.testerUid===uid))},publish:{totals:x.totals?.[uid]||null,slot:d.publishSlot||null},packs:await loadPacks(await currentUser())}}
+ if(isDemo){const d=demoState(),uid=d.role==='tester'?'t1':'d1',x=d.xp||{};return {projects:d.projects,assignments:d.assignments,testers:d.testers,testersLoaded:true,reports:d.reports??[],messages:d.messages??[],settings:d.settings,xp:{totals:x.totals?.[uid]||null,ledgers:Object.fromEntries(Object.entries(x.ledgers||{}).filter(([,v])=>v.testerUid===uid))},publish:{totals:x.totals?.[uid]||null,slot:d.publishSlot||null,exempt:false},packs:await loadPacks(await currentUser())}}
  const user=await currentUser();if(!user||user.profileMissing||!user.emailVerified||user.suspended)return {projects:[],assignments:[],testers:[],settings:{reminderHour:20}};
  const {collection,query,where,getDocs,getDocsFromServer}=storeFns;
  const read=fromServer?getDocsFromServer:getDocs;
@@ -637,18 +637,19 @@ async function getDashboard({fromServer=false}={}){
  await loadFeatures(user.uid);
  const selfJoin=await groupData(user,read);
 const pick=(field,name)=>from(name+':'+field,query(collection(db,name),where(field,'==',user.uid)));
- const [po,ao,ro,mo,pt,ps,at,rt,mt,xl]=await Promise.all([
+ const [po,ao,ro,mo,pt,ps,waiver,at,rt,mt,xl]=await Promise.all([
  pick('ownerUid','projects'),pick('ownerUid','assignments'),pick('ownerUid','reports'),pick('ownerUid','messages'),
  // Two small reads for «اختبر قبل ما تنشر»: accepted reports so far, and what the last publish used.
  storeFns.getDoc(storeFns.doc(db,'xpTotals',user.uid)).catch(()=>null),
  storeFns.getDoc(storeFns.doc(db,'publishSlots',user.uid)).catch(()=>null),
+ storeFns.getDoc(storeFns.doc(db,'publishExemptions',user.uid)).catch(()=>null),
  pick('testerUid','assignments'),pick('testerUid','reports'),pick('testerUid','messages'),
  read(query(collection(db,'xpAssignments'),where('testerUid','==',user.uid))).catch(()=>null)
  ]);
  const totals=pt?.exists?.()?pt.data():null,projects=po.docs.map(tidy);
  // The list of available testers is only needed to add an app; it is read on demand (and cached 15 minutes).
  const testers=projects.length||directoryCache.docs?await loadTesters(user,read,fromServer):[];
- return {publish:{totals,slot:ps?.exists?.()?ps.data():null},projects,assignments:unionById(ao.docs.map(tidy),at.docs.map(tidy)),testers,testersLoaded:!!testers.length||!!directoryCache.docs,crossCount:0,support:liveList(user,'supportMessages',fromServer)??await supportThread(user,read),reports:unionById(ro.docs.map(tidy),rt.docs.map(tidy)),messages:unionById(mo.docs.map(tidy),mt.docs.map(tidy)),xp:{totals,ledgers:Object.fromEntries((xl?.docs||[]).map(d=>[d.id,d.data()]))},...selfJoin,packs:await loadPacks(user),settings:JSON.parse(previewStorage.getItem('testerhub_settings')||'{"reminderHour":20}')};
+ return {publish:{totals,slot:ps?.exists?.()?ps.data():null,exempt:waiver?.exists?.()&&waiver.data().active===true},projects,assignments:unionById(ao.docs.map(tidy),at.docs.map(tidy)),testers,testersLoaded:!!testers.length||!!directoryCache.docs,crossCount:0,support:liveList(user,'supportMessages',fromServer)??await supportThread(user,read),reports:unionById(ro.docs.map(tidy),rt.docs.map(tidy)),messages:unionById(mo.docs.map(tidy),mt.docs.map(tidy)),xp:{totals,ledgers:Object.fromEntries((xl?.docs||[]).map(d=>[d.id,d.data()]))},...selfJoin,packs:await loadPacks(user),settings:JSON.parse(previewStorage.getItem('testerhub_settings')||'{"reminderHour":20}')};
 }
 // One account: the owner's lists and the tester's lists can share a document (never the same app), so merge by id.
 function unionById(...lists){const seen=new Map();for(const list of lists)for(const x of list||[])if(x&&!seen.has(x.id))seen.set(x.id,x);return [...seen.values()]}
@@ -717,10 +718,10 @@ function projectTasks(raw){
 const PUBLISH_COST=3,LIVE_DAYS=14;
 const acceptedReportCount=t=>(Number(t?.reports)||0)+(Number(t?.bugs)||0);
 const isLiveProject=p=>!!p&&(p.status||'recruiting')==='recruiting';
-function publishGate({totals=null,slot=null,projects=[],ignoreId=null}={}){
- const accepted=acceptedReportCount(totals),next=(Number(slot?.acceptedAtPublish)||0)+PUBLISH_COST;
+function publishGate({totals=null,slot=null,projects=[],ignoreId=null,exempt=false}={}){
+ const accepted=acceptedReportCount(totals),next=(Number(slot?.acceptedAtPublish)||0)+(exempt?0:PUBLISH_COST);
  const live=projects.find(p=>p.id!==ignoreId&&isLiveProject(p))||null;
- return {accepted,next,need:Math.max(0,next-accepted),live,ok:accepted>=next&&!live};
+ return {accepted,next,need:exempt?0:Math.max(0,next-accepted),live,ok:(exempt||accepted>=next)&&!live};
 }
 // When a live app may be ended: 14 days after it went live (the slot's time), or after it was created for older apps.
 function liveEndsAt(p,slot){
@@ -733,14 +734,15 @@ function publishBlockedReason(g){
  return '';
 }
 async function loadPublishState(owner){
- if(isDemo){const d=demoState();return {totals:d.xp?.totals?.[owner.uid]||null,slot:d.publishSlot||null,projects:d.projects.filter(p=>p.ownerUid===owner.uid)}}
+ if(isDemo){const d=demoState();return {totals:d.xp?.totals?.[owner.uid]||null,slot:d.publishSlot||null,projects:d.projects.filter(p=>p.ownerUid===owner.uid),exempt:false}}
  const {doc,getDocFromServer,getDocs,query,collection,where}=storeFns;
- const [x,s,p]=await Promise.all([
+ const [x,s,p,waiver]=await Promise.all([
   getDocFromServer(doc(db,'xpTotals',owner.uid)).catch(()=>null),
   getDocFromServer(doc(db,'publishSlots',owner.uid)).catch(()=>null),
-  getDocs(query(collection(db,'projects'),where('ownerUid','==',owner.uid)))
+  getDocs(query(collection(db,'projects'),where('ownerUid','==',owner.uid))),
+  getDocFromServer(doc(db,'publishExemptions',owner.uid))
  ]);
- return {totals:x?.exists?.()?x.data():null,slot:s?.exists?.()?s.data():null,projects:p.docs.map(tidy)};
+ return {totals:x?.exists?.()?x.data():null,slot:s?.exists?.()?s.data():null,projects:p.docs.map(tidy),exempt:waiver.exists()&&waiver.data().active===true};
 }
 async function ensurePublishAllowed(owner,ignoreId=null){
  const state=await loadPublishState(owner),gate=publishGate({...state,ignoreId});
@@ -1833,7 +1835,8 @@ function currentPublishGate(ignoreId=null){return publishGate({...(dashboard.pub
 function daysUntil(ms){return Math.max(0,Math.ceil((ms-Date.now())/DAY_MS))}
 // Shown above the add-app form only when publishing would be refused. Saving a draft always works.
 function publishGateCard(ignoreId=null){
- const g=currentPublishGate(ignoreId);if(g.ok)return '';
+ const g=currentPublishGate(ignoreId);
+ if(g.ok)return dashboard.publish?.exempt?'<div class="notice gate-card" role="status">✓ عندك إعفاء إداري من شرط 3 تقارير. باقي شروط النشر، ومنها تطبيق نشط واحد، مستمرة.</div>':'';
  if(g.live){const left=daysUntil(liveEndsAt(g.live,dashboard.publish?.slot));
   return `<div class="notice gate-card" role="status"><strong>${ico('package',16)} تطبيق نشط واحد لكل مطور</strong><p>«${clean(g.live.name)}» بعده نشط. ${left?`تگدر تنهي اختباره بعد ${formatNum(left)} يوم، أو تحذفه.`:'خلصت مدته: أنهِ اختباره حتى تنشر الجديد.'}</p><button type="button" class="cta outline wide" data-action="project-details" data-id="${clean(g.live.id)}">فتح «${clean(g.live.name)}»</button><div class="tiny">تگدر تحفظ التطبيق الجديد كمسودة هسه.</div></div>`}
  const earned=Math.max(0,Math.min(PUBLISH_COST,g.accepted-(g.next-PUBLISH_COST)));
