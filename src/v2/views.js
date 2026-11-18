@@ -231,9 +231,9 @@ function v2ReportSheet(s){
 }
 function v2AddSheet(s){
  s.title='أضف تطبيقك';
- const gate=publishGate({totals:dashboard.publish?.totals,slot:dashboard.publish?.slot,projects:mineProjects()});
+ const gate=currentPublishGate();
  let body='';
- if(s.step===1)body=`<b class="v2-h3" style="font-size:19px">تطبيقك</b>${gate.ok?'':`<div class="v2-notice n-amber" style="margin-top:10px">${gate.live?`عندك تطبيق نشط («${clean(gate.live.name)}»). تگدر تحفظه مسودة وتنشره بعد ما ينتهي.`:`حتى تنشر تحتاج ${v2n(gate.need)} تقرير مقبول إضافي من اختبار تطبيقات غيرك. تگدر تحفظه مسودة هسه.`}</div>`}<label class="v2-label" for="v2-an">اسم التطبيق</label><input id="v2-an" class="v2-input" maxlength="70" value="${clean(s.name||'')}"><label class="v2-label" for="v2-au">رابط الاختبار المغلق</label><input id="v2-au" class="v2-input email-ltr" inputmode="url" placeholder="https://play.google.com/apps/testing/..." value="${clean(s.link||'')}"><div class="v2-err" id="v2-err" role="alert"></div><button type="button" class="v2-btn v2-btn-primary v2-btn-block" data-v2="add-next">التالي</button>`;
+ if(s.step===1)body=`<b class="v2-h3" style="font-size:19px">تطبيقك</b>${gate.ok&&dashboard.publish?.exempt?'<div class="v2-notice n-blue" style="margin-top:10px">✓ عندك إعفاء إداري من شرط 3 تقارير. باقي شروط النشر مستمرة.</div>':''}${gate.ok?'':`<div class="v2-notice n-amber" style="margin-top:10px">${gate.live?`عندك تطبيق نشط («${clean(gate.live.name)}»). تگدر تحفظه مسودة وتنشره بعد ما ينتهي.`:`حتى تنشر تحتاج ${v2n(gate.need)} تقرير مقبول إضافي من اختبار تطبيقات غيرك. تگدر تحفظه مسودة هسه.`}</div>`}<label class="v2-label" for="v2-an">اسم التطبيق</label><input id="v2-an" class="v2-input" maxlength="70" value="${clean(s.name||'')}"><label class="v2-label" for="v2-au">رابط الاختبار المغلق</label><input id="v2-au" class="v2-input email-ltr" inputmode="url" placeholder="https://play.google.com/apps/testing/..." value="${clean(s.link||'')}"><div class="v2-err" id="v2-err" role="alert"></div><button type="button" class="v2-btn v2-btn-primary v2-btn-block" data-v2="add-next">التالي</button>`;
  if(s.step===2)body=`<b class="v2-h3" style="font-size:19px">شنو يختبرون كل يوم؟</b><p class="v2-small v2-muted">جملة وحدة واضحة لكل يوم (سطر لكل مهمة، لحد 14). المختبر يشوفها بتقرير اليوم.</p><label class="sr-only" for="v2-at">مهام الاختبار</label><textarea id="v2-at" class="v2-input" rows="4" maxlength="1680" placeholder="مثلاً: سجّل حساب وجرب البحث">${clean(s.tasks||'')}</textarea><div class="v2-err" id="v2-err" role="alert"></div><button type="button" class="v2-btn v2-btn-primary v2-btn-block" data-v2="add-next">التالي</button>`;
  if(s.step===3){
   const testers=eligibleTesters();
@@ -241,7 +241,10 @@ function v2AddSheet(s){
   <div class="v2-notice n-amber" style="margin-top:12px">قبل النشر: ضيف بريد مجموعة TesterHub بقائمة المختبرين بـ Play Console (أو إيميلات المختبرين).<div class="v2-row" style="margin-top:8px"><span class="v2-code email-ltr v2-grow">${OFFICIAL_GROUP.email}</span><button type="button" class="v2-btn v2-btn-white v2-btn-sm" data-action="copy-group-email">نسخ</button></div>${testers.length?`<button type="button" class="v2-btn v2-btn-white v2-btn-sm" style="margin-top:8px" data-v2="add-copy-emails">نسخ إيميلات ${v2n(testers.length)} مختبر</button>`:''}</div>
   <button type="button" class="v2-opt ${s.confirmed?'on':''}" data-v2="add-confirm" aria-pressed="${!!s.confirmed}"><span class="v2-cbox ${s.confirmed?'on':''}">${s.confirmed?'✓':''}</span>أضفت المجموعة أو الإيميلات بـ Play Console</button>
   <div class="v2-small v2-muted" style="margin-top:8px">تنرسل دعوة متابعة لـ ${v2n(testers.length)} مختبر متاح داخل TesterHub.</div>
+  ${gate.ok&&dashboard.publish?.exempt?'<div class="v2-notice n-blue" style="margin-top:10px">✓ الإعفاء من شرط التقارير مفعّل لهذا الحساب.</div>':''}
   ${gate.ok?'':`<div class="v2-notice n-amber" style="margin-top:10px">${gate.live?`النشر يفتح بعد ما ينتهي تطبيقك النشط «${clean(gate.live.name)}».`:`النشر يحتاج ${v2n(gate.need)} تقرير مقبول إضافي من اختبار تطبيقات غيرك. احفظه مسودة هسه.`}</div>`}
+  ${!testers.length?'<div class="v2-notice n-amber" style="margin-top:10px">ماكو مختبرون متاحون للمتابعة داخل TesterHub حالياً؛ الإعفاء من التقارير ما يلغي الحاجة للمختبرين.</div>':''}
+  <button type="button" class="v2-btn v2-btn-soft v2-btn-block" style="margin-top:10px" data-v2="add-refresh-gate">تحديث صلاحية النشر والمختبرين</button>
   <div class="v2-err" id="v2-err" role="alert"></div>
   <button type="button" class="v2-btn v2-btn-green v2-btn-block" style="margin-top:12px" data-v2="add-publish" ${s.confirmed&&testers.length&&gate.ok?'':'disabled'}>نشر التطبيق</button>
   <button type="button" class="v2-btn v2-btn-soft v2-btn-block" style="margin-top:8px" data-v2="add-draft">حفظ مسودة</button>`;
@@ -257,9 +260,22 @@ function v2RerenderKeeping(){
  if(id){const n=document.getElementById(id);if(n){n.focus({preventScroll:true});try{n.setSelectionRange(start,end)}catch{}}}
 }
 function v2Err(text){const e=document.getElementById('v2-err');if(e)e.textContent=text}
-async function v2EnsureTesters(){
- if(dashboard.testersLoaded)return;
- const list=await api.loadTesters();dashboard={...dashboard,testers:list,testersLoaded:true};
+async function v2EnsureTesters(force=false){
+ if(!force&&dashboard.testersLoaded)return;
+ const list=await api.loadTesters(null,null,force);dashboard={...dashboard,testers:list,testersLoaded:true};
+}
+// Read a newly granted/revoked exemption from the server when the add sheet opens.
+// A cached dashboard can be minutes old; only the backend decides whether publishing is allowed.
+async function v2EnsurePublishState(){
+ if(api.isDemo||!user)return;
+ const uid=user.uid,latest=await api.loadPublishState(user);
+ if(user?.uid!==uid)return;
+ dashboard={...dashboard,publish:{totals:latest.totals,slot:latest.slot,exempt:latest.exempt},
+  projects:[...(dashboard.projects||[]).filter(p=>p.ownerUid!==uid),...latest.projects]};
+}
+async function v2PrepareAddSheet({force=false}={}){
+ await Promise.all([v2EnsureTesters(force),v2EnsurePublishState()]);
+ if(V2.sheet?.kind==='add')v2RerenderKeeping();
 }
 // Re-rendering the open sheet must never wipe what is being typed in it.
 function v2KeepTyped(){
@@ -273,7 +289,7 @@ function v2KeepTyped(){
 // ---------- Events. Returns true when the click was handled here. ----------
 function v2Click(button){
  const k=button.dataset.v2;
- if(button.dataset.tab==='new'&&!k){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2RerenderKeeping()});return true}
+ if(button.dataset.tab==='new'&&!k){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(v2PrepareAddSheet);return true}
  if(!k)return false;
  if(k.startsWith('pack-'))return packClick(button);
  const s=V2.sheet;
@@ -300,7 +316,7 @@ function v2Click(button){
   pending(async()=>{const result=await api.submitDailyReport(s.id,{outcome:s.outcome,notes,retestOf:retest?.id||''});V2.sheet=null;selectedAssignmentId=s.id;await refresh();toast(result?.alreadySaved?'تقرير اليوم محفوظ من قبل':'انرسل التقرير · ‎+10 XP بعد قبوله'+(features.packs||api.isDemo?' · وعملة خلال ربع ساعة':''))});
   return true;
  }
- if(k==='add-open'){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(async()=>{await v2EnsureTesters();v2RerenderKeeping()});return true}
+ if(k==='add-open'){V2.sheet={kind:'add',step:1};render();v2SheetFocus();pending(v2PrepareAddSheet);return true}
  if(k==='add-back'&&s){if(s.step===2)s.tasks=document.getElementById('v2-at')?.value??s.tasks;s.step--;render();return true}
  if(k==='add-next'&&s){
   if(s.step===1){
@@ -315,6 +331,10 @@ function v2Click(button){
   s.step++;render();v2SheetFocus();return true;
  }
  if(k==='add-confirm'&&s){s.confirmed=!s.confirmed;render();return true}
+ if(k==='add-refresh-gate'&&s?.kind==='add'){
+  pending(async()=>{await v2PrepareAddSheet({force:true})});
+  return true;
+ }
  if(k==='add-copy-emails'){pending(async()=>{const list=prepareTesters();await copy(list.map(t=>t.email).join(', '))});return true}
  if(k==='add-publish'&&s){
   pending(async()=>{
