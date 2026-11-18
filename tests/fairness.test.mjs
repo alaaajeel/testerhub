@@ -76,3 +76,23 @@ test('rules: the slot is private, never listed or deleted, and live apps need it
  assert.equal((projects.match(/canGoLive\(projectId\)/g)||[]).length,2,'create and draft-publish both need the slot');
  assert.match(projects,/request\.time >= liveSince\(projectId\) \+ duration\.value\(14, 'd'\)/);
 });
+
+test('owner exemption skips the report cost only, not the one-live-project guard',()=>{
+ const free=gate({totals:null,slot:null,projects:[],exempt:true});
+ assert.deepEqual(free,{accepted:0,next:0,need:0,live:null,ok:true});
+ const one=gate({totals:{reports:0},slot:{acceptedAtPublish:3},projects:[{id:'active',status:'recruiting'}],exempt:true});
+ assert.equal(one.next,3,'waived publishes do not consume earned report credits');
+ assert.equal(one.ok,false,'a waived user must still finish their active project');
+ assert.equal(one.live.id,'active');
+ assert.equal(gate({totals:{reports:2},slot:{acceptedAtPublish:3},projects:[],exempt:false}).next,6,'revoking restores the regular 3-credit increment');
+ assert.equal(gate({totals:{reports:2},slot:{acceptedAtPublish:3},projects:[],exempt:false}).ok,false);
+});
+test('exemption is checked from Firestore rather than a client toggle',()=>{
+ assert.match(html,/getDocFromServer\(doc\(db,'publishExemptions',owner\.uid\)\)/);
+ assert.match(html,/storeFns\.getDoc\(storeFns\.doc\(db,'publishExemptions',user\.uid\)\)/);
+ assert.match(rules,/match \/publishExemptions\/\{uid\}/);
+ assert.match(rules,/allow create: if adminAllowed\(\)/);
+ assert.match(rules,/allow update: if false;/);
+ assert.match(rules,/hasPublishExemption\(uid\) \? 0 : 3/);
+ assert.match(rules,/hasPublishExemption\(uid\) \|\| request\.resource\.data\.acceptedAtPublish <= acceptedReports\(uid\)/);
+});
