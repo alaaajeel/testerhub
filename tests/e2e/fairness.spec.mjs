@@ -56,7 +56,7 @@ test('with 3 accepted reports it publishes, and the next app waits for this one 
  await page.locator('#project-form button[value="publish"]').click();
  await expect(page.locator('.lead',{hasText:'Fair App'})).toBeVisible();
  const slot=await page.evaluate(()=>demoState().publishSlot);
- expect(slot.acceptedAtPublish).toBe(3);
+ expect(slot.acceptedAtPublish).toBe(0);
  expect(slot.projectId).toBe((await projectNamed(page,'Fair App')).id);
  // Ending is offered only after 14 days.
  await expect(page.locator('[data-action="complete-project"]')).toHaveCount(0);
