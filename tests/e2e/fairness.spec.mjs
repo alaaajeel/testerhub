@@ -35,21 +35,19 @@ test('a developer with a live app sees why, cannot publish a second, and can sti
  expect(await page.evaluate(()=>demoState().projects.filter(p=>!p.status).length)).toBe(3);
 });
 
-test('test before you publish: the card counts accepted reports and publishing waits for 3',async({page})=>{
+test('report-free first publish succeeds without completing other app tests',async({page})=>{
  await open(page);
- await page.evaluate(()=>{const d=demoState();for(const p of d.projects)p.status='completed';d.xp={totals:{d1:{reports:1,bugs:0}}};save(d)});
+ await page.evaluate(()=>{const d=demoState();for(const p of d.projects)p.status='completed';d.xp={totals:{d1:{reports:0,bugs:0}}};save(d)});
  await asDeveloper(page);
- const card=page.locator('.gate-card');
- await expect(card).toContainText('اختبر قبل ما تنشر');
- await expect(card).toContainText('باقي ٢');
- await expect(card).toContainText('١ / ٣');
+ await expect(page.locator('.gate-card')).toHaveCount(0);
  await fillApp(page,'Early App');
  await page.locator('#project-form button[value="publish"]').click();
- await expect(page.locator('#toast')).toContainText('تحتاج 2 تقرير مقبول بعد');
- expect(await projectNamed(page,'Early App')).toBeNull();
+ await expect(page.locator('.lead',{hasText:'Early App'})).toBeVisible();
+ expect((await projectNamed(page,'Early App')).status).toBe('recruiting');
+ expect((await page.evaluate(()=>demoState().publishSlot)).acceptedAtPublish).toBe(0);
 });
 
-test('with 3 accepted reports it publishes, and the next app waits for this one to end',async({page})=>{
+test('a second live app waits for the first one to end',async({page})=>{
  await open(page);await page.evaluate(grantPublishInDemo);await asDeveloper(page);
  await expect(page.locator('.gate-card')).toHaveCount(0);
  await fillApp(page,'Fair App');
@@ -67,7 +65,7 @@ test('with 3 accepted reports it publishes, and the next app waits for this one 
 
 test('after 14 days the owner ends the test; started testers keep their work',async({page})=>{
  await open(page);await page.evaluate(grantPublishInDemo);
- await page.evaluate(()=>{const d=demoState(),p=d.projects.find(p=>p.id==='media');p.status='recruiting';p.created=new Date(Date.now()-15*86400000).toISOString().slice(0,10);d.xp.totals.d1.reports=6;save(d)});
+ await page.evaluate(()=>{const d=demoState(),p=d.projects.find(p=>p.id==='media');p.status='recruiting';p.created=new Date(Date.now()-15*86400000).toISOString().slice(0,10);save(d)});
  await asDeveloper(page,'apps');
  await page.evaluate(()=>{selectedProjectId='media';tab='details';render()});
  page.once('dialog',d=>d.accept());
