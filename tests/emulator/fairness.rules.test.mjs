@@ -141,3 +141,48 @@ test('after ending, started testers keep reporting but nobody new is invited',as
  await assertSucceeds(b.commit());
  await assertFails(setDoc(doc(db('d1'),'assignments','done_t2'),{projectId:'done',testerUid:'t2',ownerUid:'d1',name:'Done',link:LINK,tasks:[TASK],invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()}));
 });
+
+test('only the owner can grant/revoke a single developer exemption; ordinary users cannot forge one',async()=>{
+ await admin(async d=>{
+  await setDoc(doc(d,'users','owner'),{name:'Owner',email:'owner@example.com',role:'developer',available:false,createdAt:serverTimestamp()});
+  await setDoc(doc(d,'adminRoles','owner'),{active:true});
+ });
+ const o=db('owner'),d=db('d1'),other=db('d2');
+ const grant={active:true,grantedBy:'owner',grantedAt:serverTimestamp()};
+ await assertFails(setDoc(doc(d,'publishExemptions','d1'),{active:true,grantedBy:'d1',grantedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(other,'publishExemptions','d1'),{active:true,grantedBy:'d2',grantedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(o,'publishExemptions','ghost'),grant),'nonexistent user');
+ await assertFails(setDoc(doc(o,'publishExemptions','owner'),grant),'owner cannot exempt self');
+ await assertFails(setDoc(doc(o,'publishExemptions','d1'),{...grant,admin:true}),'unknown field');
+ await assertFails(setDoc(doc(o,'publishExemptions','d1'),{...grant,grantedBy:'d1'}),'forged grantor');
+ await assertSucceeds(setDoc(doc(o,'publishExemptions','d1'),grant));
+ await assertSucceeds(getDoc(doc(d,'publishExemptions','d1')));
+ await assertFails(getDoc(doc(other,'publishExemptions','d1')));
+ await assertFails(getDocs(collection(d,'publishExemptions')));
+ await assertFails(updateDoc(doc(d,'publishExemptions','d1'),{active:false}));
+ await assertFails(updateDoc(doc(o,'publishExemptions','d1'),{active:false}));
+ await assertFails(deleteDoc(doc(d,'publishExemptions','d1')));
+ await assertSucceeds(deleteDoc(doc(o,'publishExemptions','d1')));
+});
+test('waiver publishes with zero report spend, keeps one live app, and revocation restores the 3 report gate',async()=>{
+ await admin(async d=>{
+  await setDoc(doc(d,'users','owner'),{name:'Owner',email:'owner@example.com',role:'developer',available:false,createdAt:serverTimestamp()});
+  await setDoc(doc(d,'adminRoles','owner'),{active:true});
+ });
+ const o=db('owner'),d=db('d1');
+ await assertFails(publishBatch(d,'d1','a1',app(),0).commit(),'cannot waive without grant');
+ await assertSucceeds(setDoc(doc(o,'publishExemptions','d1'),{active:true,grantedBy:'owner',grantedAt:serverTimestamp()}));
+ await assertFails(publishBatch(d,'d1','a1',app(),3).commit(),'even a waived user cannot charge 3 credits');
+ await assertSucceeds(publishBatch(d,'d1','a1',app(),0).commit());
+ assert.equal((await read('publishSlots','d1')).acceptedAtPublish,0);
+ await assertFails(publishBatch(d,'d1','a2',app(),0).commit(),'one live app still enforced');
+ await admin(x=>updateDoc(doc(x,'projects','a1'),{status:'completed'}));
+ await assertSucceeds(publishBatch(d,'d1','a2',app(),0).commit());
+ await admin(x=>updateDoc(doc(x,'projects','a2'),{status:'completed'}));
+ await assertSucceeds(deleteDoc(doc(o,'publishExemptions','d1')));
+ await assertFails(publishBatch(d,'d1','a3',app(),0).commit(),'zero cost cannot be reused after revoke');
+ await assertFails(publishBatch(d,'d1','a3',app(),3).commit(),'three reports still missing');
+ await setTotals('d1',3);
+ await assertSucceeds(publishBatch(d,'d1','a3',app(),3).commit());
+ assert.equal((await read('publishSlots','d1')).acceptedAtPublish,3);
+});
