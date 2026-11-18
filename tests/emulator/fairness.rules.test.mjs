@@ -55,7 +55,7 @@ test('one live app: a second is refused until the first is no longer live',async
  await assertFails(two.commit());
  // Deleting the live app frees the slot (its testers lose that app, so it is a real cost).
  await assertSucceeds(updateDoc(doc(d,'projects','a1'),{status:'deleting'}));
- await assertSucceeds(publishBatch(d,'d1','a2',app(),6).commit());
+ await assertSucceeds(publishBatch(d,'d1','a2',app(),0).commit());
 });
 test('a draft goes live only with the slot',async()=>{
  const d=db('d1');
@@ -103,7 +103,7 @@ test('ending a live app: owner only, status only, not before 14 days from going 
  await assertSucceeds(updateDoc(ref,{status:'completed'}));
  await assertFails(updateDoc(ref,{status:'recruiting'}),'cannot come back to life');
  await setTotals('d1',6);
- await assertSucceeds(publishBatch(d,'d1','a2',app(),6).commit());
+ await assertSucceeds(publishBatch(d,'d1','a2',app(),0).commit());
 });
 test('an old live app with no slot keeps working and can be ended 14 days after creation',async()=>{
  await admin(async x=>{
