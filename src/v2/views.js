@@ -263,7 +263,7 @@ async function v2EnsureTesters(force=false){
  if(!force&&dashboard.testersLoaded)return;
  const list=await api.loadTesters(null,null,force);dashboard={...dashboard,testers:list,testersLoaded:true};
 }
-// Read a newly granted/revoked exemption from the server when the add sheet opens.
+// Refresh the current live-project status from Firestore when the add sheet opens.
 // A cached dashboard can be minutes old; only the backend decides whether publishing is allowed.
 async function v2EnsurePublishState(){
  if(api.isDemo||!user)return;
