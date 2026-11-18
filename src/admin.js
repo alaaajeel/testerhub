@@ -32,7 +32,7 @@ const TABS={
  announcements:{title:'مركز إشعارات الإدارة',perm:'sendAnnouncements',order:()=>'createdAt',desc:true}
 };
 const STATUS={draft:['مسودة',''],recruiting:['يستقبل المختبرين','good'],paused:['متوقف','warn'],completed:['مكتمل',''],archived:['مؤرشف','warn'],deleting:['حذف غير مكتمل','bad']};
-const state={thread:null,threadMessages:[],tab:'projects',rows:[],cursor:null,hasMore:false,filter:'',details:{},busy:false,account:null,db:null,owner:false,perms:{},staffIds:new Set()};
+const state={thread:null,threadMessages:[],tab:'projects',rows:[],cursor:null,hasMore:false,filter:'',details:{},busy:false,account:null,db:null,owner:false,perms:{},staffIds:new Set(),publishExemptions:new Map()};
 // Hides what this account cannot use; the security rules are what actually enforce it.
 const allowed=permission=>state.owner||state.perms[permission]===true;
 const tabAllowed=name=>TABS[name].ownerOnly?state.owner:!TABS[name].perm||allowed(TABS[name].perm);
@@ -139,6 +139,13 @@ const personEmail=uid=>PEOPLE.get(uid)?.email||'';
 const appName=(id,fallback)=>{if(!APPS.has(id))return fallback||'تطبيق';const a=APPS.get(id);return a?(a.name||fallback||'تطبيق'):(fallback?fallback+' (محذوف)':'تطبيق محذوف')};
 const timeOf=m=>m.createdAt?.toMillis?.()??(Date.parse(m.at||'')||0);
 async function enrich(rows){
+ if(state.tab==='users'&&state.owner){
+  const missing=rows.filter(r=>!state.publishExemptions.has(r.id));
+  await Promise.all(missing.map(async person=>{
+   const snap=await getDoc(doc(state.db,'publishExemptions',person.id));
+   state.publishExemptions.set(person.id,snap.exists()&&snap.data().active===true);
+  }));
+ }
  if(!['assignments','reportsAll','messages','issues'].includes(state.tab))return;
  const people=state.owner||allowed('viewUsers')?rows.flatMap(r=>[r.testerUid,r.ownerUid,r.senderUid]):[];
  await Promise.all([nameUsers(people),nameApps(rows.map(r=>r.projectId))]);
@@ -359,15 +366,17 @@ function projectRow(item){
 function userRow(item){
  const self=item.id===state.account.uid;
  const isStaff=state.staffIds.has(item.id);
- const tag=(isStaff?'<span class="tag">مشرف</span>':'')+(item.suspended?'<span class="tag bad">موقوف</span>':item.available?'<span class="tag good">متاح للاختبار</span>':'<span class="tag">مسجّل</span>');
- return '<article class="item"><div class="info"><strong>'+esc(item.name||'مستخدم')+'</strong><small dir="ltr" style="text-align:right">'+esc(item.email||'')+'</small><small>'+(item.role==='developer'?'مطور':'مختبر')+'</small></div><div class="actions">'+tag+(self?'<span class="tag">حسابك</span>':(state.owner?button('message-user',item.id,'مراسلة'):'')+(state.owner&&!isStaff?button('promote',item.id,'ترقية إلى مشرف'):'')+(allowed('suspendUsers')&&(state.owner||!isStaff)?button('suspend',item.id,item.suspended?'إعادة التنشيط':'إيقاف الحساب',item.suspended?'soft':'danger'):''))+'</div></article>';
+ const hasWaiver=state.publishExemptions.get(item.id)===true;
+ const tag=(isStaff?'<span class="tag">مشرف</span>':'')+(hasWaiver?'<span class="tag good">معفى من 3 تقارير</span>':'')+(item.suspended?'<span class="tag bad">موقوف</span>':item.available?'<span class="tag good">متاح للاختبار</span>':'<span class="tag">مسجّل</span>');
+ return '<article class="item"><div class="info"><strong>'+esc(item.name||'مستخدم')+'</strong><small dir="ltr" style="text-align:right">'+esc(item.email||'')+'</small><small>'+(item.role==='developer'?'مطور':'مختبر')+'</small></div><div class="actions">'+tag+(self?'<span class="tag">حسابك</span>':(state.owner?button('message-user',item.id,'مراسلة'):'')+(state.owner?button('toggle-publish-exemption',item.id,hasWaiver?'سحب إعفاء النشر':'إعفاء من 3 تقارير',hasWaiver?'warn':'soft'):'')+(state.owner&&!isStaff?button('promote',item.id,'ترقية إلى مشرف'):'')+(allowed('suspendUsers')&&(state.owner||!isStaff)?button('suspend',item.id,item.suspended?'إعادة التنشيط':'إيقاف الحساب',item.suspended?'soft':'danger'):''))+'</div></article>';
 }
+
 function issueRow(item){
  const fixed=item.status==='fixed';
  return '<article class="item"><div class="info"><strong>'+esc(item.notes||'بلاغ')+'</strong><small>'+esc(appName(item.projectId))+'</small><small>'+esc(item.tested||'')+'</small><small>'+esc(item.date||'')+'</small></div><span class="tag '+(fixed?'good':'warn')+'">'+(fixed?'تم الإصلاح':'مفتوح')+'</span></article>';
 }
 function auditRow(item){
- const names={send_announcement:'إرسال إعلان',withdraw_announcement:'سحب إعلان',suspend_user:'إيقاف حساب',unsuspend_user:'إعادة تنشيط حساب',archive_project:'أرشفة تطبيق',restore_project:'إلغاء أرشفة تطبيق',delete_project:'حذف تطبيق نهائياً',process_deletion:'معالجة طلب حذف حساب',grant_staff:'ترقية مشرف',update_staff:'تعديل صلاحيات مشرف',revoke_staff:'سحب صلاحيات مشرف'};
+ const names={send_announcement:'إرسال إعلان',withdraw_announcement:'سحب إعلان',suspend_user:'إيقاف حساب',unsuspend_user:'إعادة تنشيط حساب',archive_project:'أرشفة تطبيق',restore_project:'إلغاء أرشفة تطبيق',delete_project:'حذف تطبيق نهائياً',process_deletion:'معالجة طلب حذف حساب',grant_staff:'ترقية مشرف',update_staff:'تعديل صلاحيات مشرف',revoke_staff:'سحب صلاحيات مشرف',grant_publish_exemption:'منح إعفاء من شرط 3 تقارير',revoke_publish_exemption:'سحب إعفاء 3 تقارير'};
  return '<article class="item"><div class="info"><strong>'+esc(names[item.action]||item.action||'إجراء')+'</strong><small>'+esc(item.targetName||item.targetId||'')+'</small></div><small>'+esc(stamped(item.createdAt))+'</small></article>';
 }
 function staffRow(item){
@@ -443,7 +452,7 @@ async function page(reset=false){
  if(state.tab==='activity')return loadActivity();
  if(state.tab==='help'){state.helpEdit=null;return loadHelpAdmin()}
  const source=TABS[state.tab];
- if(reset){state.rows=[];state.cursor=null;state.hasMore=false;state.details={}}
+ if(reset){state.rows=[];state.cursor=null;state.hasMore=false;state.details={};if(state.tab==='users')state.publishExemptions.clear()}
  const parts=[collection(state.db,source.collection||state.tab)];
  if(source.filter)parts.push(source.filter());
  parts.push(orderBy(source.order(),source.desc?'desc':'asc'));
@@ -460,6 +469,17 @@ async function page(reset=false){
 async function guarded(work){
  if(state.busy)return;
  try{busy(true);await work()}catch(err){console.warn(err);toast(msg(err),true)}finally{busy(false)}
+}
+async function togglePublishExemption(person){
+ if(!state.owner||person.id===state.account.uid)throw Error('الإعفاء متاح لمالك المنصة فقط ولحساب مستخدم آخر');
+ const granted=state.publishExemptions.get(person.id)===true;
+ const batch=writeBatch(state.db),ref=doc(state.db,'publishExemptions',person.id);
+ if(granted)batch.delete(ref);
+ else batch.set(ref,{active:true,grantedBy:state.account.uid,grantedAt:serverTimestamp()});
+ batchAudit(batch,granted?'revoke_publish_exemption':'grant_publish_exemption',person.id,person.email||person.name);
+ await batch.commit();
+ state.publishExemptions.set(person.id,!granted);
+ toast(granted?'تم سحب الإعفاء. شرط 3 تقارير يرجع عند نشر التطبيق التالي.':'تم منح إعفاء النشر. باقي الشروط ومنها تطبيق نشط واحد مستمرة.');
 }
 async function setSuspension(person){
  const change=!person.suspended;
@@ -514,13 +534,14 @@ async function processDeletion(item){
  toast('سُجّل الطلب كمعالَج.');
 }
 const PROMPTS={
+ 'toggle-publish-exemption':item=>({title:(state.publishExemptions.get(item.id)===true?'سحب الإعفاء من ':'إعفاء ')+(item.email||item.name)+'؟',body:state.publishExemptions.get(item.id)===true?'يرجع شرط 3 تقارير مقبولة قبل النشر القادم، والتطبيق المنشور يبقى كما هو.':'يسمح لهذا المستخدم بتجاوز شرط 3 تقارير مقبولة فقط؛ لا يمنحه صلاحيات مشرف، ولا يرفع حد التطبيق النشط الواحد.',action:state.publishExemptions.get(item.id)===true?'سحب الإعفاء':'منح الإعفاء',danger:state.publishExemptions.get(item.id)===true}),
  'revoke-staff':item=>({title:'سحب صلاحيات '+(item.email||item.name)+'؟',body:'يفقد الوصول إلى لوحة الإدارة فوراً، ويبقى حسابه العادي كما هو.',danger:true}),
  'toggle-notice':item=>(item.active===false?null:{title:'سحب «'+(item.title||'')+'»؟',body:'يختفي من جرس المستخدمين، ويبقى محفوظاً بالسجل.',action:'سحب'}),
  'process-deletion':item=>({title:'هل نفّذت الحذف فعلاً؟',body:'نفّذ الحذف أولاً من Firebase Console: احذف حساب '+(item.email||item.id)+' من Authentication، ومستند users الخاص به من Firestore (ومستند publicProfiles إن وُجد)، ثم أكد هنا.',action:'نعم، نُفّذ'}),
  suspend:item=>({title:(item.suspended?'إعادة تنشيط ':'إيقاف ')+(item.email||item.name||item.id)+'؟',body:item.suspended?'':'الإيقاف يمنع استخدام البيانات فوراً وتبقى بياناته محفوظة. حساب الدخول نفسه يُعطَّل من Firebase Console.',danger:!item.suspended}),
  archive:item=>({title:(item.status==='archived'?'إلغاء أرشفة ':'أرشفة ')+item.name+'؟',body:item.status==='archived'?'':'تتوقف التقارير والرسائل الجديدة، ولا تُحذف البيانات القديمة.'})
 };
-const ACTIONS={'toggle-notice':toggleNotice,promote:promoteUser,'edit-staff':editStaff,'revoke-staff':revokeStaff,'process-deletion':processDeletion,suspend:setSuspension,archive:archiveProject,details:loadDetails,delete:removeProject};
+const ACTIONS={'toggle-publish-exemption':togglePublishExemption,'toggle-notice':toggleNotice,promote:promoteUser,'edit-staff':editStaff,'revoke-staff':revokeStaff,'process-deletion':processDeletion,suspend:setSuspension,archive:archiveProject,details:loadDetails,delete:removeProject};
 document.addEventListener('click',event=>{
  const tab=event.target.closest('[data-tab]');
  if(tab){state.tab=tab.dataset.tab;state.thread=null;state.filter='';$('searchInput').value='';guarded(()=>page(true));return}
@@ -542,7 +563,7 @@ document.addEventListener('click',event=>{
   if(prompt){busy(false);const ok=await confirmDialog(prompt);busy(true);if(!ok)return}
   const done=await ACTIONS[name](item);
   renderList();
-  if(!['details','promote','edit-staff','revoke-staff'].includes(name)&&done!==false)await overview();
+  if(!['details','promote','edit-staff','revoke-staff','toggle-publish-exemption'].includes(name)&&done!==false)await overview();
  });
 });
 document.addEventListener('submit',event=>{
@@ -579,6 +600,7 @@ $('search').addEventListener('submit',event=>{
   if(!value)return page(true);
   const snap=await getDocs(query(collection(state.db,'users'),where('email','==',value),limit(5)));
   state.rows=snap.docs.map(x=>({id:x.id,...x.data()}));state.hasMore=false;
+  await enrich(state.rows);
   renderList();
  });
 });
