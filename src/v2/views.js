@@ -260,9 +260,9 @@ function v2RerenderKeeping(){
  if(id){const n=document.getElementById(id);if(n){n.focus({preventScroll:true});try{n.setSelectionRange(start,end)}catch{}}}
 }
 function v2Err(text){const e=document.getElementById('v2-err');if(e)e.textContent=text}
-async function v2EnsureTesters(){
- if(dashboard.testersLoaded)return;
- const list=await api.loadTesters();dashboard={...dashboard,testers:list,testersLoaded:true};
+async function v2EnsureTesters(force=false){
+ if(!force&&dashboard.testersLoaded)return;
+ const list=await api.loadTesters(null,null,force);dashboard={...dashboard,testers:list,testersLoaded:true};
 }
 // Read a newly granted/revoked exemption from the server when the add sheet opens.
 // A cached dashboard can be minutes old; only the backend decides whether publishing is allowed.
@@ -273,8 +273,8 @@ async function v2EnsurePublishState(){
  dashboard={...dashboard,publish:{totals:latest.totals,slot:latest.slot,exempt:latest.exempt},
   projects:[...(dashboard.projects||[]).filter(p=>p.ownerUid!==uid),...latest.projects]};
 }
-async function v2PrepareAddSheet(){
- await Promise.all([v2EnsureTesters(),v2EnsurePublishState()]);
+async function v2PrepareAddSheet({force=false}={}){
+ await Promise.all([v2EnsureTesters(force),v2EnsurePublishState()]);
  if(V2.sheet?.kind==='add')v2RerenderKeeping();
 }
 // Re-rendering the open sheet must never wipe what is being typed in it.
@@ -332,7 +332,7 @@ function v2Click(button){
  }
  if(k==='add-confirm'&&s){s.confirmed=!s.confirmed;render();return true}
  if(k==='add-refresh-gate'&&s?.kind==='add'){
-  pending(async()=>{if(!api.isDemo){dashboard={...dashboard,testersLoaded:false};}await v2PrepareAddSheet();});
+  pending(async()=>{await v2PrepareAddSheet({force:true})});
   return true;
  }
  if(k==='add-copy-emails'){pending(async()=>{const list=prepareTesters();await copy(list.map(t=>t.email).join(', '))});return true}
