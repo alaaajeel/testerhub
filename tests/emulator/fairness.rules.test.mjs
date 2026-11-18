@@ -6,7 +6,7 @@ import {doc,setDoc,getDoc,getDocs,updateDoc,deleteDoc,collection,writeBatch,serv
 import {allowPublish,publishBatch,publishDraftBatch} from './publish-helper.mjs';
 
 // V2 phase 2 (fairness), attacked from the browser:
-//  - test before you publish: each new live app needs 3 more accepted reports than the last publish used
+//  - publishing one app needs no accepted reports or exemption
 //  - one live app per developer; it can be ended 14 days after it went live
 //  - apps that were live before this change keep working untouched
 let env;
@@ -28,46 +28,34 @@ beforeEach(async()=>{
  });
 });
 
-test('no accepted reports, no live app; a draft is always fine',async()=>{
+test('first app is allowed without reports, but an app without its slot is rejected',async()=>{
  const d=db('d1');
- await assertFails(publishBatch(d,'d1','a1',app()).commit());
- await setTotals('d1',2);
- await assertFails(publishBatch(d,'d1','a1',app()).commit(),'2 of 3 is not enough');
- await assertSucceeds(setDoc(doc(d,'projects','draft'),app('d1',{status:'draft',link:'',tasks:[],testersCount:0,selectedTesterUids:[]})));
+ await assertFails(setDoc(doc(d,'projects','a1'),app()),'slot required');
+ await assertSucceeds(publishBatch(d,'d1','a1',app(),0).commit());
+ assert.equal((await read('publishSlots','d1')).acceptedAtPublish,0);
 });
-test('3 accepted reports (problem reports count) publish exactly one app together with the slot',async()=>{
+test('old report counters remain unchanged for the next app',async()=>{
  const d=db('d1');
- await setTotals('d1',1,2);
- await assertFails(setDoc(doc(d,'projects','a1'),app()),'the app alone, without its slot');
- await assertSucceeds(publishBatch(d,'d1','a1',app()).commit());
- const slot=await read('publishSlots','d1');
- assert.equal(slot.projectId,'a1');assert.equal(slot.acceptedAtPublish,3);
-});
-test('the slot cannot claim a different cost, and the next app needs 3 more',async()=>{
- const d=db('d1');
- await setTotals('d1',9);
- for(const cost of [0,1,2,4,6])await assertFails(publishBatch(d,'d1','a1',app(),cost).commit(),'cost '+cost);
- await assertSucceeds(publishBatch(d,'d1','a1',app(),3).commit());
- await admin(d=>updateDoc(doc(d,'projects','a1'),{status:'completed'}));
- await assertFails(publishBatch(d,'d1','a2',app(),3).commit(),'reusing the same 3 reports');
- await assertSucceeds(publishBatch(d,'d1','a2',app(),6).commit());
- await admin(d=>updateDoc(doc(d,'projects','a2'),{status:'completed'}));
- await setTotals('d1',8);
- await assertFails(publishBatch(d,'d1','a3',app(),9).commit(),'8 accepted reports cannot pay for the third app');
+ await admin(x=>setDoc(doc(x,'publishSlots','d1'),{projectId:'old',acceptedAtPublish:9,updatedAt:serverTimestamp()}));
+ await admin(x=>setDoc(doc(x,'projects','old'),app('d1',{status:'completed'})));
+ await assertFails(publishBatch(d,'d1','a1',app(),0).commit(),'never reset historical counter');
+ await assertFails(publishBatch(d,'d1','a1',app(),12).commit(),'no report credits charged');
+ await assertSucceeds(publishBatch(d,'d1','a1',app(),9).commit());
+ assert.equal((await read('publishSlots','d1')).acceptedAtPublish,9);
 });
 test('one live app: a second is refused until the first is no longer live',async()=>{
  const d=db('d1');
  await setTotals('d1',30);
  await assertSucceeds(publishBatch(d,'d1','a1',app()).commit());
- await assertFails(publishBatch(d,'d1','a2',app(),6).commit());
+ await assertFails(publishBatch(d,'d1','a2',app(),0).commit());
  // Two apps in one write with one slot: the slot names only one of them.
  const two=writeBatch(d);
  two.set(doc(d,'projects','x1'),app());two.set(doc(d,'projects','x2'),app());
- two.set(doc(d,'publishSlots','d1'),{projectId:'x1',acceptedAtPublish:6,updatedAt:serverTimestamp()});
+ two.set(doc(d,'publishSlots','d1'),{projectId:'x1',acceptedAtPublish:0,updatedAt:serverTimestamp()});
  await assertFails(two.commit());
  // Deleting the live app frees the slot (its testers lose that app, so it is a real cost).
  await assertSucceeds(updateDoc(doc(d,'projects','a1'),{status:'deleting'}));
- await assertSucceeds(publishBatch(d,'d1','a2',app(),6).commit());
+ await assertSucceeds(publishBatch(d,'d1','a2',app(),0).commit());
 });
 test('a draft goes live only with the slot',async()=>{
  const d=db('d1');
@@ -83,13 +71,13 @@ test('the slot is private and only its owner moves it, to their own live app',as
  await assertSucceeds(getDoc(doc(db('d1'),'publishSlots','d1')));
  for(const uid of ['d2','t1'])await assertFails(getDoc(doc(db(uid),'publishSlots','d1')));
  await assertFails(getDocs(collection(db('d1'),'publishSlots')));
- await assertFails(deleteDoc(doc(db('d1'),'publishSlots','d1')),'deleting would reset the count');
+ await assertFails(deleteDoc(doc(db('d1'),'publishSlots','d1')),'deleting would lose the live-project slot');
  // Pointing your slot at someone else's live app, or writing someone else's slot.
  await assertFails(setDoc(doc(db('d2'),'publishSlots','d2'),{projectId:'a1',acceptedAtPublish:3,updatedAt:serverTimestamp()}));
- await assertFails(setDoc(doc(db('d2'),'publishSlots','d1'),{projectId:'a1',acceptedAtPublish:6,updatedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(db('d2'),'publishSlots','d1'),{projectId:'a1',acceptedAtPublish:0,updatedAt:serverTimestamp()}));
  // Extra fields, a client time, or the tester view.
  await allowPublish(env,'d2');
- const slotWith=fields=>{const x=db('d2'),b=writeBatch(x);b.set(doc(x,'projects','b1'),app('d2'));b.set(doc(x,'publishSlots','d2'),{projectId:'b1',acceptedAtPublish:3,updatedAt:serverTimestamp(),...fields});return b.commit()};
+ const slotWith=fields=>{const x=db('d2'),b=writeBatch(x);b.set(doc(x,'projects','b1'),app('d2'));b.set(doc(x,'publishSlots','d2'),{projectId:'b1',acceptedAtPublish:0,updatedAt:serverTimestamp(),...fields});return b.commit()};
  await assertFails(slotWith({updatedAt:Timestamp.fromMillis(Date.now()-20*DAY)}),'a back-dated slot would allow ending at once');
  await assertFails(slotWith({bonus:true}),'extra fields');
  // V2 one account: the stored role is not a gate; the fairness limits still apply to every account.
@@ -97,9 +85,9 @@ test('the slot is private and only its owner moves it, to their own live app',as
  await assertSucceeds(publishBatch(db('d2'),'d2','b2',app('d2')).commit());
  await assertFails(publishBatch(db('d2'),'d2','b3',app('d2')).commit(),'a second live app, or the same reports used twice');
 });
-test('accepted reports cannot be typed in',async()=>{
+test('users still cannot forge XP reports, and publishing does not need any',async()=>{
  await assertFails(setDoc(doc(db('d1'),'xpTotals','d1'),{uid:'d1',points:30,reports:3,bugs:0,retests:0,cycles:0,apps:1,lastEventId:'x',updatedAt:serverTimestamp()}));
- await assertFails(publishBatch(db('d1'),'d1','a1',app()).commit());
+ await assertSucceeds(publishBatch(db('d1'),'d1','a1',app(),0).commit());
 });
 test('ending a live app: owner only, status only, not before 14 days from going live',async()=>{
  const d=db('d1'),ref=doc(d,'projects','a1');
@@ -115,7 +103,7 @@ test('ending a live app: owner only, status only, not before 14 days from going 
  await assertSucceeds(updateDoc(ref,{status:'completed'}));
  await assertFails(updateDoc(ref,{status:'recruiting'}),'cannot come back to life');
  await setTotals('d1',6);
- await assertSucceeds(publishBatch(d,'d1','a2',app(),6).commit());
+ await assertSucceeds(publishBatch(d,'d1','a2',app(),0).commit());
 });
 test('an old live app with no slot keeps working and can be ended 14 days after creation',async()=>{
  await admin(async x=>{
@@ -142,47 +130,17 @@ test('after ending, started testers keep reporting but nobody new is invited',as
  await assertFails(setDoc(doc(db('d1'),'assignments','done_t2'),{projectId:'done',testerUid:'t2',ownerUid:'d1',name:'Done',link:LINK,tasks:[TASK],invitationStatus:'pending',joinedDay:null,checkins:[],createdAt:serverTimestamp()}));
 });
 
-test('only the owner can grant/revoke a single developer exemption; ordinary users cannot forge one',async()=>{
+test('legacy waiver docs are retained but granting new exemptions is disabled for everyone',async()=>{
  await admin(async d=>{
   await setDoc(doc(d,'users','owner'),{name:'Owner',email:'owner@example.com',role:'developer',available:false,createdAt:serverTimestamp()});
   await setDoc(doc(d,'adminRoles','owner'),{active:true});
+  await setDoc(doc(d,'publishExemptions','d1'),{active:true,grantedBy:'owner',grantedAt:serverTimestamp()});
  });
- const o=db('owner'),d=db('d1'),other=db('d2');
- const grant={active:true,grantedBy:'owner',grantedAt:serverTimestamp()};
- await assertFails(setDoc(doc(d,'publishExemptions','d1'),{active:true,grantedBy:'d1',grantedAt:serverTimestamp()}));
- await assertFails(setDoc(doc(other,'publishExemptions','d1'),{active:true,grantedBy:'d2',grantedAt:serverTimestamp()}));
- await assertFails(setDoc(doc(o,'publishExemptions','ghost'),grant),'nonexistent user');
- await assertFails(setDoc(doc(o,'publishExemptions','owner'),grant),'owner cannot exempt self');
- await assertFails(setDoc(doc(o,'publishExemptions','d1'),{...grant,admin:true}),'unknown field');
- await assertFails(setDoc(doc(o,'publishExemptions','d1'),{...grant,grantedBy:'d1'}),'forged grantor');
- await assertSucceeds(setDoc(doc(o,'publishExemptions','d1'),grant));
- await assertSucceeds(getDoc(doc(d,'publishExemptions','d1')));
- await assertFails(getDoc(doc(other,'publishExemptions','d1')));
- await assertFails(getDocs(collection(d,'publishExemptions')));
- await assertFails(updateDoc(doc(d,'publishExemptions','d1'),{active:false}));
- await assertFails(updateDoc(doc(o,'publishExemptions','d1'),{active:false}));
- await assertFails(deleteDoc(doc(d,'publishExemptions','d1')));
- await assertSucceeds(deleteDoc(doc(o,'publishExemptions','d1')));
-});
-test('waiver publishes with zero report spend, keeps one live app, and revocation restores the 3 report gate',async()=>{
- await admin(async d=>{
-  await setDoc(doc(d,'users','owner'),{name:'Owner',email:'owner@example.com',role:'developer',available:false,createdAt:serverTimestamp()});
-  await setDoc(doc(d,'adminRoles','owner'),{active:true});
- });
- const o=db('owner'),d=db('d1');
- await assertFails(publishBatch(d,'d1','a1',app(),0).commit(),'cannot waive without grant');
- await assertSucceeds(setDoc(doc(o,'publishExemptions','d1'),{active:true,grantedBy:'owner',grantedAt:serverTimestamp()}));
- await assertFails(publishBatch(d,'d1','a1',app(),3).commit(),'even a waived user cannot charge 3 credits');
- await assertSucceeds(publishBatch(d,'d1','a1',app(),0).commit());
- assert.equal((await read('publishSlots','d1')).acceptedAtPublish,0);
- await assertFails(publishBatch(d,'d1','a2',app(),0).commit(),'one live app still enforced');
- await admin(x=>updateDoc(doc(x,'projects','a1'),{status:'completed'}));
- await assertSucceeds(publishBatch(d,'d1','a2',app(),0).commit());
- await admin(x=>updateDoc(doc(x,'projects','a2'),{status:'completed'}));
- await assertSucceeds(deleteDoc(doc(o,'publishExemptions','d1')));
- await assertFails(publishBatch(d,'d1','a3',app(),0).commit(),'zero cost cannot be reused after revoke');
- await assertFails(publishBatch(d,'d1','a3',app(),3).commit(),'three reports still missing');
- await setTotals('d1',3);
- await assertSucceeds(publishBatch(d,'d1','a3',app(),3).commit());
- assert.equal((await read('publishSlots','d1')).acceptedAtPublish,3);
+ const o=db('owner'),d=db('d1'),grant={active:true,grantedBy:'owner',grantedAt:serverTimestamp()};
+ await assertFails(setDoc(doc(o,'publishExemptions','d2'),grant));
+ await assertFails(setDoc(doc(d,'publishExemptions','d2'),grant));
+ await assertFails(deleteDoc(doc(o,'publishExemptions','d1')));
+ await assertSucceeds(getDoc(doc(o,'publishExemptions','d1')));
+ await assertFails(getDoc(doc(d,'publishExemptions','d1')));
+ await assertSucceeds(publishBatch(db('d2'),'d2','a2',app('d2'),0).commit());
 });

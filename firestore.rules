@@ -82,30 +82,13 @@ service cloud.firestore {
     }
     // Owner-controlled per-user waiver. It removes ONLY the 3-report requirement;
     // the single-live-project guard, verified identity and 14-day lifecycle remain intact.
+    // Legacy exemptions and past audit records are retained, but no longer grant
+    // any special publishing rights: everyone follows the same one-live-app rule.
     match /publishExemptions/{uid} {
-      allow get: if adminAllowed() || (verified() && request.auth.uid == uid);
-      allow list: if adminAllowed();
-      allow create: if adminAllowed()
-        && uid != request.auth.uid
-        && exists(/databases/$(database)/documents/users/$(uid))
-        && request.resource.data.keys().hasOnly(['active','grantedBy','grantedAt'])
-        && request.resource.data.active == true
-        && request.resource.data.grantedBy == request.auth.uid
-        && request.resource.data.grantedAt == request.time;
-      allow update: if false;
-      allow delete: if adminAllowed();
+      allow get, list: if adminAllowed();
+      allow create, update, delete: if false;
     }
-    // ---- Fairness (V2 phase 2): test before you publish, and one live app per developer ----
-    // Accepted reports are counted from XP totals, which only grow through events the rules verified.
-    // A retest is also counted as a report, so retests are not added again.
-    function xpTotalsOf(uid) { return /databases/$(database)/documents/xpTotals/$(uid); }
-    function acceptedReports(uid) {
-      return exists(xpTotalsOf(uid)) ? get(xpTotalsOf(uid)).data.get('reports', 0) + get(xpTotalsOf(uid)).data.get('bugs', 0) : 0;
-    }
-    function hasPublishExemption(uid) {
-      return exists(/databases/$(database)/documents/publishExemptions/$(uid))
-        && get(/databases/$(database)/documents/publishExemptions/$(uid)).data.get('active', false) == true;
-    }
+    // Publishing is free of prerequisites. No report or XP check is performed.
     function publishSlot(uid) { return /databases/$(database)/documents/publishSlots/$(uid); }
     // A project goes live (recruiting) only together with its owner's publish slot, written in the same request.
     function canGoLive(pid) {
@@ -257,8 +240,8 @@ service cloud.firestore {
         && request.resource.data.projectId.size() > 0 && request.resource.data.projectId.size() <= 128
         && request.resource.data.updatedAt == request.time
         && request.resource.data.acceptedAtPublish is int
-        && request.resource.data.acceptedAtPublish == (resource == null ? 0 : resource.data.get('acceptedAtPublish', 0)) + (hasPublishExemption(uid) ? 0 : 3)
-        && (hasPublishExemption(uid) || request.resource.data.acceptedAtPublish <= acceptedReports(uid))
+        // Preserve the historical counter exactly; never reset or consume old credits.
+        && request.resource.data.acceptedAtPublish == (resource == null ? 0 : resource.data.get('acceptedAtPublish', 0))
         && getAfter(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.ownerUid == uid
         && getAfter(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.get('status','recruiting') == 'recruiting'
         && (resource == null
